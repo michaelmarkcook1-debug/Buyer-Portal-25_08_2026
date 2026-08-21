@@ -29,7 +29,8 @@ export function PortalShell({
           universe={ctx.universe}
           names={ctx.names}
           updatedAt={ctx.updatedAt}
-          spineDaysStale={ctx.spine.daysStale}
+          spineDataAsOf={ctx.spine.dataAsOf}
+          spineDataAgeDays={ctx.spine.dataAgeDays}
           returnTo={returnTo}
         />
       ) : null}

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { allowedNumbers, validateInsight } from "@/lib/insight/validate";
-import { baselineFrom, parseCookieValue, tickersFromParam } from "@/lib/scope-core";
+import { baselineFrom, parseCookieValue, scopedTickers, tickersFromParam } from "@/lib/scope-core";
+import {
+  allowedAiEnterprisePillar,
+  assertHistoryMode,
+  capConfidenceByAge,
+  headroomState,
+  historyModeLabel,
+  isAllowedPricingSource,
+  procurementHeatState,
+} from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
 
 /**
@@ -192,6 +201,58 @@ describe("market scope (spec §2/§3)", () => {
 
   it("rejects cookie payloads with unknown modes", () => {
     expect(parseCookieValue(JSON.stringify({ v: 1, mode: "everything" }))).toBeNull();
+  });
+});
+
+describe("data-engine truth gates (Sprint 1 §18)", () => {
+  it("public procurement is never an allowed pricing source", () => {
+    expect(isAllowedPricingSource("procurement")).toBe(false);
+    expect(isAllowedPricingSource("public-record")).toBe(false);
+    expect(isAllowedPricingSource("curated-spine")).toBe(true);
+  });
+
+  it("procurement heat refuses to read below the observation floor", () => {
+    expect(procurementHeatState(1, 1).usable).toBe(false);
+    expect(procurementHeatState(9, 3)).toMatchObject({ usable: true, state: "unfavourable" });
+    expect(procurementHeatState(2, 8)).toMatchObject({ usable: true, state: "favourable" });
+  });
+
+  it("seed/stale AI Enterprise intelligence cannot enter portal metrics", () => {
+    expect(allowedAiEnterprisePillar({ dataStatusHint: "seed", evidenceGrade: "E4", confidence: 90 })).toBe(false);
+    expect(allowedAiEnterprisePillar({ dataStatusHint: "stale", evidenceGrade: "E4", confidence: 90 })).toBe(false);
+    expect(allowedAiEnterprisePillar({ dataStatusHint: "documented", evidenceGrade: "E1", confidence: 90 })).toBe(false);
+    expect(allowedAiEnterprisePillar({ dataStatusHint: "documented", evidenceGrade: "E0", confidence: 90 })).toBe(false);
+    expect(allowedAiEnterprisePillar({ dataStatusHint: "documented", evidenceGrade: "E3", confidence: 80 })).toBe(true);
+  });
+
+  it("stale evidence cannot silently keep high confidence", () => {
+    expect(capConfidenceByAge("high", "2026-08-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("high");
+    expect(capConfidenceByAge("high", "2026-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("medium");
+    expect(capConfidenceByAge("medium", "2024-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("low");
+    expect(capConfidenceByAge("low", "2020-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("low");
+    expect(capConfidenceByAge("insufficient", "2020-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("insufficient");
+  });
+
+  it("reconstructed history can never claim observed-snapshot status", () => {
+    expect(() => assertHistoryMode("observed_snapshot", false)).toThrow(/History integrity/);
+    expect(assertHistoryMode("observed_snapshot", true)).toBe("observed_snapshot");
+    expect(assertHistoryMode("reconstructed", false)).toBe("reconstructed");
+    expect(historyModeLabel("reconstructed")).toContain("reconstructed");
+    expect(historyModeLabel("observed_snapshot")).toContain("observed");
+  });
+
+  it("financial headroom never fabricates for unlisted vendors", () => {
+    expect(headroomState({ operatingMarginPct: null, cashUsd: null, longTermDebtUsd: null }).state).toBe("insufficient");
+    expect(headroomState({ operatingMarginPct: 14, cashUsd: 9e9, longTermDebtUsd: 3e9 }).state).toBe("favourable");
+    expect(headroomState({ operatingMarginPct: 1.5, cashUsd: 1e9, longTermDebtUsd: 8e9 }).state).toBe("unfavourable");
+  });
+
+  it("selected vendors define every relative calculation — scope never widens (§15)", () => {
+    expect(scopedTickers({ mode: "selected_vendors", vendorIds: ["ACN", "CTSH"] }, ["ACN", "CTSH", "TTNQY", "IBM"]))
+      .toEqual(["ACN", "CTSH"]);
+    expect(scopedTickers({ mode: "whole_market", vendorIds: [] }, ["ACN", "CTSH", "TTNQY"]))
+      .toEqual(["ACN", "CTSH", "TTNQY"]);
+    expect(scopedTickers({ mode: "unset", vendorIds: [] }, ["ACN"])).toEqual([]);
   });
 });
 

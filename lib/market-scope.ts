@@ -80,12 +80,7 @@ export async function getMarketScope(
   return { mode: "unset", vendorIds: [], selectionTimestamp: null, baselineStart: baselineFrom(firstUseAt), firstUseAt };
 }
 
-/** The tickers a data read should scope to. Whole market → the full universe. */
-export function scopedTickers(scope: MarketScope, universe: readonly string[]): string[] {
-  if (scope.mode === "selected_vendors") return scope.vendorIds;
-  if (scope.mode === "whole_market") return [...universe];
-  return [];
-}
+export { scopedTickers } from "./scope-core";
 
 /** Stable cache key component for this scope. */
 export function scopeKey(scope: MarketScope): string {

@@ -172,7 +172,7 @@ export function buildContext(
   const sections: string[] = [
     `MARKET SCOPE: ${intel.scope.mode === "whole_market" ? `Whole supported market (${intel.scope.names.length} AG-covered vendors)` : `Selected vendors: ${intel.scope.names.join(", ")}`}.`,
     "EVIDENCE OWNERSHIP: the reader has provided ONLY this vendor selection. None of their contracts, spend, renewal dates, rates or commitments are held. Every contract figure, value and date in this context is a market/public observation about agreements between these vendors and OTHER organisations. Never present any of it as the reader's own.",
-    `RETROSPECTIVE BASELINE: ${intel.baselineStart}. Data updated: ${intel.updatedAt ?? "unknown"}. Contract spine last refreshed ${intel.spine.lastIngest} (${intel.spine.daysStale} days ago) — award-flow windows anchor there.`,
+    `RETROSPECTIVE BASELINE: ${intel.baselineStart}. Data updated: ${intel.updatedAt ?? "unknown"}. Commercial contract evidence is as of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old) — treat contract-derived movement accordingly. Public-procurement and AG-signal evidence is materially fresher and each fact carries its own date.`,
     intel.signalTrackingSince
       ? `AG signal tracking began ${intel.signalTrackingSince}; a full 12-month signal series is not yet held.`
       : "",
@@ -271,9 +271,9 @@ export async function getInsight(
   const context = buildContext(intel, tab, opts);
   const dataVersion = `${intel.updatedAt ?? ""}|${intel.spine.lastIngest}`;
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
-  // v4: completeness/window hardening — evicts briefings generated before
-  // the "book/portfolio" and negotiating-window rules existed.
-  const key = ["insight", "v4", tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  // v5: data-engine sprint 1 — procurement flow, EDGAR financials, observed
+  // snapshots and data-as-of framing entered the context.
+  const key = ["insight", "v5", tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

@@ -17,14 +17,17 @@ export function ScopeBar({
   universe,
   names,
   updatedAt,
-  spineDaysStale,
+  spineDataAsOf,
+  spineDataAgeDays,
   returnTo,
 }: {
   scope: MarketScope;
   universe: UniverseVendor[];
   names: string[];
   updatedAt: string | null;
-  spineDaysStale: number | null;
+  /** The newest observation date the commercial evidence itself carries. */
+  spineDataAsOf: string | null;
+  spineDataAgeDays: number | null;
   returnTo: string;
 }) {
   const tracking =
@@ -146,14 +149,15 @@ export function ScopeBar({
         </div>
       </div>
 
-      {spineDaysStale != null && spineDaysStale > 45 ? (
+      {spineDataAgeDays != null && spineDataAgeDays > 45 ? (
         <div style={{ background: "var(--data-watch-soft)" }}>
           <div
             className="mx-auto max-w-[var(--max-width)] px-5 py-1.5 text-[0.78rem] sm:px-8"
             style={{ color: "var(--data-watch-ink)" }}
           >
-            Data limited — the contract spine last refreshed {agoDays(spineDaysStale)}. Contract-derived
-            readings are dated accordingly; nothing here is passed off as current.
+            Commercial contract evidence is as of {shortDate(spineDataAsOf)} ({agoDays(spineDataAgeDays)}) —
+            contract-derived readings are dated accordingly. Public-procurement and AG-signal evidence is
+            fresher and carries its own dates; nothing here is passed off as current.
           </div>
         </div>
       ) : null}

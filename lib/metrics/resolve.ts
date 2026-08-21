@@ -3,19 +3,38 @@ import { cache } from "react";
 import {
   getCatalog,
   getFreshness,
+  getProcurementFlow,
   getScopeAggregates,
   getSecSummaries,
   getSignalDeltas,
   getSpineAnchor,
   getUniverse,
   getVendorDealFacts,
+  getVendorPrimitives,
   getVendorSignals,
   type CatalogFacts,
+  type ProcurementFlow,
   type SecSummary,
   type SignalDelta,
   type VendorDealFacts,
+  type VendorPrimitive,
   type VendorSignals,
 } from "@/lib/data/facts";
+import {
+  getPricingModelMixByYear,
+  getProcurementMonthlyFlow,
+  getReputationSeries,
+  getSpineQuarterlyFlow,
+  type HistorySeries,
+} from "@/lib/data/history";
+import {
+  capConfidenceByAge,
+  headroomState,
+  historyModeLabel,
+  invertMove,
+  procurementHeatState,
+  ratioMove,
+} from "./rules";
 import { scopedTickers, type MarketScope } from "@/lib/market-scope";
 import { money, count, signed, shortDate } from "@/lib/format";
 import {
@@ -70,23 +89,7 @@ function metric(
   return { id, label, state, movement, confidence, headline, basis, asOf };
 }
 
-const ratioMove = (now: number, before: number): Movement => {
-  if (before === 0 && now === 0) return "insufficient";
-  if (before === 0) return now > 0 ? "improving" : "stable";
-  const r = now / before;
-  if (r >= 1.5) return "materially-improving";
-  if (r >= 1.15) return "improving";
-  if (r <= 0.5) return "materially-deteriorating";
-  if (r <= 0.85) return "deteriorating";
-  return "stable";
-};
-
-const invertMove = (m: Movement): Movement =>
-  m === "improving" ? "deteriorating"
-  : m === "deteriorating" ? "improving"
-  : m === "materially-improving" ? "materially-deteriorating"
-  : m === "materially-deteriorating" ? "materially-improving"
-  : m;
+/* ratioMove / invertMove now live in ./rules (pure, unit-tested). */
 
 /* ───────────────────── per-vendor metric rules ───────────────────── */
 
@@ -98,10 +101,19 @@ interface VendorInputs {
   catalog: CatalogFacts | undefined;
   sec: SecSummary | undefined;
   delta: SignalDelta | undefined;
+  /** Fresh public-procurement flow (market evidence; flow/context, never pricing). */
+  proc: ProcurementFlow | undefined;
+  /** Canonical vendor primitives (claims) — incl. EDGAR financials where listed. */
+  prims: Map<string, VendorPrimitive> | undefined;
+  /** AG reputation tracker's own trailing series, when present. */
+  repSeries: HistorySeries | undefined;
+  /** Distinct scoped vendors winning public work in the last 180 days. */
+  procWinners180: number;
   /** Other scoped vendors active in this vendor's top service line. */
   alternativesInTopLine: number;
   scopeVendorCount: number;
   spineLastIngest: string;
+  spineDataAsOf: string | null;
 }
 
 function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
@@ -138,6 +150,13 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         source: "Curated contract tracker (market record)", ownership: "market",
       });
     }
+    if (v.proc && v.proc.inPlayNext12 > 0) {
+      basis.push({
+        text: `${count(v.proc.inPlayNext12)} observed public-sector agreements also reach end-of-term within 12 months (fresh market record).`,
+        source: "Public procurement record", ownership: "market",
+        asOf: v.proc.lastAwardDate,
+      });
+    }
     const state: MetricState =
       d.inPlay12 >= 2 || (d.inPlay12 >= 1 && v.alternativesInTopLine >= 1)
         ? "favourable"
@@ -162,13 +181,44 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   }
 
-  /* Deal market heat — award flow, honestly anchored to the spine window. */
+  /* Deal market heat — fresh public-procurement flow leads when it can carry the
+     read (official, refreshed within days); the curated spine remains context,
+     anchored to its own data-as-of. The two corpora are never summed. */
   let dealMarketHeat: Metric;
-  if (!d || d.contracts < 3) {
+  const procHeat = v.proc ? procurementHeatState(v.proc.awardsT90, v.proc.awardsPrior90) : { usable: false as const, state: "stable" as const, movement: "insufficient" as Movement };
+  if (v.proc && procHeat.usable) {
+    const basis: Basis[] = [
+      {
+        text: `${count(v.proc.awardsT90)} public-procurement awards in the trailing 90 days vs ${count(v.proc.awardsPrior90)} in the prior 90 (latest ${shortDate(v.proc.lastAwardDate)}). Flow evidence only — public awards never price enterprise agreements.`,
+        source: "Public procurement record", ownership: "market",
+        asOf: v.proc.lastAwardDate,
+      },
+    ];
+    if (d && d.contracts >= 3) {
+      basis.push({
+        text: `Context from the curated spine: ${count(d.awardsT12)} observed commercial awards (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) prior.`,
+        source: "Curated contract tracker (market record)", ownership: "market",
+      });
+    }
+    dealMarketHeat = metric(
+      "dealMarketHeat",
+      "Deal Market Heat",
+      procHeat.state,
+      procHeat.movement,
+      "medium", // official award data, fresh — but one evidence family
+      procHeat.state === "favourable"
+        ? "Public award flow has cooled — demand pressure is with the buyer."
+        : procHeat.state === "unfavourable"
+          ? "Public award flow is accelerating — capacity may be absorbed elsewhere."
+          : "Public award flow broadly steady across the two windows.",
+      basis,
+      v.proc.lastAwardDate,
+    );
+  } else if (!d || d.contracts < 3) {
     dealMarketHeat = insufficientMetric(
       "dealMarketHeat",
       "Deal Market Heat",
-      "Too few contracts on record to read award flow for this vendor.",
+      "Too few observed contracts or awards to read deal flow for this vendor.",
     );
   } else {
     const move = ratioMove(d.awardsT12, d.awardsPrior12);
@@ -183,19 +233,19 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Deal Market Heat",
       state,
       move,
-      "low", // one-source read on a spine refreshed once — never above low
+      "low", // spine-only read, anchored to its own data-as-of
       state === "favourable"
-        ? "Their signing pace has slowed — demand pressure is with the buyer."
+        ? "Their observed signing pace has slowed — demand pressure is with the buyer."
         : state === "unfavourable"
-          ? "Their signing pace has risen — capacity may be absorbed elsewhere."
-          : "Signing pace broadly steady across the two windows.",
+          ? "Their observed signing pace has risen — capacity may be absorbed elsewhere."
+          : "Observed signing pace broadly steady across the two windows.",
       [
         {
-          text: `${count(d.awardsT12)} awards (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) in the prior 12; ${spineNote}.`,
+          text: `${count(d.awardsT12)} observed awards (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) in the prior 12; ${spineNote}.`,
           source: "Curated contract tracker (market record)", ownership: "market",
         },
       ],
-      v.spineLastIngest,
+      v.spineDataAsOf ?? v.spineLastIngest,
     );
   }
 
@@ -232,26 +282,40 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   }
 
-  /* Financial resilience — catalog revenue + growth, SEC results cadence. */
+  /* Financial resilience — EDGAR-backed where listed (E4 regulatory facts),
+     AG catalog otherwise. */
+  const marginPrim = v.prims?.get("operating_margin_pct");
+  const cashPrim = v.prims?.get("cash_usd");
+  const debtPrim = v.prims?.get("long_term_debt_usd");
+  const edgarRevPrim = v.prims?.get("edgar_revenue_annual");
+
   let financialResilience: Metric;
-  if (!cat || (cat.revenueUsd == null && cat.revenueGrowthYoy == null)) {
+  if (!cat || (cat.revenueUsd == null && cat.revenueGrowthYoy == null && !marginPrim)) {
     financialResilience = insufficientMetric(
       "financialResilience",
       "Financial Resilience",
       "No financial reading is held for this vendor.",
     );
   } else {
-    const g = cat.revenueGrowthYoy;
-    const state: MetricState = g == null ? "mixed" : g >= 5 ? "favourable" : g >= 0 ? "stable" : "unfavourable";
+    const g = cat?.revenueGrowthYoy ?? null;
+    let state: MetricState = g == null ? "mixed" : g >= 5 ? "favourable" : g >= 0 ? "stable" : "unfavourable";
+    // A thin regulatory-filed margin overrides an optimistic growth read.
+    if (marginPrim && marginPrim.value < 3) state = "unfavourable";
     const basis: Basis[] = [];
-    if (cat.revenueUsd != null) {
+    if (cat?.revenueUsd != null) {
       basis.push({
         text: `Revenue ${money(cat.revenueUsd)}${g != null ? `, growth ${g.toFixed(1)}% YoY` : ""}.`,
         source: "AnalystGenius vendor catalog", ownership: "market",
         asOf: cat.sourcedAt,
       });
     } else if (g != null) {
-      basis.push({ text: `Revenue growth ${g.toFixed(1)}% YoY.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat.sourcedAt });
+      basis.push({ text: `Revenue growth ${g.toFixed(1)}% YoY.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+    }
+    if (marginPrim) {
+      basis.push({
+        text: `Operating margin ${marginPrim.value.toFixed(1)}% for the period ending ${shortDate(marginPrim.asOf)} (SEC 10-K, XBRL).`,
+        source: "SEC EDGAR companyfacts", ownership: "market", asOf: marginPrim.asOf,
+      });
     }
     if (v.sec?.byItem["2.02"]) {
       basis.push({
@@ -264,23 +328,55 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "financialResilience",
       "Financial Resilience",
       state,
-      "insufficient", // no growth history held — direction not asserted
-      "medium",
+      "insufficient", // a single filed period asserts no direction
+      capConfidenceByAge(marginPrim ? "high" : "medium", marginPrim?.asOf ?? cat?.sourcedAt ?? null, { maxFreshDays: 400 }),
       state === "favourable"
         ? "Financially expanding on the latest reading."
         : state === "unfavourable"
-          ? "Revenue contracting on the latest reading."
+          ? "Financially strained on the latest reading."
           : "Financial position broadly steady on the latest reading.",
       basis,
-      cat.sourcedAt,
+      marginPrim?.asOf ?? cat?.sourcedAt ?? null,
     );
   }
 
-  const financialHeadroom = insufficientMetric(
-    "financialHeadroom",
-    "Financial Headroom",
-    "Margin and balance-sheet headroom data is not held — no assessment is made.",
-  );
+  /* Financial headroom — observed corporate flexibility, US-listed (EDGAR) subset.
+     Never account-level profitability; absent filings stay honestly insufficient. */
+  let financialHeadroom: Metric;
+  {
+    const h = headroomState({
+      operatingMarginPct: marginPrim?.value ?? null,
+      cashUsd: cashPrim?.value ?? null,
+      longTermDebtUsd: debtPrim?.value ?? null,
+    });
+    if (h.state === "insufficient") {
+      financialHeadroom = insufficientMetric(
+        "financialHeadroom",
+        "Financial Headroom",
+        "No regulatory-filed margin or balance-sheet data is held for this vendor (coverage: US-listed subset via SEC EDGAR).",
+      );
+    } else {
+      const basis: Basis[] = [];
+      if (marginPrim)
+        basis.push({ text: `Operating margin ${marginPrim.value.toFixed(1)}% (period ending ${shortDate(marginPrim.asOf)}).`, source: "SEC EDGAR companyfacts", ownership: "market", asOf: marginPrim.asOf });
+      if (cashPrim)
+        basis.push({ text: `Cash and equivalents ${money(cashPrim.value)} at ${shortDate(cashPrim.asOf)}.`, source: "SEC EDGAR companyfacts", ownership: "market", asOf: cashPrim.asOf });
+      if (debtPrim)
+        basis.push({ text: `Long-term debt ${money(debtPrim.value)} at ${shortDate(debtPrim.asOf)}.`, source: "SEC EDGAR companyfacts", ownership: "market", asOf: debtPrim.asOf });
+      if (edgarRevPrim)
+        basis.push({ text: `Annual revenue ${money(edgarRevPrim.value)} (period ending ${shortDate(edgarRevPrim.asOf)}).`, source: "SEC EDGAR companyfacts", ownership: "market", asOf: edgarRevPrim.asOf });
+      financialHeadroom = metric(
+        "financialHeadroom",
+        "Financial Headroom",
+        h.state,
+        "insufficient", // single filed period — direction not asserted
+        capConfidenceByAge("high", marginPrim?.asOf ?? cashPrim?.asOf ?? null, { maxFreshDays: 400 }),
+        h.reading,
+        basis,
+        marginPrim?.asOf ?? cashPrim?.asOf ?? null,
+      );
+    }
+  }
 
   /* Provider momentum — growth plus signing pace. Vendor-strength axis. */
   let providerMomentum: Metric;
@@ -292,22 +388,33 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   } else {
     const g = cat?.revenueGrowthYoy ?? null;
-    const awardsMove = d && d.contracts >= 3 ? ratioMove(d.awardsT12, d.awardsPrior12) : "insufficient";
+    // Movement: fresh procurement flow when it can carry the read; spine windows otherwise.
+    const movement: Movement =
+      v.proc && procHeat.usable
+        ? procHeat.movement
+        : d && d.contracts >= 3
+          ? ratioMove(d.awardsT12, d.awardsPrior12)
+          : "insufficient";
     const state: MetricState =
       g != null && g >= 8 ? "favourable" : g != null && g < 0 ? "unfavourable" : g != null ? "stable" : "mixed";
     const basis: Basis[] = [];
     if (g != null) basis.push({ text: `Revenue growth ${g.toFixed(1)}% YoY.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+    if (v.proc && procHeat.usable)
+      basis.push({
+        text: `Public award flow ${count(v.proc.awardsT90)} vs ${count(v.proc.awardsPrior90)} across the trailing 90-day windows (latest ${shortDate(v.proc.lastAwardDate)}).`,
+        source: "Public procurement record", ownership: "market", asOf: v.proc.lastAwardDate,
+      });
     if (d && d.contracts >= 3)
-      basis.push({ text: `Awards ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two spine windows.`, source: "Curated contract tracker (market record)", ownership: "market" });
+      basis.push({ text: `Observed commercial awards ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two spine windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
     providerMomentum = metric(
       "providerMomentum",
       "Provider Momentum",
       state,
-      awardsMove,
-      g != null && d && d.contracts >= 3 ? "medium" : "low",
+      movement,
+      (v.proc && procHeat.usable) || (g != null && d && d.contracts >= 3) ? "medium" : "low",
       null,
       basis,
-      cat?.sourcedAt ?? v.spineLastIngest,
+      v.proc?.lastAwardDate ?? cat?.sourcedAt ?? v.spineLastIngest,
     );
   }
 
@@ -338,11 +445,27 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         asOf: talent.sourcedAt,
       });
     }
+    /* Movement from GENUINE observed snapshots (canonical claim versions). */
+    let talentMove: Movement = "insufficient";
+    const flowSeries = v.prims?.get("talent_net_flow")?.series;
+    if (flowSeries && flowSeries.length >= 2) {
+      const delta = flowSeries[flowSeries.length - 1].value - flowSeries[0].value;
+      talentMove =
+        delta <= -1500 ? "materially-deteriorating"
+        : delta <= -250 ? "deteriorating"
+        : delta >= 1500 ? "materially-improving"
+        : delta >= 250 ? "improving"
+        : "stable";
+      basis.push({
+        text: `Net-flow moved ${signed(Math.round(delta))} across ${flowSeries.length} observed snapshots since ${shortDate(flowSeries[0].calculatedAt)} (observed snapshots).`,
+        source: "Canonical vendor snapshots", ownership: "market",
+      });
+    }
     talentPressure = metric(
       "talentPressure",
       "Talent Pressure",
       state,
-      "insufficient",
+      talentMove,
       "medium",
       declining
         ? "Delivery workforce is contracting — a capacity question for multi-year commitments."
@@ -404,8 +527,31 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "No reputation reading is held for this vendor.",
     );
   } else {
-    const movement: Movement =
+    /* Movement from the tracker's OWN trailing series where present (reconstructed
+       history — labelled as such), else its per-audience trend flags. */
+    let movement: Movement =
       rep.trendsUp > rep.trendsDown ? "improving" : rep.trendsDown > rep.trendsUp ? "deteriorating" : "stable";
+    const basis: Basis[] = [
+      {
+        text: `Sentiment ${rep.sentimentScore}/100 across tracked audiences; ${rep.trendsUp} trending up, ${rep.trendsDown} down.`,
+        source: "AnalystGenius reputation tracker", ownership: "market",
+        asOf: rep.sourcedAt,
+      },
+    ];
+    const series = v.repSeries;
+    if (series && series.points.length >= 4) {
+      const vals = series.points.map((p) => p.value).filter((x): x is number => x != null);
+      const first = vals[0];
+      const last = vals[vals.length - 1];
+      if (first != null && last != null) {
+        const delta = last - first;
+        movement = delta >= 6 ? "improving" : delta <= -6 ? "deteriorating" : "stable";
+        basis.push({
+          text: `Tracker series moved ${delta >= 0 ? "+" : ""}${delta} points across its ${vals.length} most recent periods (${historyModeLabel(series.mode)}).`,
+          source: series.source, ownership: "market",
+        });
+      }
+    }
     const state: MetricState = rep.sentimentScore >= 70 ? "favourable" : rep.sentimentScore >= 50 ? "stable" : "unfavourable";
     reputationMovement = metric(
       "reputationMovement",
@@ -414,13 +560,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       movement,
       "medium",
       rep.insightTitle,
-      [
-        {
-          text: `Sentiment ${rep.sentimentScore}/100 across tracked audiences; ${rep.trendsUp} trending up, ${rep.trendsDown} down.`,
-          source: "AnalystGenius reputation tracker", ownership: "market",
-          asOf: rep.sourcedAt,
-        },
-      ],
+      basis,
       rep.sourcedAt,
     );
   }
@@ -505,6 +645,11 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
     if (talent?.netFlow != null)
       basis.push({ text: `Net talent flow ${signed(talent.netFlow)} with headcount ${talent.headcountTrend ?? "trend not stated"}.`, source: "AnalystGenius talent signals", ownership: "market", asOf: talent.sourcedAt });
+    if (marginPrim)
+      basis.push({
+        text: `Financial capacity to fund gain-share structures: operating margin ${marginPrim.value.toFixed(1)}% (SEC 10-K, period ending ${shortDate(marginPrim.asOf)}).`,
+        source: "SEC EDGAR companyfacts", ownership: "market", asOf: marginPrim.asOf,
+      });
     gainShareOpportunity = metric(
       "gainShareOpportunity",
       "Gain-Sharing Opportunity",
@@ -529,7 +674,23 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   } else {
     const alts = v.alternativesInTopLine;
-    const state: MetricState = alts >= 2 && d.inPlay12 >= 1 ? "favourable" : alts >= 1 ? "stable" : "unfavourable";
+    // Competitive breadth counts both corpora: scoped alternatives in the vendor's top
+    // commercial line, and distinct scoped winners of fresh public work.
+    const competitiveBreadth = Math.max(alts, v.procWinners180 > 1 ? v.procWinners180 - 1 : 0);
+    const state: MetricState =
+      competitiveBreadth >= 2 && d.inPlay12 >= 1 ? "favourable" : competitiveBreadth >= 1 ? "stable" : "unfavourable";
+    const basis: Basis[] = [
+      {
+        text: `${count(alts)} other selected vendor${alts === 1 ? "" : "s"} active in ${d.topLines[0]?.line ?? "their top line"}; ${count(d.inPlay12)} of their observed agreements in the 12-month window.`,
+        source: "Curated contract tracker (market record)", ownership: "market",
+      },
+    ];
+    if (v.procWinners180 >= 2) {
+      basis.push({
+        text: `${count(v.procWinners180)} of the selected vendors won public work in the last 180 days — live competitive participation.`,
+        source: "Public procurement record", ownership: "market",
+      });
+    }
     marketTestOpportunity = metric(
       "marketTestOpportunity",
       "Market-Test Opportunity",
@@ -539,15 +700,10 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       state === "favourable"
         ? "Credible alternatives exist in-scope while observed renewal activity concentrates."
         : state === "unfavourable"
-          ? "No scoped alternative holds contracts in their top line — a test would need a wider field."
+          ? "No scoped alternative shows observed activity in their field — a test would need a wider market."
           : null,
-      [
-        {
-          text: `${count(alts)} other selected vendor${alts === 1 ? "" : "s"} active in ${d.topLines[0]?.line ?? "their top line"}; ${count(d.inPlay12)} of their observed agreements in the 12-month window.`,
-          source: "Curated contract tracker (market record)", ownership: "market",
-        },
-      ],
-      v.spineLastIngest,
+      basis,
+      v.spineDataAsOf ?? v.spineLastIngest,
     );
   }
 
@@ -764,16 +920,23 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const tickers = scopedTickers(scope, universeTickers);
   const key = [...tickers].sort().join(",");
 
-  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness] = await Promise.all([
-    getVendorDealFacts(key),
-    getVendorSignals(key),
-    getCatalog(key),
-    getSecSummaries(key),
-    getSignalDeltas(key),
-    getScopeAggregates(key),
-    getSpineAnchor(),
-    getFreshness(),
-  ]);
+  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, spineQ, procMonthly, pricingMix] =
+    await Promise.all([
+      getVendorDealFacts(key),
+      getVendorSignals(key),
+      getCatalog(key),
+      getSecSummaries(key),
+      getSignalDeltas(key),
+      getScopeAggregates(key),
+      getSpineAnchor(),
+      getFreshness(),
+      getProcurementFlow(key),
+      getVendorPrimitives(key),
+      getReputationSeries(key),
+      getSpineQuarterlyFlow(key),
+      getProcurementMonthlyFlow(key),
+      getPricingModelMixByYear(key),
+    ]);
 
   /* Alternatives: which scoped vendors share a top service line. */
   const topLineOf = new Map<string, string | null>();
@@ -804,9 +967,14 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       catalog: catalog.get(ticker),
       sec: sec.get(ticker),
       delta: deltas.get(ticker),
+      proc: proc.byVendor.get(ticker),
+      prims: prims.get(ticker),
+      repSeries: repSeries.get(ticker),
+      procWinners180: proc.distinctWinners180,
       alternativesInTopLine: alternatives,
       scopeVendorCount: tickers.length,
       spineLastIngest: anchor.lastIngest,
+      spineDataAsOf: anchor.dataAsOf,
     });
     const opportunities = opportunitiesFor(metrics);
     const nrg = signals.get(ticker)?.nrg;
@@ -876,6 +1044,20 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       "Demand is heating across your market.",
     ),
     servicesDemand: (() => {
+      // Fresh public award flow carries demand when it can (§13); the spine is context.
+      if (proc.totalT90 + proc.totalPrior90 >= 5) {
+        const move = ratioMove(proc.totalT90, proc.totalPrior90);
+        return metric(
+          "m.demand", "Services Demand",
+          move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
+          move, "medium", null,
+          [{
+            text: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (public record, refreshed ${shortDate(proc.lastIngest)}).`,
+            source: "Public procurement record", ownership: "market", asOf: proc.lastIngest,
+          }],
+          proc.lastIngest,
+        );
+      }
       if (agg.contracts === 0) return insufficientMetric("m.demand", "Services Demand", "No contract evidence in scope.");
       const move = ratioMove(agg.awardsT12, agg.awardsPrior12);
       return metric(
@@ -883,10 +1065,10 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
         move, "low", null,
         [{
-          text: `${count(agg.awardsT12)} awards across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
+          text: `${count(agg.awardsT12)} observed awards across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.dataAsOf ?? anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
           source: "Curated contract tracker (market record)", ownership: "market",
         }],
-        anchor.lastIngest,
+        anchor.dataAsOf ?? anchor.lastIngest,
       );
     })(),
     competitiveIntensity: (() => {
@@ -932,81 +1114,160 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     return { state, movement, dimensions: economicsDimensions };
   })();
 
-  /* 12-month change — honest per dimension (spec §3, §10). */
+  /* ── 12-month change — reconstructed from dated observations, plus GENUINE
+     observed snapshots where the canonical ledger holds ≥2 versions (§9/§15).
+     Every row states its mode; reconstructed history is never presented as
+     contemporaneous calculation. Quality gates (documented, §14): a direction
+     is asserted only from ≥2 dated points; sub-threshold series say so. ── */
   const trackedSince = [...deltas.values()].map((d) => d.trackedSince).filter(Boolean).sort()[0] ?? null;
-  const aiDeltas = [...deltas.values()].map((d) => d.aiReadinessDelta).filter((x): x is number => x != null && x !== 0);
-  const netFlowDeltas = [...deltas.values()].map((d) => d.netFlowDelta).filter((x): x is number => x != null && x !== 0);
-  const gapDeltas = [...deltas.values()].map((d) => d.gapScoreDelta).filter((x): x is number => x != null && x !== 0);
 
-  const changes: TwelveMonthDimension[] = [
-    {
-      dimension: "AI delivery capability",
-      state: aiDeltas.length > 0 ? "mixed" : "stable",
-      movement: aiDeltas.length === 0 ? "stable" : aiDeltas.reduce((a, b) => a + b, 0) > 0 ? "improving" : "deteriorating",
-      detail:
-        trackedSince == null
-          ? "No capability history is held."
-          : aiDeltas.length === 0
-            ? `No AI-readiness movement observed since AG signal tracking began (${shortDate(trackedSince)}). A full 12-month capability series is not yet held.`
-            : `${aiDeltas.length} vendor${aiDeltas.length === 1 ? "" : "s"} moved on AI-readiness since tracking began ${shortDate(trackedSince)}; a full 12-month series is not yet held.`,
-      confidence: "low",
-      source: "AnalystGenius vendor catalog",
-    },
-    {
-      dimension: "Pricing economics",
-      state: "insufficient",
-      movement: "insufficient",
-      detail: `The contract spine has not refreshed since ${shortDate(anchor.lastIngest)} (${anchor.daysStale} days) — pricing movement over the retrospective window cannot be evidenced.`,
-      confidence: "insufficient",
-      source: "Curated contract tracker (market record)",
-    },
-    {
+  const seriesDelta = (metricName: string): { moved: number; assessed: number; net: number } => {
+    let moved = 0;
+    let assessed = 0;
+    let net = 0;
+    for (const t of tickers) {
+      const s = prims.get(t)?.get(metricName)?.series;
+      if (!s || s.length < 2) continue;
+      assessed++;
+      const d0 = s[s.length - 1].value - s[0].value;
+      if (d0 !== 0) {
+        moved++;
+        net += d0;
+      }
+    }
+    return { moved, assessed, net };
+  };
+
+  const qSum = (series: HistorySeries, fromIdx: number, toIdx: number): number =>
+    series.points.slice(fromIdx, toIdx).reduce((a, p) => a + (p.value ?? 0), 0);
+
+  const changes: TwelveMonthDimension[] = [];
+
+  {
+    // Commercial deal flow — quarterly signings, anchored to the spine's own data-as-of.
+    const pts = spineQ.points;
+    if (pts.length >= 8) {
+      const recent = qSum(spineQ, pts.length - 4, pts.length);
+      const prior = qSum(spineQ, pts.length - 8, pts.length - 4);
+      changes.push({
+        dimension: "Deal flow (commercial)",
+        state: recent < prior ? "favourable" : recent > prior ? "unfavourable" : "stable",
+        movement: ratioMove(recent, prior),
+        detail: `${count(recent)} observed signings across the four most recent quarters on record vs ${count(prior)} in the four before (to ${shortDate(anchor.dataAsOf)}; ${historyModeLabel(spineQ.mode)}).`,
+        confidence: "medium",
+        source: spineQ.source,
+      });
+    }
+  }
+
+  {
+    // Public award flow — the fresh series.
+    if (proc.totalT90 + proc.totalPrior90 >= 5) {
+      changes.push({
+        dimension: "Deal flow (public procurement)",
+        state: proc.totalT90 < proc.totalPrior90 ? "favourable" : proc.totalT90 > proc.totalPrior90 ? "unfavourable" : "stable",
+        movement: ratioMove(proc.totalT90, proc.totalPrior90),
+        detail: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (${historyModeLabel(procMonthly.mode)}; flow evidence, never enterprise pricing).`,
+        confidence: "medium",
+        source: procMonthly.source,
+      });
+    }
+  }
+
+  {
+    // Commercial-model mix — the observable gain-sharing precondition.
+    const withShare = pricingMix.points.filter((p) => p.value != null);
+    if (withShare.length >= 2) {
+      const first = withShare[0];
+      const last = withShare[withShare.length - 1];
+      const delta = Number(((last.value ?? 0) - (first.value ?? 0)).toFixed(1));
+      changes.push({
+        dimension: "Pricing economics (commercial model)",
+        state: "mixed",
+        movement: delta > 1 ? "improving" : delta < -1 ? "deteriorating" : "stable",
+        detail: `Consumption/outcome-shaped share of observed agreements ${first.value}% (${first.period}, n=${first.n}) → ${last.value}% (${last.period}, n=${last.n}) (${historyModeLabel(pricingMix.mode)}). Rate-LEVEL movement remains unverifiable from the record.`,
+        confidence: "low",
+        source: pricingMix.source,
+      });
+    } else {
+      changes.push({
+        dimension: "Pricing economics",
+        state: "insufficient",
+        movement: "insufficient",
+        detail: `Commercial contract evidence is as of ${shortDate(anchor.dataAsOf)} — rate-level movement over the retrospective window cannot be evidenced.`,
+        confidence: "insufficient",
+        source: "Curated contract spine (market record)",
+      });
+    }
+  }
+
+  {
+    // Talent — genuine observed snapshots from the canonical ledger.
+    const t = seriesDelta("talent_net_flow");
+    changes.push({
       dimension: "Talent pressure",
-      state: netFlowDeltas.some((d) => d < 0) ? "unfavourable" : "stable",
-      movement: netFlowDeltas.length === 0 ? "stable" : netFlowDeltas.reduce((a, b) => a + b, 0) < 0 ? "deteriorating" : "improving",
+      state: t.net < 0 ? "unfavourable" : "stable",
+      movement: t.assessed === 0 ? "insufficient" : t.net < -500 ? "deteriorating" : t.net > 500 ? "improving" : "stable",
       detail:
-        netFlowDeltas.length === 0
-          ? `No net-flow movement observed since tracking began${trackedSince ? ` (${shortDate(trackedSince)})` : ""}.`
-          : `Net talent flow moved for ${netFlowDeltas.length} vendor${netFlowDeltas.length === 1 ? "" : "s"} since ${shortDate(trackedSince)}.`,
+        t.assessed === 0
+          ? `Observed snapshots begin ${shortDate(trackedSince)} — movement will accrue from the canonical ledger.`
+          : `Net talent flow moved for ${t.moved} of ${t.assessed} vendors with ≥2 canonical snapshots (observed snapshots since ${shortDate(trackedSince)}).`,
+      confidence: t.assessed >= 2 ? "medium" : "low",
+      source: "Canonical vendor snapshots · AG talent signals",
+    });
+  }
+
+  {
+    // AI capability — observed snapshots of the AG AI-readiness primitive.
+    const a = seriesDelta("ai_readiness");
+    changes.push({
+      dimension: "AI delivery capability",
+      state: a.moved > 0 ? "mixed" : "stable",
+      movement: a.assessed === 0 ? "insufficient" : a.net > 0 ? "improving" : a.net < 0 ? "deteriorating" : "stable",
+      detail:
+        a.assessed === 0
+          ? `AI-readiness snapshots begin ${shortDate(trackedSince)}; a full 12-month capability series is not yet held.`
+          : `AI-readiness moved for ${a.moved} of ${a.assessed} vendors across canonical snapshots (observed snapshots); a full 12-month series is still accruing.`,
       confidence: "low",
-      source: "AnalystGenius talent signals",
-    },
-    {
-      dimension: "Provider economics",
-      state: strip.servicesDemand.state,
-      movement: strip.servicesDemand.movement,
-      detail: strip.servicesDemand.basis[0]?.text ?? "—",
-      confidence: "low",
-      source: "Curated contract tracker · SEC 8-K",
-    },
-    {
-      dimension: "Competitive intensity",
-      state: strip.competitiveIntensity.state,
-      movement: strip.competitiveIntensity.movement,
-      detail: strip.competitiveIntensity.basis[0]?.text ?? "—",
-      confidence: "low",
-      source: "Curated contract tracker (market record)",
-    },
-    {
+      source: "Canonical vendor snapshots · AG vendor catalog",
+    });
+  }
+
+  {
+    // Reputation — the tracker's own trailing series (reconstructed).
+    let assessed = 0;
+    let netShift = 0;
+    for (const t of tickers) {
+      const s = repSeries.get(t);
+      if (!s || s.points.length < 4) continue;
+      const vals = s.points.map((p) => p.value).filter((x): x is number => x != null);
+      if (vals.length < 4) continue;
+      assessed++;
+      netShift += vals[vals.length - 1] - vals[0];
+    }
+    if (assessed > 0) {
+      changes.push({
+        dimension: "Reputation",
+        state: netShift < -6 * assessed ? "unfavourable" : "stable",
+        movement: netShift > 4 * assessed ? "improving" : netShift < -4 * assessed ? "deteriorating" : "stable",
+        detail: `Mean tracker-series shift ${netShift >= 0 ? "+" : ""}${Math.round(netShift / assessed)} points across ${assessed} vendors (reconstructed from the AG tracker's own trailing series).`,
+        confidence: "low",
+        source: "AnalystGenius reputation tracker",
+      });
+    }
+  }
+
+  {
+    // Buyer leverage inputs — expiry pipeline vs recent endings (both corpora shown separately).
+    changes.push({
       dimension: "Buyer leverage",
       state: agg.inPlay12 > agg.expiredPast12 ? "favourable" : agg.inPlay12 === 0 ? "unfavourable" : "stable",
       movement: ratioMove(agg.inPlay12, agg.expiredPast12),
-      detail: `${count(agg.inPlay12)} observed agreements reach end-of-term in the next 12 months (${money(agg.inPlay12Tcv)}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
+      detail: `${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${money(agg.inPlay12Tcv)}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
       confidence: "medium",
       source: "Curated contract tracker (market record)",
-    },
-    {
-      dimension: "Claims vs delivery",
-      state: gapDeltas.length > 0 ? "mixed" : "stable",
-      movement: gapDeltas.length > 0 ? "improving" : "stable",
-      detail:
-        gapDeltas.length === 0
-          ? `No claims-vs-delivery direction changed since tracking began${trackedSince ? ` (${shortDate(trackedSince)})` : ""}.`
-          : `${gapDeltas.length} vendor gap score${gapDeltas.length === 1 ? "" : "s"} moved since ${shortDate(trackedSince)}.`,
-      confidence: "low",
-      source: "AnalystGenius claims-vs-delivery",
-    },
-  ];
+    });
+  }
 
   const names = tickers.map((t) => nameOf.get(t) ?? t);
   const updatedAt = freshness.map((f) => f.lastSeen).filter((x): x is string => Boolean(x)).sort().at(-1) ?? null;

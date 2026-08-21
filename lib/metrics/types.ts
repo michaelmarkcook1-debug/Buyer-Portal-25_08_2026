@@ -163,7 +163,12 @@ export interface MarketIntel {
   baselineStart: string;
   /** Latest ingest across sources — the global freshness line. */
   updatedAt: string | null;
-  spine: { lastIngest: string; daysStale: number };
+  /**
+   * Spine freshness carries BOTH truths: ingest provenance and the newest
+   * observation date the commercial evidence itself contains (data-as-of).
+   * Freshness is never inferred from ingestion timestamps alone.
+   */
+  spine: { lastIngest: string; daysStale: number; dataAsOf: string | null; dataAgeDays: number | null };
   strip: {
     buyerLeverage: Metric;
     pricingPressure: Metric;

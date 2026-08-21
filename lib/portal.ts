@@ -1,5 +1,5 @@
 import "server-only";
-import { getFreshness, getSpineAnchor, getUniverse, type SourceFreshness, type UniverseVendor } from "@/lib/data/facts";
+import { getFreshness, getSpineAnchor, getUniverse, type SourceFreshness, type SpineAnchor, type UniverseVendor } from "@/lib/data/facts";
 import { isDbConfigured } from "@/lib/db";
 import { getMarketScope, type MarketScope, type RawSearchParams } from "@/lib/market-scope";
 
@@ -12,7 +12,7 @@ export type PortalContext =
       scope: MarketScope;
       names: string[];
       freshness: SourceFreshness[];
-      spine: { lastIngest: string; daysStale: number };
+      spine: SpineAnchor;
       updatedAt: string | null;
     };
 

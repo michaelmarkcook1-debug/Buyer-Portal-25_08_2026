@@ -47,6 +47,23 @@ export function encodeCookieValue(c: ScopeCookie): string {
   return JSON.stringify(c);
 }
 
+export type ScopeMode = "selected_vendors" | "whole_market" | "unset";
+
+export interface MarketScopeShape {
+  mode: ScopeMode;
+  vendorIds: string[];
+}
+
+/**
+ * The tickers a data read may scope to. Selected vendors define the market —
+ * a calculation may NEVER silently widen beyond this (§15 regression-tested).
+ */
+export function scopedTickers(scope: MarketScopeShape, universe: readonly string[]): string[] {
+  if (scope.mode === "selected_vendors") return scope.vendorIds;
+  if (scope.mode === "whole_market") return [...universe];
+  return [];
+}
+
 /** Normalise a ?vendors= param (repeated or comma-separated) to uppercase tickers. */
 export function tickersFromParam(value: string | string[] | undefined): string[] {
   if (value == null) return [];

@@ -20,7 +20,13 @@ import { q } from "@/lib/db";
  *   · nothing hardcodes a count; every figure is computed at request time.
  */
 
-const COMMERCIAL = "contract_tracker";
+/**
+ * The commercial spine now has two curated feeds: the TG structured dataset
+ * ('contract_tracker', via the xlsx bridge) and the Contract Tracker curated
+ * store's validated non-TG discoveries ('contract_tracker_store'). Both are
+ * market evidence; store values land only when the store marks them explicit.
+ */
+const COMMERCIAL_SYSTEMS = ["contract_tracker", "contract_tracker_store"];
 
 /* ───────────────────────── Freshness ───────────────────────── */
 
@@ -36,9 +42,11 @@ export interface SourceFreshness {
 
 const FRESHNESS_SOURCES = [
   { table: "stg_curated_deal", source: "Curated contract tracker", feeds: "contract spine — awards, renewals, values" },
+  { table: "stg_contract_store", source: "Contract Tracker curated store", feeds: "validated discovered contracts, renewal intelligence" },
+  { table: "stg_procurement_contract", source: "Public procurement record", feeds: "award flow across 6 jurisdictions — market evidence" },
   { table: "stg_analystgenius_signal", source: "AnalystGenius signals", feeds: "talent, reputation, top issues, claims vs delivery" },
   { table: "stg_analystgenius_provider", source: "AnalystGenius vendor catalog", feeds: "revenue, growth, AI readiness" },
-  { table: "stg_sec_event", source: "SEC 8-K filings", feeds: "corporate events, 17 US-listed vendors" },
+  { table: "stg_sec_event", source: "SEC 8-K filings", feeds: "corporate events, US-listed vendors" },
 ] as const;
 
 export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
@@ -68,14 +76,41 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
   );
 });
 
-/** The contract spine's last ingest date — the honest anchor for award-flow windows. */
-export const getSpineAnchor = cache(async (): Promise<{ lastIngest: string; daysStale: number }> => {
-  const [r] = await q<{ last: string; days: string }>(
-    `SELECT to_char(max(ingested_at), 'YYYY-MM-DD') AS last,
-            (current_date - max(ingested_at)::date) AS days
-       FROM stg_curated_deal`,
+export interface SpineAnchor {
+  /** Last INGEST — pipeline provenance only, never presented as data freshness. */
+  lastIngest: string;
+  daysStale: number;
+  /**
+   * DATA-AS-OF — the newest observation date the commercial evidence itself
+   * carries (max curated announcement date, max started store contract).
+   * Freshness must never be inferred from ingestion timestamps (§1).
+   */
+  dataAsOf: string | null;
+  dataAgeDays: number | null;
+}
+
+export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
+  const [r] = await q<{ last: string; days: string; as_of: string | null; age: string | null }>(
+    `WITH curated AS (
+       SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date AS d
+         FROM stg_curated_deal
+     ), store AS (
+       SELECT max(left(start_date_raw, 10))::date AS d
+         FROM stg_contract_store
+        WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')
+     )
+     SELECT to_char(max(sd.ingested_at), 'YYYY-MM-DD') AS last,
+            (current_date - max(sd.ingested_at)::date) AS days,
+            to_char(GREATEST((SELECT d FROM curated), (SELECT d FROM store)), 'YYYY-MM-DD') AS as_of,
+            (current_date - GREATEST((SELECT d FROM curated), (SELECT d FROM store))) AS age
+       FROM stg_curated_deal sd`,
   );
-  return { lastIngest: r?.last ?? "", daysStale: Number(r?.days ?? 0) };
+  return {
+    lastIngest: r?.last ?? "",
+    daysStale: Number(r?.days ?? 0),
+    dataAsOf: r?.as_of ?? null,
+    dataAgeDays: r?.age == null ? null : Number(r.age),
+  };
 });
 
 /* ───────────────────────── Vendor universe ───────────────────────── */
@@ -107,9 +142,9 @@ export const getUniverse = cache(async (): Promise<UniverseVendor[]> => {
      )
      SELECT l.ticker, l.name,
             (SELECT count(*) FROM deal d
-              WHERE d.ag_provider_id = xr.ag_provider_id AND d.source_system = $1) AS contracts,
+              WHERE d.ag_provider_id = xr.ag_provider_id AND d.source_system = ANY($1::text[])) AS contracts,
             (SELECT count(*) FROM deal d
-              WHERE d.ag_provider_id = xr.ag_provider_id AND d.source_system = $1
+              WHERE d.ag_provider_id = xr.ag_provider_id AND d.source_system = ANY($1::text[])
                 AND d.end_date >= current_date
                 AND d.end_date < current_date + interval '24 months') AS in_play_24,
             (SELECT count(DISTINCT s.signal_type) FROM stg_analystgenius_signal s
@@ -118,7 +153,7 @@ export const getUniverse = cache(async (): Promise<UniverseVendor[]> => {
        FROM latest l
        JOIN xr ON xr.ticker = l.ticker
       ORDER BY l.name ASC`,
-    [COMMERCIAL],
+    [COMMERCIAL_SYSTEMS],
   );
   return rows.map((r) => ({
     ticker: r.ticker,
@@ -193,9 +228,9 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
                 AND d.start_date <= (SELECT d FROM anchor) - interval '12 months') AS aw_p12_tcv
          FROM deal d
          JOIN xr ON xr.ag_provider_id = d.ag_provider_id
-        WHERE d.source_system = $1
+        WHERE d.source_system = ANY($1::text[])
         GROUP BY xr.ticker`,
-      [COMMERCIAL, tickers],
+      [COMMERCIAL_SYSTEMS, tickers],
     ),
     q<{ ticker: string; line: string; n: string }>(
       `WITH xr AS (SELECT external_id AS ticker, ag_provider_id FROM xref_identity WHERE system='ticker'
@@ -204,10 +239,10 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
          FROM deal d
          JOIN xr ON xr.ag_provider_id = d.ag_provider_id
          JOIN service_taxonomy t ON t.taxonomy_id = d.taxonomy_id
-        WHERE d.source_system = $1
+        WHERE d.source_system = ANY($1::text[])
         GROUP BY 1, 2
         ORDER BY 1, count(*) DESC`,
-      [COMMERCIAL, tickers],
+      [COMMERCIAL_SYSTEMS, tickers],
     ),
   ]);
 
@@ -265,12 +300,12 @@ export async function getVendorExposure(ticker: string, limit = 8): Promise<Expo
        JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
        LEFT JOIN service_taxonomy t ON t.taxonomy_id = d.taxonomy_id
        LEFT JOIN vertical v ON v.vertical_id = d.client_vertical_id
-      WHERE d.source_system = $1 AND x.external_id = $2
+      WHERE d.source_system = ANY($1::text[]) AND x.external_id = $2
         AND d.end_date >= current_date
         AND d.end_date < current_date + interval '24 months'
       ORDER BY d.end_date ASC
       LIMIT $3`,
-    [COMMERCIAL, ticker, limit],
+    [COMMERCIAL_SYSTEMS, ticker, limit],
   );
   return rows.map((r) => ({
     client: r.client_name,
@@ -624,13 +659,13 @@ export const getDevelopments = cache(async (tickersKey: string, limit = 30): Pro
          LEFT JOIN stg_curated_deal sd
            ON sd.source_system = d.source_system
           AND d.deal_id = substr(encode(digest('deal:' || sd.source_system || ':' || sd.source_record_id, 'sha256'), 'hex'), 1, 32)
-        WHERE d.source_system = $1
+        WHERE d.source_system = ANY($1::text[])
           AND x.external_id = ANY($2::text[])
           AND d.start_date <= current_date
           AND d.start_date >= current_date - interval '12 months'
         ORDER BY d.start_date DESC
         LIMIT $3`,
-      [COMMERCIAL, tickers, limit],
+      [COMMERCIAL_SYSTEMS, tickers, limit],
     ),
     q<{ d: string; ticker: string; vendor: string; code: string | null; label: string | null; url: string | null }>(
       `SELECT to_char(e.filed_at, 'YYYY-MM-DD') AS d, e.ticker,
@@ -695,12 +730,196 @@ export const getScopeLines = cache(async (tickersKey: string): Promise<ScopeLine
        FROM deal d
        JOIN xr ON xr.ag_provider_id = d.ag_provider_id
        JOIN service_taxonomy t ON t.taxonomy_id = d.taxonomy_id
-      WHERE d.source_system = $1
+      WHERE d.source_system = ANY($1::text[])
       GROUP BY 1
       ORDER BY count(*) DESC`,
-    [COMMERCIAL, tickers],
+    [COMMERCIAL_SYSTEMS, tickers],
   );
   return rows.map((r) => ({ line: r.line, contracts: Number(r.n), inPlay24: Number(r.in_play) }));
+});
+
+/* ───────────────────────── Public procurement flow (fresh market evidence) ───────────────────────── */
+
+export interface ProcurementFlow {
+  ticker: string;
+  awardsT90: number;
+  awardsPrior90: number;
+  awardsT365: number;
+  valueT365: number | null;
+  lastAwardDate: string | null;
+  /** Procurement records with end dates inside the next 12 months. */
+  inPlayNext12: number;
+}
+
+export interface ScopeProcurement {
+  byVendor: Map<string, ProcurementFlow>;
+  totalT90: number;
+  totalPrior90: number;
+  distinctWinners180: number;
+  lastIngest: string | null;
+}
+
+/**
+ * Fresh public-procurement award flow for the scoped vendors — MARKET evidence,
+ * flow/context only. Values here NEVER feed pricing benchmarks (public-sector
+ * awards are not enterprise pricing); the curated spine remains the pricing
+ * substrate. Only rows the resolver actually resolved are counted.
+ */
+export const getProcurementFlow = cache(async (tickersKey: string): Promise<ScopeProcurement> => {
+  const tickers = tickersKey.split(",").filter(Boolean);
+  const empty: ScopeProcurement = { byVendor: new Map(), totalT90: 0, totalPrior90: 0, distinctWinners180: 0, lastIngest: null };
+  if (tickers.length === 0) return empty;
+
+  const [rows, [scope]] = await Promise.all([
+    q<{
+      ticker: string; t90: string; p90: string; t365: string; v365: string | null;
+      last_award: string | null; inplay12: string;
+    }>(
+      `SELECT x.external_id AS ticker,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '90 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS t90,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '180 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(current_date - interval '90 days', 'YYYY-MM-DD')) AS p90,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '365 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS t365,
+              sum(p.value_usd_raw) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '365 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS v365,
+              max(left(p.start_date_raw, 10)) FILTER (WHERE left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS last_award,
+              count(*) FILTER (WHERE left(p.end_date_raw, 10) >= to_char(current_date, 'YYYY-MM-DD')
+                                 AND left(p.end_date_raw, 10) < to_char(current_date + interval '12 months', 'YYYY-MM-DD')) AS inplay12
+         FROM stg_procurement_contract p
+         JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
+        WHERE p.resolution_status = 'resolved'
+          AND x.external_id = ANY($1::text[])
+        GROUP BY 1`,
+      [tickers],
+    ),
+    q<{ winners: string; last_ingest: string | null }>(
+      `SELECT count(DISTINCT p.resolved_ag_provider_id) FILTER (
+                WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '180 days', 'YYYY-MM-DD')) AS winners,
+              to_char(max(p.ingested_at), 'YYYY-MM-DD') AS last_ingest
+         FROM stg_procurement_contract p
+         JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
+        WHERE p.resolution_status = 'resolved'
+          AND x.external_id = ANY($1::text[])`,
+      [tickers],
+    ),
+  ]);
+
+  const byVendor = new Map<string, ProcurementFlow>();
+  let totalT90 = 0;
+  let totalPrior90 = 0;
+  for (const r of rows) {
+    const flow: ProcurementFlow = {
+      ticker: r.ticker,
+      awardsT90: Number(r.t90),
+      awardsPrior90: Number(r.p90),
+      awardsT365: Number(r.t365),
+      valueT365: r.v365 == null ? null : Number(r.v365),
+      lastAwardDate: r.last_award,
+      inPlayNext12: Number(r.inplay12),
+    };
+    byVendor.set(r.ticker, flow);
+    totalT90 += flow.awardsT90;
+    totalPrior90 += flow.awardsPrior90;
+  }
+  return {
+    byVendor,
+    totalT90,
+    totalPrior90,
+    distinctWinners180: Number(scope?.winners ?? 0),
+    lastIngest: scope?.last_ingest ?? null,
+  };
+});
+
+/* ───────────────────────── Canonical vendor-primitive claims ───────────────────────── */
+
+export interface PrimitivePoint {
+  value: number;
+  asOf: string;
+  calculatedAt: string;
+}
+
+export interface VendorPrimitive {
+  value: number;
+  unit: string | null;
+  asOf: string;
+  evidenceGrade: string;
+  dataStatus: string;
+  confidence: number;
+  sourceUrl: string | null;
+  /** Full version chain, oldest→newest — genuine observed snapshots (§10/§15). */
+  series: PrimitivePoint[];
+}
+
+/**
+ * Reads the vendor-level primitives snapshotted upstream onto the canonical
+ * claim ledger (claim versioning IS the snapshot history). The portal derives
+ * market-relative intelligence from these; it never writes them.
+ */
+export const getVendorPrimitives = cache(async (tickersKey: string): Promise<Map<string, Map<string, VendorPrimitive>>> => {
+  const tickers = tickersKey.split(",").filter(Boolean);
+  if (tickers.length === 0) return new Map();
+
+  const rows = await q<{
+    ticker: string; claim_type: string; numeric_value: number | null; unit: string | null;
+    as_of: string | null; valid_from: string; is_current: boolean;
+    evidence_grade: string; data_status: string; confidence: string;
+    source_url: string | null;
+  }>(
+    `SELECT x.external_id AS ticker,
+            c.claim_type,
+            c.numeric_value,
+            c.unit,
+            to_char(c.as_of, 'YYYY-MM-DD') AS as_of,
+            to_char(c.valid_from, 'YYYY-MM-DD') AS valid_from,
+            (c.valid_to IS NULL) AS is_current,
+            c.evidence_grade::text AS evidence_grade,
+            c.data_status::text AS data_status,
+            c.confidence_score::float8::text AS confidence,
+            (SELECT e.source_url FROM claim_evidence ce
+               JOIN evidence e ON e.evidence_id = ce.evidence_id
+              WHERE ce.claim_id = c.claim_id LIMIT 1) AS source_url
+       FROM claim c
+       JOIN xref_identity x ON x.ag_provider_id = c.ag_provider_id AND x.system = 'ticker'
+      WHERE c.claim_type LIKE 'metric.%'
+        AND x.external_id = ANY($1::text[])
+      ORDER BY x.external_id, c.claim_type, c.valid_from ASC`,
+    [tickers],
+  );
+
+  const out = new Map<string, Map<string, VendorPrimitive>>();
+  for (const r of rows) {
+    if (r.numeric_value == null) continue;
+    const metric = r.claim_type.replace(/^metric\./, "");
+    const vendor = out.get(r.ticker) ?? new Map<string, VendorPrimitive>();
+    const point: PrimitivePoint = { value: r.numeric_value, asOf: r.as_of ?? r.valid_from, calculatedAt: r.valid_from };
+    const existing = vendor.get(metric);
+    if (existing) {
+      existing.series.push(point);
+      if (r.is_current) {
+        existing.value = r.numeric_value;
+        existing.asOf = r.as_of ?? r.valid_from;
+        existing.evidenceGrade = r.evidence_grade;
+        existing.dataStatus = r.data_status;
+        existing.confidence = Number(r.confidence);
+        existing.sourceUrl = r.source_url;
+      }
+    } else {
+      vendor.set(metric, {
+        value: r.numeric_value,
+        unit: r.unit,
+        asOf: r.as_of ?? r.valid_from,
+        evidenceGrade: r.evidence_grade,
+        dataStatus: r.data_status,
+        confidence: Number(r.confidence),
+        sourceUrl: r.source_url,
+        series: [point],
+      });
+    }
+    out.set(r.ticker, vendor);
+  }
+  return out;
 });
 
 /* ───────────────────────── Scope-level aggregates ───────────────────────── */
@@ -758,8 +977,8 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
               AND d.start_date <= (SELECT d FROM anchor) - interval '12 months') AS aw_p12_v
        FROM deal d
        JOIN xr ON xr.ag_provider_id = d.ag_provider_id
-      WHERE d.source_system = $1`,
-    [COMMERCIAL, tickers],
+      WHERE d.source_system = ANY($1::text[])`,
+    [COMMERCIAL_SYSTEMS, tickers],
   );
   const n = (k: string) => Number(r?.[k] ?? 0);
   const m = (k: string) => (r?.[k] == null ? null : Number(r[k]));
