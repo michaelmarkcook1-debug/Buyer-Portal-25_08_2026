@@ -1,4 +1,4 @@
-import type { MarketIntel, Metric, Opportunity, VendorIntel } from "./metrics/types";
+import type { MarketIntel, Metric, Opportunity, OpportunityType, VendorIntel } from "./metrics/types";
 import { shiftLevel, levelScore } from "./metrics/types";
 
 /**
@@ -192,4 +192,65 @@ export function applyScenario(intel: MarketIntel, scenario: Scenario): ScenarioR
     rankMoves.set(v.ticker, before - i);
   });
   return { scenario, vendors, rankMoves };
+}
+
+/* ── §18 (sprint 4): what the scenario means for STRATEGY, not just scores ── */
+
+export interface ScenarioRead {
+  /** Vendor whose opportunity profile moves most under the assumption. */
+  mostAffected: { ticker: string; name: string } | null;
+  /** The opportunity family that moves most for that vendor. */
+  familyMoved: OpportunityType | null;
+  /** Whether the buyer's relative position improves, worsens, or holds. */
+  position: "improves" | "worsens" | "holds";
+  /** Plain-language strategy note — modelled, never evidence. */
+  note: string;
+}
+
+const FAMILY_TEXT: Record<OpportunityType, string> = {
+  pricing: "pricing", automation: "automation", "gain-sharing": "gain-sharing",
+  "commercial-leverage": "commercial leverage", "market-test": "market-test",
+};
+
+export function scenarioRead(baseline: MarketIntel, result: ScenarioResult): ScenarioRead {
+  const before = new Map(baseline.vendors.map((v) => [v.ticker, v]));
+  let best: { ticker: string; name: string; delta: number; family: OpportunityType | null; dir: number } | null = null;
+  let netDelta = 0;
+  for (const v of result.vendors) {
+    const b = before.get(v.ticker);
+    if (!b) continue;
+    let vendorDelta = 0;
+    let famBest: { f: OpportunityType; d: number } | null = null;
+    for (const f of Object.keys(FAMILY_TEXT) as OpportunityType[]) {
+      const d = levelScore(v.opportunities[f].level) - levelScore(b.opportunities[f].level);
+      vendorDelta += d;
+      if (d !== 0 && (!famBest || Math.abs(d) > Math.abs(famBest.d))) famBest = { f, d };
+    }
+    netDelta += vendorDelta;
+    if (!best || Math.abs(vendorDelta) > Math.abs(best.delta)) {
+      best = { ticker: v.ticker, name: v.name, delta: vendorDelta, family: famBest?.f ?? null, dir: Math.sign(vendorDelta) };
+    }
+  }
+  if (!best || best.delta === 0) {
+    return {
+      mostAffected: null, familyMoved: null, position: "holds",
+      note: "Under this assumption, no selected vendor's opportunity profile moves a band — the modelled change is not decision-relevant at current evidence levels.",
+    };
+  }
+  const position = netDelta > 0 ? "improves" : netDelta < 0 ? "worsens" : "holds";
+  const others = result.vendors.filter((v) => v.ticker !== best!.ticker);
+  const unmoved = others.filter((v) => {
+    const b = before.get(v.ticker)!;
+    return (Object.keys(FAMILY_TEXT) as OpportunityType[]).every(
+      (f) => levelScore(v.opportunities[f].level) === levelScore(b.opportunities[f].level),
+    );
+  });
+  const note =
+    `The scenario ${best.dir > 0 ? "strengthens" : "weakens"} the ${best.family ? FAMILY_TEXT[best.family] : "commercial"} case ` +
+    `${best.dir > 0 ? "against" : "with"} ${best.name}` +
+    (unmoved.length > 0
+      ? `, but changes little for ${unmoved.map((v) => v.name).join(" and ")} — their positions rest on different evidence`
+      : "") +
+    `. Modelled recalculation, not new evidence.`;
+  return { mostAffected: { ticker: best.ticker, name: best.name }, familyMoved: best.family, position, note };
 }

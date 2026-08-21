@@ -19,6 +19,7 @@ const TAB_LABEL: Record<InsightTab, string> = {
   "vendor-detail": "Vendor",
   opportunities: "Opportunities",
   scenarios: "Scenario",
+  "opportunity-detail": "Opportunity briefing",
 };
 
 function Frame({ tab, children }: { tab: InsightTab; children: React.ReactNode }) {

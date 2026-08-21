@@ -36,7 +36,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
 
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
   const tickersKey = [...intel.scope.tickers].sort().join(",");
-  const developments = (await getDevelopments(tickersKey, 12)).slice(0, 6);
+  const developments = (await getDevelopments(tickersKey, 12)).slice(0, 5);
 
   const movers = intel.vendors
     .map((v) => {

@@ -133,6 +133,30 @@ export default async function VendorDetail({
 
       <AnalystInsightHero intel={intel} tab="vendor-detail" focalTicker={ticker} />
 
+      {focal.differentiation ? (
+        <section className="mt-10">
+          <SectionHeader eyebrow="Relative position" title="Why manage this vendor differently" />
+          <Panel className="mt-5 px-6 py-5">
+            <ul className="m-0 flex list-none flex-col gap-2.5 p-0 text-[0.92rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+              <li>{focal.differentiation.strongest}</li>
+              {focal.differentiation.weakest ? <li style={{ color: "var(--fg-muted)" }}>{focal.differentiation.weakest}</li> : null}
+              {focal.differentiation.relatives.map((r) => (
+                <li key={r} style={{ color: "var(--fg-muted)" }}>{r}</li>
+              ))}
+              {focal.differentiation.keyChange ? (
+                <li style={{ color: "var(--fg-muted)" }}>Most important 12-month change: {focal.differentiation.keyChange}</li>
+              ) : null}
+              {focal.differentiation.risk ? (
+                <li style={{ color: "var(--data-risk-ink)" }}>Current risk to the buyer: {focal.differentiation.risk}</li>
+              ) : null}
+              {focal.differentiation.discuss ? (
+                <li>Strongest commercial discussion topic: {focal.differentiation.discuss}</li>
+              ) : null}
+            </ul>
+          </Panel>
+        </section>
+      ) : null}
+
       <section className="mt-10">
         <SectionHeader eyebrow="Commercial position" title="Where the buyer stands" />
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

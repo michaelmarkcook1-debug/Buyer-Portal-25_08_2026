@@ -211,7 +211,7 @@ export function validateOwnership(text: string): { blocked: string[]; warnings: 
   return { blocked, warnings };
 }
 
-const WORD_CAP = 200;
+const WORD_CAP = 180;
 
 export function validateInsight(text: string, contextJson: string): InsightValidation {
   const blocked: string[] = [];

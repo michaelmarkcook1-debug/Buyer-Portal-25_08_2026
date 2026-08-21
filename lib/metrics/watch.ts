@@ -1,5 +1,6 @@
 import "server-only";
 import { getAiEvents, getDevelopments, type Development } from "@/lib/data/facts";
+import { dedupeSignals, leverageSignalClass } from "./rules";
 import { money, shortDate, signed } from "@/lib/format";
 import type { MarketIntel, WatchSignal } from "./types";
 
@@ -102,7 +103,9 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
     const lev = v.metrics.buyerLeverage;
     if (lev.state === "favourable" && v.coverage.inPlay12 > 0) {
       signals.push({
-        classification: "ACT",
+        // §7: ACT only when the evidence is confident AND concentration is
+        // real; thin or stale-capped leverage reads demote to WATCH.
+        classification: leverageSignalClass(lev.confidence, v.coverage.inPlay12),
         tickers: [v.ticker],
         vendors: [v.name],
         headline: `${v.name}: observed renewal activity concentrating`,
@@ -204,9 +207,13 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
     });
   }
 
+  /* §8: one underlying development surfaces once — same vendor within a
+     1-day window is the same development; the strongest classification wins. */
+  const byDevelopment = dedupeSignals(signals);
+
   /* Rank: ACT first, then recency, then confidence. One signal per (class, vendor). */
   const seen = new Set<string>();
-  const deduped = signals.filter((s) => {
+  const deduped = byDevelopment.filter((s) => {
     const k = `${s.classification}:${s.tickers.join(",")}:${s.headline}`;
     if (seen.has(k)) return false;
     seen.add(k);

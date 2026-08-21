@@ -32,9 +32,16 @@ function Cell({ v, col }: { v: VendorIntel; col: string }) {
   switch (col) {
     case "overall":
       return (
-        <span className="inline-flex items-center gap-1.5">
-          <LevelText level={v.overall.level} />
-          {v.overall.modelled ? <ModelledTag note={v.overall.modelled} /> : null}
+        <span className="inline-flex flex-col gap-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <LevelText level={v.overall.level} />
+            {v.overall.modelled ? <ModelledTag note={v.overall.modelled} /> : null}
+          </span>
+          {v.overall.reason ? (
+            <span className="max-w-[38ch] text-[0.72rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+              {v.overall.reason}
+            </span>
+          ) : null}
         </span>
       );
     case "pricing":

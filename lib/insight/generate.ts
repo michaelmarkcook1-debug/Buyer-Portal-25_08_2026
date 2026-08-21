@@ -15,7 +15,8 @@ import { validateInsight, VALIDATOR_VERSION } from "./validate";
  * failure mode renders as an explicit state — never as substitute prose.
  */
 
-export type InsightTab = "home" | "market" | "vendors" | "vendor-detail" | "opportunities" | "scenarios";
+import { OBJECTIVES, SCENARIOS_DEFAULT_OBJECTIVE, type InsightTab } from "./objectives";
+export type { InsightTab };
 
 export type InsightResult =
   | { status: "ok"; text: string; warnings: string[] }
@@ -23,19 +24,6 @@ export type InsightResult =
   | { status: "blocked"; reasons: string[] }
   | { status: "no-scope" };
 
-const OBJECTIVES: Record<InsightTab, string> = {
-  home: "Identify what matters most today across the buyer's selected vendor market — the one or two developments that most change their commercial, sourcing or supplier position.",
-  market:
-    "Judge how services economics are changing across the selected vendors: whether current conditions favour the buyer, why, and which one or two economic forces matter most.",
-  vendors:
-    "Compare the selected vendors: where they are diverging, which divergence most changes the buyer's position, and what that implies about who to press and who to watch.",
-  "vendor-detail":
-    "Judge how the focal vendor is changing relative to the buyer's selected market, and what that does to the buyer's position with them specifically.",
-  opportunities:
-    "Identify where buyer value has increased most across the selected vendors during the retrospective window, and which opportunity types deserve investigation first.",
-  scenarios:
-    "Judge the commercial implications of the stated scenario for the buyer's position across the selected market. Modelled values are modelled — say so where it bears on the judgement.",
-};
 
 /** Spec §8, substantially verbatim. */
 const SYSTEM_PROMPT = `You are a senior VP-level industry analyst specialising in IT services,
@@ -50,6 +38,21 @@ The user's selected vendors define the market. Do not broaden the market
 beyond that scope unless Whole Market is explicitly selected.
 
 Do not merely summarise dashboard metrics.
+
+Identify the SINGLE dominant development first; build the briefing around
+it. Distinguish short-term signal from structural change explicitly.
+
+EVIDENCE FRESHNESS: evidence families carry different as-of dates. Weigh
+fresher, high-materiality evidence (SEC filings, gated AI events, public
+awards, FX) more heavily in current judgements than stale families — but
+never prefer recent weak evidence over older authoritative evidence. Where
+fresh and stale families create tension, SAY SO explicitly (e.g. "fresh AI
+capability evidence strengthens the productivity case, while
+commercial-contract evidence remains stale") rather than pretending all
+evidence is equally current.
+
+The CURRENT DATED SIGNALS section lists what the portal already shows as
+cards — do not repeat those cards; interpret beyond them or connect them.
 
 Identify the one or two developments that most materially change the
 buyer's commercial, sourcing, supplier or operational position.
@@ -86,6 +89,9 @@ Therefore:
 - Frame contract-linked recommendations as "buyers should consider…",
   "buyers with comparable agreements…", "this creates a basis to
   investigate…", "this may justify challenging…".
+- VOCABULARY BAN: never use the words "book", "books", "portfolio" or
+  "portfolios" in any form when describing contracts or agreements — no
+  qualifier makes them acceptable. Say "observed agreements" instead.
 - COMPLETENESS: the observed contracts are a PARTIAL market dataset, never a
   vendor's complete portfolio. Never call them a vendor's "book",
   "portfolio" or "commitments" — say "observed agreements", "observed
@@ -131,7 +137,7 @@ CPO, CFO, transformation executive or strategic sourcing leader.
 
 Write flowing prose only — no headings, no bullet points, no lists.
 
-Maximum 200 words.`;
+Target 120–160 words; hard maximum 180. Sharper is better than longer.`;
 
 /* ── context assembly — compact, canonical-only ── */
 
@@ -220,10 +226,14 @@ export function buildContext(
 
   // Scenarios tab with NO scenario selected (sprint 3 fix 2): interpret the
   // baseline's scenario SENSITIVITY only — never invent modelled results.
-  const objective =
-    tab === "scenarios" && !opts.scenario
-      ? "No scenario is selected yet. From the current baseline evidence only, judge which market variable — demand/deal flow, delivery-cost economics, AI capability, talent capacity, renewal concentration, or vendor financial position — currently has the greatest potential to change the buyer's commercial position across the selected vendors, and why. Do not invent modelled outcomes or hypothetical numbers; this is an interpretation of present sensitivity, grounded in the supplied context."
-      : OBJECTIVES[tab];
+  const objective = tab === "scenarios" && !opts.scenario ? SCENARIOS_DEFAULT_OBJECTIVE : OBJECTIVES[tab];
+  {
+    const fam: string[] = [];
+    fam.push(`commercial contract spine data-as-of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old — STALE evidence family; constrain current-conclusions accordingly)`);
+    if (intel.updatedAt) fam.push(`freshest evidence families (SEC, AI events, procurement, FX, talent, reputation) run to ${intel.updatedAt}`);
+    sections.push("", "EVIDENCE FRESHNESS BY FAMILY: " + fam.join("; ") + ".");
+  }
+
   if (opts.signals?.length) {
     sections.push("", "CURRENT DATED SIGNALS (deterministic, evidence-gated — the freshest developments in this market):");
     for (const sg of opts.signals.slice(0, 5)) {
@@ -273,8 +283,32 @@ async function generateUncached(context: string): Promise<InsightResult> {
 
   if (!result.ok) return { status: "blocked", reasons: [result.reason] };
 
-  const validation = validateInsight(result.value.insight ?? "", context);
-  if (!validation.ok) return { status: "blocked", reasons: validation.blocked };
+  let validation = validateInsight(result.value.insight ?? "", context);
+  if (!validation.ok) {
+    // One corrective retry (sprint 4 §4): the rules never soften — the model
+    // gets the exact violations and one chance to rewrite. Still-blocked
+    // output renders the refusal state as before.
+    const retry = await generateStructured<{ insight: string }>(availability.config, {
+      system: SYSTEM_PROMPT,
+      user:
+        context +
+        "\n\nYOUR PREVIOUS DRAFT WAS BLOCKED by the grounding firewall for the following violations — rewrite the briefing avoiding them exactly, without weakening the analysis:\n" +
+        validation.blocked.map((b) => `- ${b}`).join("\n"),
+      maxTokens: 700,
+      tool: {
+        name: "submit_insight",
+        description: "Submit the corrected analyst insight for this briefing.",
+        input_schema: {
+          type: "object",
+          properties: { insight: { type: "string", description: "The corrected private executive briefing: 120-180 words of flowing prose. Every figure must appear in the supplied context." } },
+          required: ["insight"],
+        },
+      },
+    });
+    if (!retry.ok) return { status: "blocked", reasons: validation.blocked };
+    validation = validateInsight(retry.value.insight ?? "", context);
+    if (!validation.ok) return { status: "blocked", reasons: validation.blocked };
+  }
   return { status: "ok", text: validation.text, warnings: validation.warnings };
 }
 
@@ -303,7 +337,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v10", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v11", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

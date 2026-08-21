@@ -6,7 +6,7 @@ import type { RawSearchParams } from "@/lib/market-scope";
 import { levelScore, OPPORTUNITY_LABELS, OPPORTUNITY_TYPES } from "@/lib/metrics/types";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
-import { applyScenario, getScenario, SCENARIOS } from "@/lib/scenarios";
+import { applyScenario, getScenario, scenarioRead, SCENARIOS } from "@/lib/scenarios";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +74,27 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
           })}
         </div>
       </section>
+
+      {scenario && result ? (() => {
+        const read = scenarioRead(intel, result);
+        return (
+          <section className="mt-6">
+            <Panel className="px-6 py-5">
+              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>Scenario read</span>
+                <ModelledTag note={`Modelled under: ${scenario.assumes}`} />
+              </div>
+              <p className="mt-3 mb-0 max-w-[78ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+                {read.note}
+              </p>
+              <p className="mt-2 mb-0 text-[0.8rem]" style={{ color: "var(--fg-muted)" }}>
+                Most affected: {read.mostAffected ? read.mostAffected.name : "none"} · Family moving most:{" "}
+                {read.familyMoved ?? "none"} · Buyer relative position: {read.position}.
+              </p>
+            </Panel>
+          </section>
+        );
+      })() : null}
 
       {scenario && result ? (
         <>

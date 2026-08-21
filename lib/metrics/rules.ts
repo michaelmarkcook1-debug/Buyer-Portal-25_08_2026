@@ -1,4 +1,4 @@
-import type { Confidence, Movement } from "./types";
+import type { Basis, Confidence, Movement, OpportunityLevel } from "./types";
 
 /**
  * Pure metric rules — extracted so the truth-critical behaviours are unit-testable
@@ -341,6 +341,49 @@ export function gainShareLevel(e: GainShareEvidence): GainShareLevel {
   return "high";
 }
 
+/* ── signal quality gates (sprint 4 §7/§8) ──────────────────────────────────── */
+
+/**
+ * Leverage signals earn ACT only when the evidence is confident and the
+ * concentration is real; stale/thin evidence demotes to WATCH — an ACT must
+ * represent a credible commercial action, not a template.
+ */
+export function leverageSignalClass(confidence: Confidence, inPlay12: number): "ACT" | "WATCH" {
+  return confidence !== "low" && inPlay12 >= 2 ? "ACT" : "WATCH";
+}
+
+export interface DedupableSignal {
+  classification: "ACT" | "WATCH" | "KNOW";
+  tickers: string[];
+  date: string | null;
+  headline: string;
+}
+
+/**
+ * One underlying development must not surface repeatedly (§8): signals for
+ * the same vendor within a 1-day window are treated as the same development —
+ * the highest classification (ACT > WATCH > KNOW) survives; ties keep the
+ * first (already-ranked) entry.
+ */
+export function dedupeSignals<T extends DedupableSignal>(signals: T[]): T[] {
+  const rank = { ACT: 0, WATCH: 1, KNOW: 2 } as const;
+  const kept: T[] = [];
+  for (const s of signals) {
+    const dup = kept.findIndex((k) => {
+      if (k.tickers[0] !== s.tickers[0]) return false;
+      if (!k.date || !s.date) return false;
+      const gap = Math.abs(Date.parse(k.date) - Date.parse(s.date));
+      return gap <= 86_400_000;
+    });
+    if (dup === -1) {
+      kept.push(s);
+    } else if (rank[s.classification] < rank[kept[dup]!.classification]) {
+      kept[dup] = s;
+    }
+  }
+  return kept;
+}
+
 /* ── freshness semantics (sprint 3 fix 5): asOf = newest reliable evidence ── */
 
 export function newestOf(...dates: Array<string | null | undefined>): string | null {
@@ -365,4 +408,46 @@ export function assertHistoryMode(mode: HistoricalMode, systemCalculatedAt: bool
     );
   }
   return mode;
+}
+
+/* §10/§15: plain-language driver derivation from the basis SOURCES actually
+   present — interpretation without exposing weights. */
+const DRIVER_LABELS: Array<[RegExp, string]> = [
+  [/AI capability events/i, "materiality-gated AI capability events"],
+  [/vendor catalog/i, "AI capability readings"],
+  [/talent signals/i, "workforce movement"],
+  [/EDGAR/i, "filed financial position"],
+  [/FRED/i, "delivery-cost economics"],
+  [/procurement/i, "public award flow"],
+  [/contract (?:tracker|spine)/i, "observed contract-market movement"],
+  [/reputation/i, "reputation movement"],
+];
+
+export function driversOf(basis: Basis[]): string[] {
+  const out: string[] = [];
+  for (const b of basis) {
+    for (const [re, label] of DRIVER_LABELS) {
+      if (re.test(b.source) && !out.includes(label)) out.push(label);
+    }
+  }
+  return out;
+}
+
+export const LEVEL_WORD: Record<OpportunityLevel, string> = {
+  "very-high": "Very high", high: "High", medium: "Medium", low: "Low", insufficient: "Insufficient evidence",
+};
+
+/** §10/§20: level explained by drivers; low confidence changes the meaning. */
+export function opportunityReason(level: OpportunityLevel, confidence: Confidence, basis: Basis[], spineStale: boolean): string {
+  if (level === "insufficient") return "Insufficient evidence to assess this opportunity.";
+  const d = driversOf(basis);
+  let r = `${LEVEL_WORD[level]} — primarily driven by ${d.slice(0, 2).join(" and ") || "the canonical readings"}.`;
+  if ((level === "high" || level === "very-high") && confidence === "low") {
+    r += spineStale && d.includes("observed contract-market movement")
+      ? " The commercial direction appears favourable, but the underlying contract evidence remains stale — treat this as a reason to investigate rather than a negotiating conclusion."
+      : " Confidence is low — treat this as a reason to investigate rather than a conclusion.";
+  } else if (confidence === "low") {
+    r += " Confidence is low — directional, not conclusive.";
+  }
+  return r;
 }

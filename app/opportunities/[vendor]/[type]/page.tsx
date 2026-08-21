@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AnalystInsightHero } from "@/components/AnalystInsightHero";
 import { MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import {
@@ -94,6 +95,11 @@ export default async function OpportunityDetail({
           <span className="eyebrow">Confidence: {CONFIDENCE_LABEL[opp.confidence]}</span>
           {opp.modelled ? <ModelledTag note={opp.modelled} /> : null}
         </div>
+        {opp.reason ? (
+          <p className="mt-3 mb-0 max-w-[74ch] text-[0.92rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            {opp.reason}
+          </p>
+        ) : null}
         {opp.level === "insufficient" ? (
           <p className="mt-4 mb-0 max-w-[70ch] text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
             Insufficient evidence for a reliable {OPPORTUNITY_LABELS[oppType].toLowerCase()} assessment.
@@ -101,6 +107,10 @@ export default async function OpportunityDetail({
           </p>
         ) : null}
       </Panel>
+
+      <div className="mt-8">
+        <AnalystInsightHero intel={intel} tab="opportunity-detail" focalTicker={focal.ticker} />
+      </div>
 
       {opp.why.length > 0 ? (
         <section className="mt-10">

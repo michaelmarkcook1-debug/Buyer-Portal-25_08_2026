@@ -42,6 +42,7 @@ import {
   historyModeLabel,
   invertMove,
   newestOf,
+  opportunityReason,
   pricingRead,
   procurementHeatState,
   ratioMove,
@@ -918,13 +919,24 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       gainShareOpportunity.state === "favourable",
     ].filter(Boolean).length;
     const state: MetricState = inputs >= 3 ? "favourable" : inputs === 2 ? "mixed" : "stable";
+    const present = [
+      buyerLeverage.state === "favourable" ? "buyer leverage" : null,
+      pricingPressure.state === "favourable" || pricingPressure.state === "mixed" ? "pricing conditions" : null,
+      dealMarketHeat.state === "favourable" ? "demand heat" : null,
+      gainShareOpportunity.state === "favourable" ? "gain-share economics" : null,
+    ].filter((x): x is string => Boolean(x));
+    const spineStaleHere = v.spineDataAsOf ? (Date.now() - Date.parse(v.spineDataAsOf)) / 86_400_000 > 120 : true;
     savingsOpportunity = metric(
       "savingsOpportunity",
       "Savings Opportunity",
       state,
       buyerLeverage.movement,
       "low",
-      "Potential savings opportunity from movement in vendor and market economics — not a claim about your contracts.",
+      (present.length > 0
+        ? `${present.join(", ")} ${present.length === 1 ? "has" : "have"} moved in the buyer's favour`
+        : "No savings precondition has clearly moved in the buyer's favour") +
+        (spineStaleHere ? ", but stale contract evidence limits confidence" : "") +
+        " — not a claim about your contracts.",
       [
         {
           text: `${inputs} of 4 savings preconditions present (leverage, pricing conditions, demand heat, gain-share).`,
@@ -978,7 +990,7 @@ const stateToLevel = (m: Metric): OpportunityLevel =>
           ? "medium"
           : "low";
 
-function opportunitiesFor(metrics: VendorMetrics): Record<OpportunityType, Opportunity> {
+function opportunitiesFor(metrics: VendorMetrics, spineStale: boolean): Record<OpportunityType, Opportunity> {
   const mk = (
     type: OpportunityType,
     from: Metric,
@@ -997,19 +1009,24 @@ function opportunitiesFor(metrics: VendorMetrics): Record<OpportunityType, Oppor
       confidence: from.confidence,
       why: from.basis,
       investigate,
+      reason: opportunityReason(level, from.confidence, from.basis, spineStale),
     };
   };
 
   /* Gain-sharing uses the evidence-floor band directly (fix 4): the level is
      earned by change evidence, and the metric's insufficient state wins. */
-  const mkGainShare = (from: Metric, band: VendorMetrics["gainShareLevelBand"], investigate: string[]): Opportunity => ({
-    type: "gain-sharing",
-    level: from.state === "insufficient" ? "insufficient" : band ?? stateToLevel(from),
-    movement: from.movement,
-    confidence: from.confidence,
-    why: from.basis,
-    investigate,
-  });
+  const mkGainShare = (from: Metric, band: VendorMetrics["gainShareLevelBand"], investigate: string[]): Opportunity => {
+    const level = from.state === "insufficient" ? "insufficient" : band ?? stateToLevel(from);
+    return {
+      type: "gain-sharing",
+      level,
+      movement: from.movement,
+      confidence: from.confidence,
+      why: from.basis,
+      investigate,
+      reason: opportunityReason(level, from.confidence, from.basis, spineStale),
+    };
+  };
 
   return {
     pricing: mk(
@@ -1069,6 +1086,13 @@ function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: Vendor
     const blended = Math.round(avg * 0.5 + max * 0.5);
     level = (["insufficient", "low", "medium", "high", "very-high"] as const)[Math.min(4, Math.max(1, blended))];
   }
+  // §9/§10: name the strongest family so the rank explains itself — vendors
+  // get different commercial stories, not one universal narrative.
+  const top = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level))[0];
+  const FAMILY_WORD: Record<OpportunityType, string> = {
+    pricing: "pricing", automation: "automation", "gain-sharing": "gain-sharing",
+    "commercial-leverage": "commercial leverage", "market-test": "market-test",
+  };
   return {
     type: "commercial-leverage",
     level,
@@ -1076,6 +1100,9 @@ function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: Vendor
     confidence: defined.length >= 3 ? "medium" : defined.length >= 1 ? "low" : "insufficient",
     why: defined.slice(0, 2).flatMap((o) => o.why.slice(0, 1)),
     investigate: [],
+    reason: top
+      ? `Strongest lever: ${FAMILY_WORD[top.type]}. ${top.reason ?? ""}`.trim()
+      : "Insufficient evidence for a reliable opportunity read.",
   };
 }
 
@@ -1110,13 +1137,18 @@ function rollup(
   const confs: Confidence[] = ["high", "medium", "low"];
   const confidence = confs.find((c) => assessed.every((m) => m.confidence === c)) ??
     (assessed.some((m) => m.confidence === "low") ? "low" : "medium");
+  // §17: divergence is analyst signal, not noise — say when the read is uneven.
+  const divergent = states.favourable > 0 && states.unfavourable > 0;
+  const baseReading = state === "favourable" ? favourableReading : state === "unfavourable" ? unfavourableReading : null;
   return metric(
     id,
     label,
     state,
     movement,
     confidence,
-    state === "favourable" ? favourableReading : state === "unfavourable" ? unfavourableReading : null,
+    divergent
+      ? `${baseReading ? baseReading + " " : ""}Uneven across the selected vendors — favourable for ${states.favourable}, unfavourable for ${states.unfavourable}.`
+      : baseReading,
     [
       {
         text: `${states.favourable} of ${n} assessed vendors favourable, ${states.unfavourable} unfavourable, ${states.stable + states.mixed} steady or mixed.`,
@@ -1282,7 +1314,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       spineLastIngest: anchor.lastIngest,
       spineDataAsOf: anchor.dataAsOf,
     });
-    const opportunities = opportunitiesFor(metrics);
+    const opportunities = opportunitiesFor(metrics, (anchor.dataAgeDays ?? 999) > 120);
     const nrg = signals.get(ticker)?.nrg;
     const asOfs = [
       catalog.get(ticker)?.sourcedAt,
@@ -1310,6 +1342,78 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   });
 
   vendors.sort((a, b) => levelScore(b.overall.level) - levelScore(a.overall.level));
+
+  /* §11/§12 — comparative differentiation: why manage THIS vendor differently.
+     Superlatives use the selected market only (or the supported universe when
+     Whole Market is selected); no ranking is asserted without evidence. */
+  {
+    const scopeWord = scope.mode === "whole_market" ? "across the supported universe" : "in your selected market";
+    const FAMILY_WORD: Record<OpportunityType, string> = {
+      pricing: "pricing", automation: "automation", "gain-sharing": "gain-sharing",
+      "commercial-leverage": "commercial leverage", "market-test": "market-test",
+    };
+    const FAMILIES = Object.keys(FAMILY_WORD) as OpportunityType[];
+    // unique per-family leaders (ties assert nothing)
+    const leaders = new Map<OpportunityType, string>();
+    for (const f of FAMILIES) {
+      const scored = vendors
+        .map((v) => ({ t: v.ticker, s: levelScore(v.opportunities[f].level) }))
+        .filter((x) => x.s >= 2) // medium or better — weak leads earn no superlative
+        .sort((a, b) => b.s - a.s);
+      if (scored.length >= 1 && (scored.length === 1 || scored[0]!.s > scored[1]!.s)) leaders.set(f, scored[0]!.t);
+    }
+    // unique resilience leader
+    const RES_RANK: Record<string, number> = { favourable: 3, stable: 2, mixed: 1, unfavourable: 0 };
+    const res = vendors
+      .map((v) => ({ t: v.ticker, s: RES_RANK[v.metrics.financialResilience.state] ?? -1 }))
+      .filter((x) => x.s >= 0)
+      .sort((a, b) => b.s - a.s);
+    const resLeader = res.length >= 2 && res[0]!.s > res[1]!.s ? res[0]!.t : null;
+
+    for (const v of vendors) {
+      const defined = FAMILIES.map((f) => v.opportunities[f]).filter((o) => o.level !== "insufficient");
+      if (defined.length === 0 || vendors.length < 2) {
+        v.differentiation = {
+          strongest: defined.length === 0 ? "Insufficient evidence for a reliable relative ranking." : `Strongest lever: ${FAMILY_WORD[defined.sort((a, b) => levelScore(b.level) - levelScore(a.level))[0]!.type]}.`,
+          weakest: null, keyChange: null,
+          relatives: vendors.length < 2 ? ["Only one vendor in scope — no relative ranking is possible."] : ["Insufficient evidence for a reliable relative ranking."],
+          risk: null, discuss: null,
+        };
+        continue;
+      }
+      const ranked = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level));
+      const strongest = ranked[0]!;
+      const weakest = ranked[ranked.length - 1]!;
+      const relatives: string[] = [];
+      for (const [f, t] of leaders) {
+        if (t === v.ticker) relatives.push(`Strongest ${FAMILY_WORD[f]} opportunity ${scopeWord}.`);
+      }
+      if (resLeader === v.ticker) relatives.push(`Highest financial resilience among the selected vendors.`);
+      if (relatives.length === 0) relatives.push("No unique leadership position — evidence supports no reliable superlative for this vendor.");
+      // most important 12-month change: the strongest fresh movement
+      const MOVE_RANK: Record<string, number> = { "materially-improving": 2, "materially-deteriorating": 2, improving: 1, deteriorating: 1 };
+      const moving = (Object.values(v.metrics).filter((m) => m && typeof m === "object") as Metric[])
+        .filter((m) => MOVE_RANK[m.movement])
+        .sort((a, b) => (MOVE_RANK[b.movement]! - MOVE_RANK[a.movement]!) || ((b.asOf ?? "").localeCompare(a.asOf ?? "")));
+      const keyChange = moving[0]
+        ? `${moving[0].label} ${moving[0].movement.replace(/-/g, " ")}${moving[0].basis[0] ? ` — ${moving[0].basis[0].text}` : ""}`
+        : null;
+      const risk =
+        v.metrics.operationalRisk.state === "unfavourable"
+          ? v.metrics.operationalRisk.basis[0]?.text ?? "Elevated operational risk on the current record."
+          : v.metrics.talentPressure.state === "unfavourable"
+            ? "Delivery workforce is contracting — capacity risk on multi-year commitments."
+            : null;
+      v.differentiation = {
+        strongest: `Strongest lever: ${FAMILY_WORD[strongest.type]} (${strongest.level.replace(/-/g, " ")}). ${strongest.reason ?? ""}`.trim(),
+        weakest: weakest !== strongest ? `Weakest lever: ${FAMILY_WORD[weakest.type]} (${weakest.level.replace(/-/g, " ")}).` : null,
+        keyChange,
+        relatives,
+        risk,
+        discuss: strongest.investigate[0] ?? null,
+      };
+    }
+  }
 
   const m = (sel: (v: VendorIntel) => Metric) => vendors.map(sel);
 

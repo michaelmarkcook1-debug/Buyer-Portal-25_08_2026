@@ -54,7 +54,7 @@ describe("grounding firewall (spec §24)", () => {
     const sentence = "The record shows 3 agreements in the window. ";
     const r = validateInsight(sentence.repeat(40), context);
     expect(r.ok).toBe(true);
-    expect(r.text.split(/\s+/).length).toBeLessThanOrEqual(200);
+    expect(r.text.split(/\s+/).length).toBeLessThanOrEqual(180);
     expect(r.text.endsWith(".")).toBe(true);
     expect(r.warnings.some((w) => w.includes("trimmed"))).toBe(true);
   });
@@ -490,5 +490,79 @@ describe("delivery-location economics (sprint 3 P4)", () => {
     const ctsh = deliveryExposure("CTSH", "Teaneck, US", 340_000);
     expect(ctsh.band).toBe("india-heavy");
     expect(ctsh.basis?.text).toContain("10-K");
+  });
+});
+
+/* ── Sprint 4: decision quality — objectives, signals, reasons ── */
+
+import { OBJECTIVES, SCENARIOS_DEFAULT_OBJECTIVE } from "@/lib/insight/objectives";
+import { dedupeSignals, leverageSignalClass, opportunityReason } from "@/lib/metrics/rules";
+
+describe("tab-specific analytical objectives (sprint 4 §5)", () => {
+  it("every tab asks a genuinely different question", () => {
+    const values = Object.values(OBJECTIVES);
+    expect(new Set(values).size).toBe(values.length);
+    // each answers a distinct concern
+    expect(OBJECTIVES.home).toContain("SINGLE most important development");
+    expect(OBJECTIVES.market).toContain("DIVERGE");
+    expect(OBJECTIVES.vendors).toContain("DIFFERENTLY");
+    expect(OBJECTIVES["vendor-detail"]).toContain("THIS vendor");
+    expect(OBJECTIVES.opportunities).toContain("strongest commercial lever");
+    expect(OBJECTIVES.scenarios).toContain("alter vendor strategy");
+    expect(SCENARIOS_DEFAULT_OBJECTIVE).toContain("Do not invent modelled outcomes");
+  });
+});
+
+describe("signal decision gate + deduplication (sprint 4 §7/§8)", () => {
+  it("weak/stale leverage evidence cannot become ACT", () => {
+    expect(leverageSignalClass("low", 5)).toBe("WATCH");
+    expect(leverageSignalClass("medium", 1)).toBe("WATCH");
+    expect(leverageSignalClass("medium", 3)).toBe("ACT");
+    expect(leverageSignalClass("high", 2)).toBe("ACT");
+  });
+
+  it("the same underlying development surfaces once — strongest class wins", () => {
+    const sig = (cls: "ACT" | "WATCH" | "KNOW", ticker: string, date: string | null, headline: string) =>
+      ({ classification: cls, tickers: [ticker], date, headline });
+    const out = dedupeSignals([
+      sig("KNOW", "ACN", "2026-04-24", "Reported results of operations"),
+      sig("ACT", "ACN", "2026-04-24", "Terminated a material agreement"),
+      sig("WATCH", "ACN", "2026-08-05", "Workforce redesign event"),
+      sig("WATCH", "TTNQY", "2026-04-24", "Different vendor, same day"),
+    ]);
+    expect(out).toHaveLength(3);
+    expect(out.filter((s) => s.tickers[0] === "ACN" && s.date === "2026-04-24")).toHaveLength(1);
+    expect(out.find((s) => s.tickers[0] === "ACN" && s.date === "2026-04-24")!.classification).toBe("ACT");
+  });
+
+  it("undated state signals are never merged away", () => {
+    const out = dedupeSignals([
+      { classification: "ACT" as const, tickers: ["ACN"], date: null, headline: "a" },
+      { classification: "KNOW" as const, tickers: ["ACN"], date: null, headline: "b" },
+    ]);
+    expect(out).toHaveLength(2);
+  });
+});
+
+describe("opportunity reasons (sprint 4 §10/§20)", () => {
+  const basis = (source: string) => ({ text: "x 1", source, ownership: "market" as const });
+
+  it("levels are explained by drivers, never black-box", () => {
+    const r = opportunityReason("high", "medium", [basis("AI capability events (materiality-gated)"), basis("AnalystGenius talent signals")], true);
+    expect(r).toContain("High — primarily driven by");
+    expect(r).toContain("AI capability events");
+    expect(r).toContain("workforce movement");
+  });
+
+  it("high opportunity + low confidence produces cautious investigate-first language", () => {
+    const r = opportunityReason("high", "low", [basis("Curated contract tracker (market record)")], true);
+    expect(r).toContain("remains stale");
+    expect(r).toContain("investigate rather than a negotiating conclusion");
+  });
+
+  it("different evidence profiles produce different stories", () => {
+    const a = opportunityReason("high", "medium", [basis("AI capability events (materiality-gated)")], false);
+    const b = opportunityReason("high", "medium", [basis("Public procurement record")], false);
+    expect(a).not.toBe(b);
   });
 });

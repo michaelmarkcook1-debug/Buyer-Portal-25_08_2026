@@ -88,6 +88,8 @@ export interface Opportunity {
   why: Basis[];
   /** What to investigate or challenge — framing prompts, never contract claims. */
   investigate: string[];
+  /** Plain-language explanation of the level (sprint 4 §10) — drivers, no weights. */
+  reason?: string;
   modelled?: string;
 }
 
@@ -112,6 +114,16 @@ export interface VendorMetrics {
   gainShareLevelBand?: "very-high" | "high" | "medium" | "low" | "insufficient";
 }
 
+/** Sprint 4 §11/§12 — why this vendor should be managed differently. */
+export interface VendorDifferentiation {
+  strongest: string;
+  weakest: string | null;
+  keyChange: string | null;
+  relatives: string[];
+  risk: string | null;
+  discuss: string | null;
+}
+
 export interface VendorIntel {
   ticker: string;
   name: string;
@@ -127,6 +139,7 @@ export interface VendorIntel {
   /** Overall commercial opportunity — the ranking key across the portal. */
   overall: Opportunity;
   /** AG claims-vs-delivery read, surfaced as interpretation (never recomputed). */
+  differentiation?: VendorDifferentiation;
   claimsVsDelivery: {
     direction: string | null;
     headline: string | null;
