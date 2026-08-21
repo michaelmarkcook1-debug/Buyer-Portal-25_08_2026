@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import type { MarketIntel, VendorIntel } from "@/lib/metrics/types";
 import type { Scenario } from "@/lib/scenarios";
 import { generateStructured, llmAvailability } from "./llm";
-import { validateInsight } from "./validate";
+import { validateInsight, VALIDATOR_VERSION } from "./validate";
 
 /**
  * Analyst Insight — per-tab orchestration (spec §7–§9).
@@ -157,6 +157,7 @@ function vendorBlock(v: VendorIntel, detail: boolean): string {
     : (["buyerLeverage", "pricingPressure", "gainShareOpportunity", "talentPressure", "operationalRisk"] as const);
   for (const k of keys) {
     const m = v.metrics[k];
+    if (m == null || typeof m !== "object") continue; // skip non-Metric fields (e.g. gainShareLevelBand)
     if (m.state === "insufficient" && !detail) continue;
     lines.push("  " + metricLine(m));
   }
@@ -216,7 +217,13 @@ export function buildContext(
     );
   }
 
-  sections.push("", `ANALYTICAL OBJECTIVE FOR THIS BRIEFING: ${OBJECTIVES[tab]}`);
+  // Scenarios tab with NO scenario selected (sprint 3 fix 2): interpret the
+  // baseline's scenario SENSITIVITY only — never invent modelled results.
+  const objective =
+    tab === "scenarios" && !opts.scenario
+      ? "No scenario is selected yet. From the current baseline evidence only, judge which market variable — demand/deal flow, delivery-cost economics, AI capability, talent capacity, renewal concentration, or vendor financial position — currently has the greatest potential to change the buyer's commercial position across the selected vendors, and why. Do not invent modelled outcomes or hypothetical numbers; this is an interpretation of present sensitivity, grounded in the supplied context."
+      : OBJECTIVES[tab];
+  sections.push("", `ANALYTICAL OBJECTIVE FOR THIS BRIEFING: ${objective}`);
   return sections.filter((s) => s !== "").join("\n");
 }
 
@@ -281,9 +288,9 @@ export async function getInsight(
   const context = buildContext(intel, tab, opts);
   const dataVersion = `${intel.updatedAt ?? ""}|${intel.spine.lastIngest}`;
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
-  // v5: data-engine sprint 1 — procurement flow, EDGAR financials, observed
-  // snapshots and data-as-of framing entered the context.
-  const key = ["insight", "v8", tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
+  // every cached insight, so nothing validated by an older ruleset survives.
+  const key = ["insight", "v9", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
@@ -299,7 +306,13 @@ export async function getInsight(
   );
 
   try {
-    return await cached();
+    const result = await cached();
+    // Defence in depth (sprint 3 fix 1): re-validate on EVERY read with the
+    // validator compiled into THIS runtime. A cache entry written by a stale
+    // runtime (the Sprint 2 incident) is caught here and never rendered.
+    const recheck = validateInsight(result.text, context);
+    if (!recheck.ok) return { status: "blocked", reasons: recheck.blocked };
+    return result;
   } catch (e) {
     if (e instanceof InsightFailure) return e.result;
     return { status: "blocked", reasons: [`Insight generation failed: ${(e as Error).message}`] };

@@ -20,7 +20,8 @@ import { getPortalContext } from "@/lib/portal";
 export const dynamic = "force-dynamic";
 
 /** Which canonical metric underpins each opportunity type, for supporting detail. */
-const UNDERLYING: Record<OpportunityType, Array<keyof import("@/lib/metrics/types").VendorMetrics>> = {
+type MetricKey = Exclude<keyof import("@/lib/metrics/types").VendorMetrics, "gainShareLevelBand">;
+const UNDERLYING: Record<OpportunityType, Array<MetricKey>> = {
   pricing: ["pricingPressure", "dealMarketHeat", "buyerLeverage"],
   automation: ["automationOpportunity", "talentPressure"],
   "gain-sharing": ["gainShareOpportunity", "aiProductivityOpportunity", "talentPressure"],

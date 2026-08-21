@@ -108,6 +108,8 @@ export interface VendorMetrics {
   dealMarketHeat: Metric;
   operationalRisk: Metric;
   reputationMovement: Metric;
+  /** Evidence-floor banding for the gain-sharing opportunity (sprint 3 fix 4). */
+  gainShareLevelBand?: "very-high" | "high" | "medium" | "low" | "insufficient";
 }
 
 export interface VendorIntel {

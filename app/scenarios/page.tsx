@@ -39,19 +39,10 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
       {scenario && scenarioIntel ? (
         <AnalystInsightHero intel={scenarioIntel} tab="scenarios" scenario={scenario} />
       ) : (
-        <Panel hero className="px-6 py-7 sm:px-9 sm:py-8">
-          <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
-            Scenarios
-          </div>
-          <h2 className="display mt-3 max-w-[30ch] text-[1.7rem] leading-tight" style={{ color: "var(--fg)" }}>
-            What happens to your buying position if relevant conditions change?
-          </h2>
-          <p className="mt-3 mb-0 max-w-[66ch] text-[0.92rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-            Choose a predefined scenario. The portal recalculates your market&rsquo;s canonical states
-            under the stated assumption — every adjusted value is marked as modelled, and the
-            underlying evidence is never altered.
-          </p>
-        </Panel>
+        /* Default state (sprint 3 fix 2): a real Analyst Insight on the
+           baseline's scenario SENSITIVITY — which variable could most change
+           the buyer's position — before any scenario is chosen. */
+        <AnalystInsightHero intel={intel} tab="scenarios" />
       )}
 
       <section className="mt-8">

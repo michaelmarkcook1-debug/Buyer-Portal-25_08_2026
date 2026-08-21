@@ -36,9 +36,12 @@ import {
   automationState,
   capConfidenceByAge,
   deliveryCostState,
+  gainShareLevel,
   headroomState,
   historyModeLabel,
   invertMove,
+  newestOf,
+  pricingRead,
   procurementHeatState,
   ratioMove,
   type MacroReading,
@@ -235,7 +238,9 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
           ? "Observed decision points inside 24 months — prepare rather than press."
           : "Nothing of theirs reaches a decision point soon.",
       basis,
-      v.spineLastIngest,
+      // Freshness = newest reliable evidence behind the read (fix 5): the
+      // spine's own data-as-of plus any fresh procurement end-of-terms used.
+      newestOf(v.spineDataAsOf, v.proc && v.proc.inPlayNext12 > 0 ? v.proc.lastAwardDate : null) ?? v.spineLastIngest,
     );
   }
 
@@ -316,31 +321,31 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Insufficient contract evidence to read pricing conditions for this vendor.",
     );
   } else {
-    /* §14: pricing direction is INFERRED from independent condition families —
-       market heat, competitive breadth, delivery-cost economics, and filed
-       margin room. Procurement/award flow stays a flow signal; no rate, price
+    /* §14 + sprint 3 fix 3: pricing direction is INFERRED from the vendor's
+       OWN evidence — their deal-market heat, competitive breadth in their
+       line, and their filed margin room. The market-wide macro read is
+       context only: it colours the basis, never the state, so one broad
+       tailwind cannot mark the whole universe favourable. No rate, price
        point or savings figure is ever produced here. */
-    const cooling = dealMarketHeat.state === "favourable";
     const alternatives = v.alternativesInTopLine;
-    const costFavourable = dcRead.state === "favourable";
     const marginRoom = marginPrim != null && marginPrim.value >= 12;
-    const votes = [cooling, alternatives >= 2, costFavourable, marginRoom].filter(Boolean).length;
-    const state: MetricState =
-      (cooling && alternatives >= 1) || (votes >= 2 && (cooling || alternatives >= 1))
-        ? "favourable"
-        : votes >= 1
-          ? "mixed"
-          : "stable";
-    const families = (cooling || alternatives >= 1 ? 1 : 0) + (dcRead.state !== "insufficient" ? 1 : 0) + (marginPrim ? 1 : 0);
+    const read = pricingRead({
+      heatUsable: dealMarketHeat.state !== "insufficient",
+      cooling: dealMarketHeat.state === "favourable",
+      stronglyCooling: dealMarketHeat.state === "favourable" && dealMarketHeat.movement === "materially-deteriorating",
+      alternatives,
+      marginRoom,
+      macroFavourable: dcRead.state === "favourable",
+    });
     const basis: Basis[] = [
       {
         text: `Award flow ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two 12-month windows; ${count(alternatives)} scoped alternative${alternatives === 1 ? "" : "s"} in ${d.topLines[0]?.line ?? "their top line"}.`,
-        source: "Curated contract tracker (market record)", ownership: "market",
+        source: "Curated contract tracker (market record)", ownership: "market", asOf: v.spineDataAsOf,
       },
     ];
     if (dcRead.state !== "insufficient") {
       basis.push({
-        text: `Underlying delivery-cost economics currently read ${dcRead.state === "favourable" ? "buyer-favourable" : dcRead.state === "unfavourable" ? "supplier-favourable" : dcRead.state} on the published wage, inflation and FX series.`,
+        text: `Market-wide context: underlying delivery-cost economics read ${dcRead.state === "favourable" ? "buyer-favourable" : dcRead.state === "unfavourable" ? "supplier-favourable" : dcRead.state} on the published wage, inflation and FX series — a market condition, not vendor-specific pricing evidence.`,
         source: "FRED macro series", ownership: "market", asOf: v.macroAsOf,
       });
     }
@@ -350,19 +355,28 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         source: "SEC EDGAR companyfacts", ownership: "market", asOf: marginPrim.asOf,
       });
     }
+    // Confidence: two vendor-specific families earn medium — then the spine's
+    // own data age caps it (stale tracker evidence must not read confident).
+    const confidence = capConfidenceByAge(
+      read.vendorFamilies >= 2 ? "medium" : "low",
+      v.spineDataAsOf,
+      { maxFreshDays: 120 },
+    );
     pricingPressure = metric(
       "pricingPressure",
       "Pricing Pressure",
-      state,
+      read.state,
       dealMarketHeat.movement === "insufficient" ? "insufficient" : invertMove(dealMarketHeat.movement),
-      families >= 2 ? "medium" : "low",
-      state === "favourable"
-        ? "Conditions lean toward the buyer on price."
-        : state === "mixed"
-          ? "Some pricing conditions favour the buyer; evidence is partial."
-          : "No clear pricing pressure either way from the record.",
+      confidence,
+      read.state === "favourable"
+        ? "This vendor's own record leans toward the buyer on price."
+        : read.state === "mixed"
+          ? "Some vendor-specific pricing conditions favour the buyer; evidence is partial."
+          : read.marketContextOnly
+            ? "Market-wide cost conditions favour buyers, but this vendor's own record shows no clear pricing pressure."
+            : "No clear pricing pressure either way from the record.",
       basis,
-      v.spineLastIngest,
+      newestOf(v.spineDataAsOf, dcRead.state !== "insufficient" ? v.macroAsOf : null, marginPrim?.asOf) ?? v.spineLastIngest,
     );
   }
 
@@ -494,7 +508,14 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       (v.proc && procHeat.usable) || (g != null && d && d.contracts >= 3) ? "medium" : "low",
       null,
       basis,
-      v.proc?.lastAwardDate ?? cat?.sourcedAt ?? v.spineLastIngest,
+      // Fix 5: asOf = NEWEST reliable evidence behind the read. An ancient
+      // last-award date must never masquerade as the metric's freshness.
+      newestOf(
+        v.proc && procHeat.usable ? v.proc.lastAwardDate : null,
+        cat?.sourcedAt,
+        d && d.contracts >= 3 ? v.spineDataAsOf : null,
+        ev?.latestDate,
+      ) ?? v.spineLastIngest,
     );
   }
 
@@ -780,7 +801,8 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Gain-Sharing Opportunity",
       state,
       eventMove,
-      "medium",
+      // Fix 4: baseline inputs alone earn low confidence; change evidence earns medium.
+      capabilityUp || labourDown || commercialModelEvent != null || materialT12 > 0 ? "medium" : "low",
       state === "favourable" && commercialModelEvent
         ? "Their own disclosures monetise the productivity shift — gains exist that commercial assumptions set earlier will not reflect."
         : state === "favourable"
@@ -883,6 +905,17 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     dealMarketHeat,
     operationalRisk,
     reputationMovement,
+    // Fix 4: evidence-floor banding for gain-sharing — levels are earned by
+    // commercially meaningful change evidence, not by baseline inputs existing.
+    gainShareLevelBand: gainShareLevel({
+      aiReadiness: ai,
+      materialEventsT12: materialT12,
+      highEventsT12: highT12,
+      commercialModelEvent: commercialModelEvent != null,
+      labourDown: talent?.netFlow != null && talent.netFlow < 0,
+      talentKnown: talent?.netFlow != null || talent?.headcountTrend != null,
+      marginRoom: marginPrim != null && marginPrim.value >= 12,
+    }),
   };
 }
 
@@ -921,6 +954,17 @@ function opportunitiesFor(metrics: VendorMetrics): Record<OpportunityType, Oppor
     };
   };
 
+  /* Gain-sharing uses the evidence-floor band directly (fix 4): the level is
+     earned by change evidence, and the metric's insufficient state wins. */
+  const mkGainShare = (from: Metric, band: VendorMetrics["gainShareLevelBand"], investigate: string[]): Opportunity => ({
+    type: "gain-sharing",
+    level: from.state === "insufficient" ? "insufficient" : band ?? stateToLevel(from),
+    movement: from.movement,
+    confidence: from.confidence,
+    why: from.basis,
+    investigate,
+  });
+
   return {
     pricing: mk(
       "pricing",
@@ -940,10 +984,9 @@ function opportunitiesFor(metrics: VendorMetrics): Record<OpportunityType, Oppor
         "Whether staffing assumptions in agreements priced before these changes remain justified.",
       ],
     ),
-    "gain-sharing": mk(
-      "gain-sharing",
+    "gain-sharing": mkGainShare(
       metrics.gainShareOpportunity,
-      metrics.aiProductivityOpportunity.state === "favourable",
+      metrics.gainShareLevelBand,
       [
         "Productivity commitments and baseline resets — buyers with agreements priced before these capability changes may have a basis to challenge them.",
         "Unit or outcome pricing where labour dependency has visibly fallen.",

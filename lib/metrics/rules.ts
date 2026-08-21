@@ -195,6 +195,86 @@ export function deliveryCostState(m: MacroReading): {
   return { state: "stable", reading: "Observed wage, inflation and FX series are broadly offsetting.", signals };
 }
 
+/* ── pricing discrimination (sprint 3 fix 3) ─────────────────────────────────
+   State is driven by VENDOR-SPECIFIC evidence only. A market-wide macro
+   tailwind is context: it can colour the basis and never the state, so one
+   broad signal cannot collapse the whole universe into "favourable". */
+
+export interface PricingInputs {
+  /** Vendor's own deal-market heat read is usable (enough of their own flow). */
+  heatUsable: boolean;
+  /** Vendor's own award flow is cooling (buyer-favourable heat state). */
+  cooling: boolean;
+  /** Vendor's own flow fell by half or more across the windows. */
+  stronglyCooling: boolean;
+  /** Scoped alternatives active in the vendor's top service line. */
+  alternatives: number;
+  /** Vendor's own filed margin leaves observed room to concede. */
+  marginRoom: boolean;
+  /** Market-wide macro delivery-cost read is buyer-favourable (context only). */
+  macroFavourable: boolean;
+}
+
+export function pricingRead(p: PricingInputs): {
+  state: "favourable" | "mixed" | "stable";
+  vendorFamilies: number;
+  marketContextOnly: boolean;
+} {
+  const cooling = p.heatUsable && p.cooling;
+  const vendorFamilies = [cooling, p.alternatives >= 1, p.marginRoom].filter(Boolean).length;
+  // Favourable is earned by the vendor's own record: their flow must be
+  // cooling AND corroborated — strongly, or by breadth plus margin room.
+  const favourable =
+    (p.heatUsable && p.stronglyCooling && p.alternatives >= 1) ||
+    (cooling && p.alternatives >= 1 && p.marginRoom);
+  if (favourable) return { state: "favourable", vendorFamilies, marketContextOnly: false };
+  if (vendorFamilies >= 2 || cooling) return { state: "mixed", vendorFamilies, marketContextOnly: false };
+  // A lone structural signal (alternatives exist / margin room) or a purely
+  // market-wide tailwind reads stable — direction is not asserted.
+  return { state: "stable", vendorFamilies, marketContextOnly: vendorFamilies === 0 && p.macroFavourable };
+}
+
+/* ── gain-sharing evidence floor (sprint 3 fix 4) ────────────────────────────
+   Levels are earned by commercially meaningful CHANGE evidence, not by the
+   mere existence of baseline inputs. */
+
+export type GainShareLevel = "very-high" | "high" | "medium" | "low" | "insufficient";
+
+export interface GainShareEvidence {
+  aiReadiness: number | null;
+  materialEventsT12: number;
+  highEventsT12: number;
+  /** A gated pricing-model / productivity / AI-revenue disclosure exists. */
+  commercialModelEvent: boolean;
+  /** Net talent flow is negative (labour dependency observably falling). */
+  labourDown: boolean;
+  /** Talent reading exists at all. */
+  talentKnown: boolean;
+  /** Filed margin indicates capacity to fund gain-share structures. */
+  marginRoom: boolean;
+}
+
+export function gainShareLevel(e: GainShareEvidence): GainShareLevel {
+  const capabilityUp = e.aiReadiness != null && e.aiReadiness >= 60;
+  const eventsUp = e.materialEventsT12 >= 1;
+  // CHANGE families: things that materially challenge existing commercial
+  // assumptions. Margin room supports a case; it never creates one.
+  const changeFamilies = [capabilityUp, eventsUp, e.labourDown, e.commercialModelEvent].filter(Boolean).length;
+  if (e.aiReadiness == null && e.materialEventsT12 === 0 && !e.talentKnown) return "insufficient";
+  if (changeFamilies === 0) return "low";
+  if (changeFamilies === 1 && !e.commercialModelEvent) return "medium";
+  if (e.commercialModelEvent && (capabilityUp || e.labourDown) && (e.highEventsT12 >= 1 || e.marginRoom)) return "very-high";
+  if (changeFamilies >= 3 && e.highEventsT12 >= 1) return "very-high";
+  return "high";
+}
+
+/* ── freshness semantics (sprint 3 fix 5): asOf = newest reliable evidence ── */
+
+export function newestOf(...dates: Array<string | null | undefined>): string | null {
+  const clean = dates.filter((d): d is string => Boolean(d));
+  return clean.length ? clean.sort().at(-1)! : null;
+}
+
 /* ── historical modes: reconstructed history may never claim snapshot status (§18) ── */
 export type HistoricalMode = "reconstructed" | "observed_snapshot";
 

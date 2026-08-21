@@ -11,7 +11,10 @@ import {
   headroomState,
   historyModeLabel,
   isAllowedPricingSource,
+  gainShareLevel,
   mixCoverage,
+  newestOf,
+  pricingRead,
   procurementHeatState,
 } from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
@@ -364,5 +367,82 @@ describe("delivery-cost economics (sprint 2 §15) — macro-grounded, never fabr
     // the rule itself is exercised here: stale asOf degrades confidence.
     expect(capConfidenceByAge("high", "2025-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("medium");
     expect(capConfidenceByAge("high", "2026-08-10", { maxFreshDays: 45, today: "2026-08-21" })).toBe("high");
+  });
+});
+
+
+/* ── Sprint 3 Stage 1: discrimination, floors, freshness, cache hardening ── */
+
+describe("pricing discrimination (sprint 3 fix 3)", () => {
+  it("a market-wide macro tailwind alone cannot mark ANY vendor favourable", () => {
+    const universe = Array.from({ length: 50 }, () =>
+      pricingRead({ heatUsable: false, cooling: false, stronglyCooling: false, alternatives: 0, marginRoom: false, macroFavourable: true }),
+    );
+    expect(universe.filter((r) => r.state === "favourable")).toHaveLength(0);
+    expect(universe.every((r) => r.state === "stable" && r.marketContextOnly)).toBe(true);
+  });
+
+  it("favourable is earned by the vendor's own corroborated record", () => {
+    expect(pricingRead({ heatUsable: true, cooling: true, stronglyCooling: true, alternatives: 2, marginRoom: false, macroFavourable: false }).state).toBe("favourable");
+    expect(pricingRead({ heatUsable: true, cooling: true, stronglyCooling: false, alternatives: 1, marginRoom: true, macroFavourable: false }).state).toBe("favourable");
+    // mild cooling + breadth but no margin corroboration -> mixed, not favourable
+    expect(pricingRead({ heatUsable: true, cooling: true, stronglyCooling: false, alternatives: 3, marginRoom: false, macroFavourable: true }).state).toBe("mixed");
+    // a lone structural signal reads stable
+    expect(pricingRead({ heatUsable: false, cooling: false, stronglyCooling: false, alternatives: 1, marginRoom: false, macroFavourable: false }).state).toBe("stable");
+  });
+
+  it("stale tracker evidence caps pricing confidence", () => {
+    expect(capConfidenceByAge("medium", "2026-04-16", { maxFreshDays: 120, today: "2026-08-21" })).toBe("low");
+    expect(capConfidenceByAge("medium", "2026-07-16", { maxFreshDays: 120, today: "2026-08-21" })).toBe("medium");
+  });
+});
+
+describe("gain-sharing evidence floor (sprint 3 fix 4)", () => {
+  it("no evidence at all reads insufficient", () => {
+    expect(gainShareLevel({ aiReadiness: null, materialEventsT12: 0, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: false, marginRoom: false })).toBe("insufficient");
+  });
+
+  it("baseline inputs with no meaningful change read LOW, never medium", () => {
+    expect(gainShareLevel({ aiReadiness: 38, materialEventsT12: 0, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: true, marginRoom: false })).toBe("low");
+    expect(gainShareLevel({ aiReadiness: 45, materialEventsT12: 0, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: true, marginRoom: true })).toBe("low");
+  });
+
+  it("one change family reads medium; several read high/very-high", () => {
+    expect(gainShareLevel({ aiReadiness: 65, materialEventsT12: 0, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: true, marginRoom: false })).toBe("medium");
+    expect(gainShareLevel({ aiReadiness: 65, materialEventsT12: 2, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: true, marginRoom: false })).toBe("high");
+    expect(gainShareLevel({ aiReadiness: 65, materialEventsT12: 3, highEventsT12: 1, commercialModelEvent: false, labourDown: true, talentKnown: true, marginRoom: true })).toBe("very-high");
+    expect(gainShareLevel({ aiReadiness: 61, materialEventsT12: 4, highEventsT12: 1, commercialModelEvent: true, labourDown: true, talentKnown: true, marginRoom: true })).toBe("very-high");
+  });
+
+  it("a generic announcement cannot raise the level (gate keeps events at zero)", () => {
+    const before = gainShareLevel({ aiReadiness: 40, materialEventsT12: 0, highEventsT12: 0, commercialModelEvent: false, labourDown: false, talentKnown: true, marginRoom: false });
+    expect(before).toBe("low");
+  });
+});
+
+describe("freshness semantics (sprint 3 fix 5)", () => {
+  it("newestOf picks the newest non-null date and never invents one", () => {
+    expect(newestOf("2016-08-22", "2026-04-16", null, "2025-01-01")).toBe("2026-04-16");
+    expect(newestOf(null, undefined)).toBe(null);
+  });
+});
+
+describe("insight cache hardening (sprint 3 fix 1)", () => {
+  const context = JSON.stringify({ facts: ["46 observed agreements ($7.2bn) reach end-of-term"] });
+  it("the three incident phrases cannot survive the current validator", () => {
+    for (const bad of [
+      "Vendors are exposed as their contract books come up for renewal.",
+      "Their renewal books are defended aggressively.",
+      "Your renewal window opens in the autumn.",
+      "Vendors are chasing renewal-heavy books rather than fresh volume.",
+      "Accenture's book of business is under pressure.",
+    ]) {
+      expect(validateInsight(bad, context).ok).toBe(false);
+    }
+  });
+
+  it("keeps the legitimate financial ratio 'book-to-bill' legal", () => {
+    const r = validateInsight("A published book-to-bill above 1 supports the observed momentum reading.", JSON.stringify({ f: "book-to-bill 1" }));
+    expect(r.blocked).toEqual([]);
   });
 });

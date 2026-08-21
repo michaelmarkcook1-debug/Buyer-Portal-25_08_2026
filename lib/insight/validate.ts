@@ -9,6 +9,14 @@
  * never silently repairs or substitutes.
  */
 
+/**
+ * Version of the validation ruleset. Part of the insight cache key, so any
+ * rule change invalidates every previously cached insight — an insight
+ * validated by an older ruleset can never be served again (sprint 3 fix 1).
+ * Bump on EVERY rule change.
+ */
+export const VALIDATOR_VERSION = 3;
+
 export interface InsightValidation {
   ok: boolean;
   text: string;
@@ -84,6 +92,14 @@ const OWNERSHIP_BLOCKERS: Array<{ re: RegExp; message: string }> = [
     // "starved order books" — no complete book of any kind is held.
     re: /\b(?:expiring|renewal|contract|order)\s+(?:books?|portfolios?)\b/i,
     message: "observed market contracts are described as vendors' “books/portfolios” — the dataset is partial market observation",
+  },
+  {
+    // The whole variant class (v3): in this domain a plural "books" — with ANY
+    // modifier ("renewal-heavy books") — means vendors' contract/order books,
+    // which the partial dataset can never substantiate. "book-to-bill" (a
+    // published financial ratio) remains legal; "book of business" does not.
+    re: /\bbooks\b|\bbook\s+of\s+business\b/i,
+    message: "vendors' “books” are asserted — the dataset is partial market observation, never a vendor's complete book",
   },
   {
     re: /\b(?:total|vendor|their|its)\s+commitments\b/i,
