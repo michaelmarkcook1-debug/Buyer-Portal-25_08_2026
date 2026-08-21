@@ -80,6 +80,12 @@ const OWNERSHIP_BLOCKERS: Array<{ re: RegExp; message: string }> = [
     message: "observed market contracts are described as a complete “book/portfolio” — the dataset is partial market observation",
   },
   {
+    // Possessive-less variants too: "defending large expiring books",
+    // "starved order books" — no complete book of any kind is held.
+    re: /\b(?:expiring|renewal|contract|order)\s+(?:books?|portfolios?)\b/i,
+    message: "observed market contracts are described as vendors' “books/portfolios” — the dataset is partial market observation",
+  },
+  {
     re: /\b(?:total|vendor|their|its)\s+commitments\b/i,
     message: "observed market contracts are described as authoritative vendor commitments",
   },
@@ -88,6 +94,13 @@ const OWNERSHIP_BLOCKERS: Array<{ re: RegExp; message: string }> = [
   {
     re: /\b(?:negotiating|negotiation)\s+window\s+(?:is|now|stands)\s+(?:wide\s+)?open\b/i,
     message: "market renewal timing is converted into an open negotiating window for the reader",
+  },
+  {
+    // Positive assertions that a window EXISTS ("this is a genuine negotiating
+    // window") — the reader's contract dates are unknown, so no window can be
+    // asserted, only the market backdrop described.
+    re: /\b(?:is|represents|creates?|opens?|offers?)\s+a\s+(?:\w+\s+){0,2}?(?:negotiating|negotiation)\s+window\b/i,
+    message: "a negotiating window is asserted to exist — market timing never establishes the reader's window; describe the commercial backdrop instead",
   },
   {
     re: /\byour\s+(?:negotiating|negotiation|renewal)\s+(?:window|timing|deadline)\b/i,
@@ -115,9 +128,30 @@ const OWNERSHIP_BLOCKERS: Array<{ re: RegExp; message: string }> = [
   },
 ];
 
+/* ── completeness firewall (Sprint 2 §10): absence in OUR dataset is never
+      absence in THE MARKET. Dataset-scoped phrasing is required. ── */
+const COMPLETENESS_BLOCKERS: Array<{ re: RegExp; message: string }> = [
+  {
+    re: /\b(?:the\s+)?(?:market|industry)\s+has\s+no\b/i,
+    message: "dataset absence is asserted as market-wide absence — say “none identified in the observed dataset”",
+  },
+  {
+    re: /\bno[^.;!?]{0,40}\bexists?\s+in\s+the\s+(?:market|industry)\b/i,
+    message: "dataset absence is asserted as market-wide absence — say “none identified in the observed dataset”",
+  },
+  {
+    re: /\bnowhere\s+in\s+the\s+(?:market|industry)\b/i,
+    message: "dataset absence is asserted as market-wide absence",
+  },
+];
+
 /** Buyer-directed timing keyed to a market contract date, without market framing. */
 const TIMED_IMPERATIVE =
   /\b(?:press|approach|renegotiate|challenge|act|move|engage)\b[^.;!?]{0,60}\b(?:before|by|ahead of)\b[^.;!?]{0,40}\b(?:renewal|expiry|end-of-term|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b/i;
+/** Reader-directed "…now" urgency on renewal/pricing timing (sprint 2 tightening). */
+const URGENT_NOW =
+  /\b(?:press|pressure-test|renegotiate|challenge|move|engage|push|act)\b[^.;!?]{0,60}\bnow\b/i;
+const TIMING_TOPIC = /\b(?:renewal|expiry|end-of-term|window|pricing|rates?)\b/i;
 const MARKET_FRAMING = /\b(?:observed|market|comparable|buyers?\s+with|public record)\b/i;
 
 export function validateOwnership(text: string): { blocked: string[]; warnings: string[] } {
@@ -129,12 +163,23 @@ export function validateOwnership(text: string): { blocked: string[]; warnings: 
     if (m) blocked.push(`Ownership violation: ${rule.message} (“${m[0].trim()}”).`);
   }
 
+  for (const rule of COMPLETENESS_BLOCKERS) {
+    const m = text.match(rule.re);
+    if (m) blocked.push(`Completeness violation: ${rule.message} (“${m[0].trim()}”).`);
+  }
+
   // Sentence-wise: advice timed to a renewal/expiry must carry market framing.
   for (const sentence of text.split(/(?<=[.!?])\s+/)) {
     const m = sentence.match(TIMED_IMPERATIVE);
     if (m && !MARKET_FRAMING.test(sentence)) {
       blocked.push(
         `Ownership violation: buyer-directed timing is keyed to a market contract date without market framing (“${m[0].trim()}”).`,
+      );
+    }
+    const u = sentence.match(URGENT_NOW);
+    if (u && TIMING_TOPIC.test(sentence) && !MARKET_FRAMING.test(sentence)) {
+      blocked.push(
+        `Ownership violation: reader-directed “now” urgency on renewal/pricing timing without market framing (“${u[0].trim()}”).`,
       );
     }
   }

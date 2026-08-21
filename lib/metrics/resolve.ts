@@ -1,8 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import {
+  getAiEvents,
   getCatalog,
   getFreshness,
+  getMacroReadings,
   getProcurementFlow,
   getScopeAggregates,
   getSecSummaries,
@@ -13,9 +15,11 @@ import {
   getVendorPrimitives,
   getVendorSignals,
   type CatalogFacts,
+  type MacroSeriesReading,
   type ProcurementFlow,
   type SecSummary,
   type SignalDelta,
+  type VendorAiEvents,
   type VendorDealFacts,
   type VendorPrimitive,
   type VendorSignals,
@@ -28,12 +32,16 @@ import {
   type HistorySeries,
 } from "@/lib/data/history";
 import {
+  aiCapabilityChange,
+  automationState,
   capConfidenceByAge,
+  deliveryCostState,
   headroomState,
   historyModeLabel,
   invertMove,
   procurementHeatState,
   ratioMove,
+  type MacroReading,
 } from "./rules";
 import { scopedTickers, type MarketScope } from "@/lib/market-scope";
 import { money, count, signed, shortDate } from "@/lib/format";
@@ -109,6 +117,13 @@ interface VendorInputs {
   repSeries: HistorySeries | undefined;
   /** Distinct scoped vendors winning public work in the last 180 days. */
   procWinners180: number;
+  /** Materiality-gated AI capability events (canonical ai_shift signals). */
+  aiEvents: VendorAiEvents | undefined;
+  /** Market-level macro reading (already freshness-filtered) — same for every vendor. */
+  macro: MacroReading;
+  /** Pre-built basis lines for the macro series that passed the freshness gate. */
+  macroBasis: Basis[];
+  macroAsOf: string | null;
   /** Other scoped vendors active in this vendor's top service line. */
   alternativesInTopLine: number;
   scopeVendorCount: number;
@@ -121,6 +136,49 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
   const sig = v.signals ?? {};
   const cat = v.catalog;
   const spineNote = `award windows anchored at the contract spine's last refresh (${shortDate(v.spineLastIngest)})`;
+
+  /* Shared inputs hoisted: EDGAR primitives, AI readiness, materiality-gated
+     capability events (§6/§7), and the macro delivery-cost read (§15) feed
+     several metrics below. */
+  const marginPrim = v.prims?.get("operating_margin_pct");
+  const cashPrim = v.prims?.get("cash_usd");
+  const debtPrim = v.prims?.get("long_term_debt_usd");
+  const edgarRevPrim = v.prims?.get("edgar_revenue_annual");
+
+  const ai = cat?.aiReadinessScore ?? null;
+  const aiDelta = v.delta?.aiReadinessDelta ?? null;
+  const aiMove: Movement =
+    aiDelta == null ? "insufficient" : aiDelta > 2 ? "improving" : aiDelta < -2 ? "deteriorating" : "stable";
+
+  const ev = v.aiEvents;
+  const materialT12 = ev?.materialT12 ?? 0;
+  const highT12 = ev?.highT12 ?? 0;
+  const aiChange = aiCapabilityChange({ materialT12, highT12 }, aiDelta);
+  /* Events carry 12-month movement where the readiness delta alone cannot. */
+  const eventMove: Movement =
+    aiChange === "materially-increased" ? "materially-improving"
+    : aiChange === "increased" ? "improving"
+    : aiChange === "decreased" ? "deteriorating"
+    : aiChange === "stable" ? "stable"
+    : aiMove;
+  const eventCountBasis: Basis | null =
+    ev && materialT12 > 0
+      ? {
+          text: `${count(materialT12)} materiality-gated AI capability event${materialT12 === 1 ? "" : "s"} on this vendor in the trailing 12 months${highT12 > 0 ? ` (${count(highT12)} high-materiality)` : ""}; latest ${shortDate(ev.latestDate)}. Generic announcements are excluded by the gate.`,
+          source: "AI capability events (materiality-gated)", ownership: "market", asOf: ev.latestDate,
+        }
+      : null;
+  const eventBasis: Basis[] = (ev?.events ?? [])
+    .filter((e) => e.materiality >= 3)
+    .slice(0, 2)
+    .map((e) => ({
+      text: `${shortDate(e.date)}: ${e.headline}.`,
+      source: "AI capability events (materiality-gated)", ownership: "market" as const, asOf: e.date,
+    }));
+  const COMMERCIAL_MODEL_EVENTS = new Set(["pricing_model_change", "productivity_disclosure", "ai_revenue_or_bookings"]);
+  const commercialModelEvent = (ev?.events ?? []).find((e) => e.materiality >= 3 && COMMERCIAL_MODEL_EVENTS.has(e.eventType)) ?? null;
+
+  const dcRead = deliveryCostState(v.macro);
 
   /* Buyer leverage — observed end-of-term concentration is buyer-relevant context.
      Never framed as the reader's own negotiating window: their contract dates are unknown. */
@@ -258,37 +316,58 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Insufficient contract evidence to read pricing conditions for this vendor.",
     );
   } else {
+    /* §14: pricing direction is INFERRED from independent condition families —
+       market heat, competitive breadth, delivery-cost economics, and filed
+       margin room. Procurement/award flow stays a flow signal; no rate, price
+       point or savings figure is ever produced here. */
     const cooling = dealMarketHeat.state === "favourable";
     const alternatives = v.alternativesInTopLine;
-    const state: MetricState = cooling && alternatives >= 1 ? "favourable" : cooling || alternatives >= 2 ? "mixed" : "stable";
+    const costFavourable = dcRead.state === "favourable";
+    const marginRoom = marginPrim != null && marginPrim.value >= 12;
+    const votes = [cooling, alternatives >= 2, costFavourable, marginRoom].filter(Boolean).length;
+    const state: MetricState =
+      (cooling && alternatives >= 1) || (votes >= 2 && (cooling || alternatives >= 1))
+        ? "favourable"
+        : votes >= 1
+          ? "mixed"
+          : "stable";
+    const families = (cooling || alternatives >= 1 ? 1 : 0) + (dcRead.state !== "insufficient" ? 1 : 0) + (marginPrim ? 1 : 0);
+    const basis: Basis[] = [
+      {
+        text: `Award flow ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two 12-month windows; ${count(alternatives)} scoped alternative${alternatives === 1 ? "" : "s"} in ${d.topLines[0]?.line ?? "their top line"}.`,
+        source: "Curated contract tracker (market record)", ownership: "market",
+      },
+    ];
+    if (dcRead.state !== "insufficient") {
+      basis.push({
+        text: `Underlying delivery-cost economics currently read ${dcRead.state === "favourable" ? "buyer-favourable" : dcRead.state === "unfavourable" ? "supplier-favourable" : dcRead.state} on the published wage, inflation and FX series.`,
+        source: "FRED macro series", ownership: "market", asOf: v.macroAsOf,
+      });
+    }
+    if (marginPrim) {
+      basis.push({
+        text: `Operating margin ${marginPrim.value.toFixed(1)}% (SEC 10-K, period ending ${shortDate(marginPrim.asOf)})${marginRoom ? " — observed room to absorb commercial pressure" : ""}.`,
+        source: "SEC EDGAR companyfacts", ownership: "market", asOf: marginPrim.asOf,
+      });
+    }
     pricingPressure = metric(
       "pricingPressure",
       "Pricing Pressure",
       state,
       dealMarketHeat.movement === "insufficient" ? "insufficient" : invertMove(dealMarketHeat.movement),
-      "low",
+      families >= 2 ? "medium" : "low",
       state === "favourable"
         ? "Conditions lean toward the buyer on price."
         : state === "mixed"
           ? "Some pricing conditions favour the buyer; evidence is partial."
           : "No clear pricing pressure either way from the record.",
-      [
-        {
-          text: `Award flow ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two 12-month windows; ${count(alternatives)} scoped alternative${alternatives === 1 ? "" : "s"} in ${d.topLines[0]?.line ?? "their top line"}.`,
-          source: "Curated contract tracker (market record)", ownership: "market",
-        },
-      ],
+      basis,
       v.spineLastIngest,
     );
   }
 
   /* Financial resilience — EDGAR-backed where listed (E4 regulatory facts),
      AG catalog otherwise. */
-  const marginPrim = v.prims?.get("operating_margin_pct");
-  const cashPrim = v.prims?.get("cash_usd");
-  const debtPrim = v.prims?.get("long_term_debt_usd");
-  const edgarRevPrim = v.prims?.get("edgar_revenue_annual");
-
   let financialResilience: Metric;
   if (!cat || (cat.revenueUsd == null && cat.revenueGrowthYoy == null && !marginPrim)) {
     financialResilience = insufficientMetric(
@@ -406,6 +485,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       });
     if (d && d.contracts >= 3)
       basis.push({ text: `Observed commercial awards ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two spine windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
+    if (eventCountBasis) basis.push(eventCountBasis);
     providerMomentum = metric(
       "providerMomentum",
       "Provider Momentum",
@@ -477,11 +557,35 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   }
 
-  const deliveryCostPressure = insufficientMetric(
-    "deliveryCostPressure",
-    "Delivery Cost Pressure",
-    "No delivery-cost or rate data is held — no assessment is made.",
-  );
+  /* Delivery-cost economics — CALCULATED from published macro series (BLS wage
+     index, CPI, INR/USD via FRED), never a fabricated blended rate (§15). The
+     read is market-level; vendor talent shape says how hard it bites. */
+  let deliveryCostPressure: Metric;
+  if (dcRead.state === "insufficient") {
+    deliveryCostPressure = insufficientMetric(
+      "deliveryCostPressure",
+      "Delivery Cost Pressure",
+      "Fewer than two fresh macro cost series are held — no delivery-cost assessment is made.",
+    );
+  } else {
+    const basis: Basis[] = [...v.macroBasis];
+    if ((talent?.totalHeadcount ?? 0) >= 50_000) {
+      basis.push({
+        text: `Labour-heavy delivery model (headcount ${count(talent!.totalHeadcount!)}) — published wage and FX movements bear directly on their cost base.`,
+        source: "AnalystGenius talent signals", ownership: "market", asOf: talent?.sourcedAt ?? null,
+      });
+    }
+    deliveryCostPressure = metric(
+      "deliveryCostPressure",
+      "Delivery Cost Pressure",
+      dcRead.state,
+      "insufficient", // point-in-time YoY readings; no trajectory is asserted
+      dcRead.signals >= 3 ? "medium" : "low",
+      dcRead.reading,
+      basis,
+      v.macroAsOf,
+    );
+  }
 
   /* Operational risk — AG top-issues read plus disclosure-grade events. */
   let operationalRisk: Metric;
@@ -565,86 +669,107 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   }
 
-  /* AI productivity / automation / gain-sharing — AG AI-readiness + talent. */
-  const ai = cat?.aiReadinessScore ?? null;
-  const aiDelta = v.delta?.aiReadinessDelta ?? null;
-  const aiMove: Movement =
-    aiDelta == null ? "insufficient" : aiDelta > 2 ? "improving" : aiDelta < -2 ? "deteriorating" : "stable";
-
+  /* AI productivity / automation / gain-sharing — AG AI-readiness + talent +
+     materiality-gated capability events (§6/§7). A generic announcement never
+     moves these: only events that cleared the upstream gate are visible here. */
   let aiProductivityOpportunity: Metric;
-  if (ai == null) {
+  if (ai == null && materialT12 === 0) {
     aiProductivityOpportunity = insufficientMetric(
       "aiProductivityOpportunity",
       "AI Productivity Opportunity",
-      "No AI-capability reading is held for this vendor.",
+      "No AI-capability reading and no materiality-gated capability events are held for this vendor.",
     );
   } else {
-    const state: MetricState = ai >= 70 ? "favourable" : ai >= 50 ? "stable" : "mixed";
+    const state: MetricState =
+      ai != null && (ai >= 70 || (ai >= 55 && materialT12 >= 2))
+        ? "favourable"
+        : (ai != null && ai >= 50) || materialT12 >= 2
+          ? "stable"
+          : "mixed";
+    const basis: Basis[] = [];
+    if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+    if (eventCountBasis) basis.push(eventCountBasis);
+    basis.push(...eventBasis);
     aiProductivityOpportunity = metric(
       "aiProductivityOpportunity",
       "AI Productivity Opportunity",
       state,
-      aiMove,
-      "medium",
-      state === "favourable"
-        ? "Their AI delivery capability has advanced — productivity assumptions set earlier deserve challenge."
-        : "AI capability is present but not yet decisive for productivity commitments.",
-      [
-        { text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null },
-      ],
-      cat?.sourcedAt ?? null,
+      eventMove,
+      ai != null && materialT12 > 0 ? "medium" : ai != null ? "medium" : "low",
+      state === "favourable" && (aiChange === "materially-increased" || aiChange === "increased")
+        ? "Their AI delivery capability has materially advanced over the observed 12 months — productivity assumptions set earlier deserve challenge."
+        : state === "favourable"
+          ? "Their AI delivery capability has advanced — productivity assumptions set earlier deserve challenge."
+          : "AI capability is present but not yet decisive for productivity commitments.",
+      basis,
+      ev?.latestDate ?? cat?.sourcedAt ?? null,
     );
   }
 
   let automationOpportunity: Metric;
-  if (ai == null) {
-    automationOpportunity = insufficientMetric(
-      "automationOpportunity",
-      "Automation Opportunity",
-      "No automation-capability reading is held for this vendor.",
-    );
-  } else {
+  {
     const labourHeavy = (talent?.totalHeadcount ?? 0) >= 50_000;
-    const state: MetricState = ai >= 70 && labourHeavy ? "favourable" : ai >= 60 ? "stable" : "mixed";
-    const basis: Basis[] = [
-      { text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null },
-    ];
-    if (talent?.totalHeadcount != null) {
-      basis.push({
-        text: `Delivery headcount ${count(talent.totalHeadcount)} (${talent.headcountTrend ?? "trend not stated"}) — the labour base automation would displace.`,
-        source: "AnalystGenius talent signals", ownership: "market",
-        asOf: talent.sourcedAt,
-      });
+    const auto = automationState({ aiReadiness: ai, labourHeavy, materialEventsT12: materialT12 });
+    if (auto === "insufficient") {
+      automationOpportunity = insufficientMetric(
+        "automationOpportunity",
+        "Automation Opportunity",
+        "No automation-capability reading and no materiality-gated capability events are held for this vendor.",
+      );
+    } else {
+      const basis: Basis[] = [];
+      if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+      if (talent?.totalHeadcount != null) {
+        basis.push({
+          text: `Delivery headcount ${count(talent.totalHeadcount)} (${talent.headcountTrend ?? "trend not stated"}) — the labour base automation would displace.`,
+          source: "AnalystGenius talent signals", ownership: "market",
+          asOf: talent.sourcedAt,
+        });
+      }
+      if (eventCountBasis) basis.push(eventCountBasis);
+      automationOpportunity = metric(
+        "automationOpportunity",
+        "Automation Opportunity",
+        auto,
+        eventMove,
+        ai != null ? "medium" : "low",
+        auto === "favourable"
+          ? "Advanced automation capability over a labour-heavy delivery base — the buyer's benefit case is live."
+          : null,
+        basis,
+        ev?.latestDate ?? cat?.sourcedAt ?? null,
+      );
     }
-    automationOpportunity = metric(
-      "automationOpportunity",
-      "Automation Opportunity",
-      state,
-      aiMove,
-      "medium",
-      state === "favourable"
-        ? "Advanced automation capability over a labour-heavy delivery base — the buyer's benefit case is live."
-        : null,
-      basis,
-      cat?.sourcedAt ?? null,
-    );
   }
 
   let gainShareOpportunity: Metric;
-  if (ai == null && (talent?.netFlow == null)) {
+  if (ai == null && talent?.netFlow == null && materialT12 === 0) {
     gainShareOpportunity = insufficientMetric(
       "gainShareOpportunity",
       "Gain-Sharing Opportunity",
-      "Insufficient evidence on AI capability and labour dependency to assess gain-sharing.",
+      "Insufficient evidence on AI capability, labour dependency and capability events to assess gain-sharing.",
     );
   } else {
-    const capabilityUp = ai != null && ai >= 60;
+    const capabilityUp = (ai != null && ai >= 60) || aiChange === "materially-increased" || aiChange === "increased";
     const labourDown = talent?.netFlow != null && talent.netFlow < 0;
-    const state: MetricState = capabilityUp && labourDown ? "favourable" : capabilityUp || labourDown ? "stable" : "mixed";
+    /* A gated commercial-model event (pricing model change, productivity or
+       AI-revenue disclosure) is direct evidence the vendor itself is monetising
+       the productivity shift — the strongest gain-share opening we can observe. */
+    const state: MetricState =
+      capabilityUp && (labourDown || commercialModelEvent != null)
+        ? "favourable"
+        : capabilityUp || labourDown || commercialModelEvent != null
+          ? "stable"
+          : "mixed";
     const basis: Basis[] = [];
     if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
     if (talent?.netFlow != null)
       basis.push({ text: `Net talent flow ${signed(talent.netFlow)} with headcount ${talent.headcountTrend ?? "trend not stated"}.`, source: "AnalystGenius talent signals", ownership: "market", asOf: talent.sourcedAt });
+    if (commercialModelEvent)
+      basis.push({
+        text: `${shortDate(commercialModelEvent.date)}: ${commercialModelEvent.headline} — observed commercial-model evidence.`,
+        source: "AI capability events (materiality-gated)", ownership: "market", asOf: commercialModelEvent.date,
+      });
     if (marginPrim)
       basis.push({
         text: `Financial capacity to fund gain-share structures: operating margin ${marginPrim.value.toFixed(1)}% (SEC 10-K, period ending ${shortDate(marginPrim.asOf)}).`,
@@ -654,13 +779,15 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "gainShareOpportunity",
       "Gain-Sharing Opportunity",
       state,
-      aiMove,
+      eventMove,
       "medium",
-      state === "favourable"
-        ? "Delivery capability is rising while labour dependency falls — productivity gains may not yet be reflected in commercial assumptions."
-        : null,
+      state === "favourable" && commercialModelEvent
+        ? "Their own disclosures monetise the productivity shift — gains exist that commercial assumptions set earlier will not reflect."
+        : state === "favourable"
+          ? "Delivery capability is rising while labour dependency falls — productivity gains may not yet be reflected in commercial assumptions."
+          : null,
       basis,
-      cat?.sourcedAt ?? talent?.sourcedAt ?? null,
+      ev?.latestDate ?? cat?.sourcedAt ?? talent?.sourcedAt ?? null,
     );
   }
 
@@ -911,6 +1038,66 @@ function rollup(
   );
 }
 
+/* ───────────────────── macro freshness gate (§15/§29) ───────────────────── */
+
+const signedPct = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`;
+
+/** Per-series staleness ceilings (days), matched to publication cadence. */
+const MACRO_FRESH_DAYS: Record<string, number> = {
+  ECIWAG: 220, // quarterly wage index + publication lag
+  CPIAUCSL: 120, // monthly US CPI
+  INDCPIALLMINMEI: 260, // monthly India CPI, long OECD source lag
+  DEXINUS: 45, // daily FX
+};
+
+/**
+ * Builds the market-level MacroReading once per resolve. A series that fails
+ * its freshness ceiling is dropped entirely (null) rather than silently kept —
+ * deliveryCostState then honestly reports "insufficient" below two signals.
+ */
+function buildMacroInputs(map: Map<string, MacroSeriesReading>): {
+  macro: MacroReading;
+  macroBasis: Basis[];
+  macroAsOf: string | null;
+} {
+  const today = Date.now();
+  const fresh = (id: string): MacroSeriesReading | null => {
+    const r = map.get(id);
+    if (!r || r.yoyPct == null) return null;
+    const age = (today - Date.parse(r.latestDate)) / 86_400_000;
+    return age <= (MACRO_FRESH_DAYS[id] ?? 120) ? r : null;
+  };
+  const wage = fresh("ECIWAG");
+  const usCpi = fresh("CPIAUCSL");
+  const inCpi = fresh("INDCPIALLMINMEI");
+  const fx = fresh("DEXINUS");
+
+  const macroBasis: Basis[] = [];
+  if (wage)
+    macroBasis.push({ text: `US employment cost index ${signedPct(wage.yoyPct!)} YoY (period ending ${shortDate(wage.latestDate)}).`, source: "FRED — BLS Employment Cost Index", ownership: "market", asOf: wage.latestDate });
+  if (usCpi)
+    macroBasis.push({ text: `US CPI ${signedPct(usCpi.yoyPct!)} YoY (period ending ${shortDate(usCpi.latestDate)}).`, source: "FRED — US CPI", ownership: "market", asOf: usCpi.latestDate });
+  if (inCpi)
+    macroBasis.push({ text: `India CPI ${signedPct(inCpi.yoyPct!)} YoY (period ending ${shortDate(inCpi.latestDate)}).`, source: "FRED — OECD India CPI", ownership: "market", asOf: inCpi.latestDate });
+  if (fx)
+    macroBasis.push({
+      text: `INR moved ${signedPct(fx.yoyPct!)} vs USD over 12 months (${fx.yoyPct! >= 0 ? "rupee weakened — offshore delivery cheaper in USD terms" : "rupee strengthened — offshore delivery dearer in USD terms"}; as of ${shortDate(fx.latestDate)}).`,
+      source: "FRED — INR/USD daily rate", ownership: "market", asOf: fx.latestDate,
+    });
+
+  const dates = [wage, usCpi, inCpi, fx].filter(Boolean).map((r) => r!.latestDate);
+  return {
+    macro: {
+      usWageYoY: wage?.yoyPct ?? null,
+      usCpiYoY: usCpi?.yoyPct ?? null,
+      indiaCpiYoY: inCpi?.yoyPct ?? null,
+      inrPerUsdYoY: fx?.yoyPct ?? null,
+    },
+    macroBasis,
+    macroAsOf: dates.length ? dates.sort().at(-1)! : null,
+  };
+}
+
 /* ───────────────────── the resolver ───────────────────── */
 
 export const resolveIntelligence = cache(async (scopeJson: string): Promise<MarketIntel> => {
@@ -920,7 +1107,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const tickers = scopedTickers(scope, universeTickers);
   const key = [...tickers].sort().join(",");
 
-  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, spineQ, procMonthly, pricingMix] =
+  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, spineQ, procMonthly, pricingMix, aiEvents, macroMap] =
     await Promise.all([
       getVendorDealFacts(key),
       getVendorSignals(key),
@@ -936,7 +1123,11 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       getSpineQuarterlyFlow(key),
       getProcurementMonthlyFlow(key),
       getPricingModelMixByYear(key),
+      getAiEvents(key),
+      getMacroReadings(),
     ]);
+
+  const { macro, macroBasis, macroAsOf } = buildMacroInputs(macroMap);
 
   /* Alternatives: which scoped vendors share a top service line. */
   const topLineOf = new Map<string, string | null>();
@@ -971,6 +1162,10 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       prims: prims.get(ticker),
       repSeries: repSeries.get(ticker),
       procWinners180: proc.distinctWinners180,
+      aiEvents: aiEvents.get(ticker),
+      macro,
+      macroBasis,
+      macroAsOf,
       alternativesInTopLine: alternatives,
       scopeVendorCount: tickers.length,
       spineLastIngest: anchor.lastIngest,
@@ -1176,7 +1371,13 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
 
   {
     // Commercial-model mix — the observable gain-sharing precondition.
+    // §10: absence in this dataset is never absence in the market; the row
+    // carries its own coverage so the reader can weigh the claim.
     const withShare = pricingMix.points.filter((p) => p.value != null);
+    const cov = pricingMix.coverage;
+    const covNote = cov
+      ? ` Coverage: ${count(cov.classifiedCount)} of ${count(cov.observedCount)} observed agreements in the window carry a commercial-model classification (${cov.coverageQuality}) — a dataset-scoped read, not a market-wide one.`
+      : "";
     if (withShare.length >= 2) {
       const first = withShare[0];
       const last = withShare[withShare.length - 1];
@@ -1185,8 +1386,8 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         dimension: "Pricing economics (commercial model)",
         state: "mixed",
         movement: delta > 1 ? "improving" : delta < -1 ? "deteriorating" : "stable",
-        detail: `Consumption/outcome-shaped share of observed agreements ${first.value}% (${first.period}, n=${first.n}) → ${last.value}% (${last.period}, n=${last.n}) (${historyModeLabel(pricingMix.mode)}). Rate-LEVEL movement remains unverifiable from the record.`,
-        confidence: "low",
+        detail: `Consumption/outcome-shaped share of observed agreements ${first.value}% (${first.period}, n=${first.n}) → ${last.value}% (${last.period}, n=${last.n}) (${historyModeLabel(pricingMix.mode)}). Rate-LEVEL movement remains unverifiable from the record.${covNote}`,
+        confidence: cov && cov.coverageQuality !== "weak" ? "low" : "insufficient",
         source: pricingMix.source,
       });
     } else {
@@ -1218,19 +1419,63 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   }
 
   {
-    // AI capability — observed snapshots of the AG AI-readiness primitive.
+    // AI capability — materiality-gated events (12-month view) plus observed
+    // snapshots of the AG AI-readiness primitive as they accrue.
     const a = seriesDelta("ai_readiness");
+    let evTotal = 0;
+    let evVendors = 0;
+    let evLatest: string | null = null;
+    for (const e of aiEvents.values()) {
+      if (e.materialT12 > 0) {
+        evTotal += e.materialT12;
+        evVendors++;
+      }
+      if (e.latestDate && (!evLatest || e.latestDate > evLatest)) evLatest = e.latestDate;
+    }
+    const eventLine =
+      evTotal > 0
+        ? `${count(evTotal)} materiality-gated AI capability events across ${count(evVendors)} selected vendors in the trailing 12 months (latest ${shortDate(evLatest)}; generic announcements excluded by the gate; event collection currently ends at that date).`
+        : `No materiality-gated AI capability events in the observed 12-month dataset${evLatest ? ` (collection currently ends ${shortDate(evLatest)})` : ""} — a dataset statement, not a market one.`;
+    const snapshotLine =
+      a.assessed === 0
+        ? ` AI-readiness snapshots begin ${shortDate(trackedSince)}; a full 12-month readiness series is still accruing.`
+        : ` AI-readiness moved for ${a.moved} of ${a.assessed} vendors across canonical snapshots (observed snapshots).`;
     changes.push({
       dimension: "AI delivery capability",
-      state: a.moved > 0 ? "mixed" : "stable",
-      movement: a.assessed === 0 ? "insufficient" : a.net > 0 ? "improving" : a.net < 0 ? "deteriorating" : "stable",
-      detail:
-        a.assessed === 0
-          ? `AI-readiness snapshots begin ${shortDate(trackedSince)}; a full 12-month capability series is not yet held.`
-          : `AI-readiness moved for ${a.moved} of ${a.assessed} vendors across canonical snapshots (observed snapshots); a full 12-month series is still accruing.`,
-      confidence: "low",
-      source: "Canonical vendor snapshots · AG vendor catalog",
+      state: evTotal > 0 || a.moved > 0 ? "mixed" : "stable",
+      movement:
+        evVendors >= 2 ? "improving"
+        : evTotal > 0 ? "stable"
+        : a.assessed === 0 ? "insufficient"
+        : a.net > 0 ? "improving" : a.net < 0 ? "deteriorating" : "stable",
+      detail: eventLine + snapshotLine,
+      confidence: evTotal > 0 ? "medium" : "low",
+      source: "AI capability events (materiality-gated) · Canonical vendor snapshots",
     });
+  }
+
+  {
+    // Delivery-cost economics — published macro series, market-level.
+    const dcMarket = deliveryCostState(macro);
+    if (dcMarket.state === "insufficient") {
+      changes.push({
+        dimension: "Delivery-cost economics",
+        state: "insufficient",
+        movement: "insufficient",
+        detail: "Fewer than two fresh published cost series (wage index, CPI, FX) are held — no delivery-cost movement is asserted.",
+        confidence: "insufficient",
+        source: "FRED macro series (BLS · OECD · FX)",
+      });
+    } else {
+      changes.push({
+        dimension: "Delivery-cost economics",
+        state: dcMarket.state,
+        movement: "insufficient", // YoY point readings; no trajectory asserted
+        detail: `${dcMarket.reading ?? ""} Read from ${count(dcMarket.signals)} published series (as of ${shortDate(macroAsOf)}): ${macroBasis.map((b) => b.text).join(" ")}`,
+        confidence: dcMarket.signals >= 3 ? "medium" : "low",
+        source: "FRED macro series (BLS · OECD · FX)",
+      });
+    }
   }
 
   {

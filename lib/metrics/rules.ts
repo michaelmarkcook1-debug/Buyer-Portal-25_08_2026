@@ -104,6 +104,97 @@ export function headroomState(input: {
   return { state: "insufficient", reading: null };
 }
 
+/* ── AI capability change (Sprint 2 §7): states from materiality-gated events ── */
+
+export type AiChangeState = "materially-increased" | "increased" | "stable" | "decreased" | "insufficient";
+
+export interface MaterialEventSummary {
+  /** Count of materiality>=3 events in the trailing 12 months. */
+  materialT12: number;
+  /** Count of materiality=5 events in the trailing 12 months. */
+  highT12: number;
+}
+
+/**
+ * Vendor AI/automation capability change over 12 months. A generic
+ * announcement (low materiality) NEVER moves this — only gated events and the
+ * observed readiness series do (§6/§29).
+ */
+export function aiCapabilityChange(ev: MaterialEventSummary, readinessDelta: number | null): AiChangeState {
+  if (ev.highT12 >= 2 || (ev.highT12 >= 1 && ev.materialT12 >= 3)) return "materially-increased";
+  if (ev.materialT12 >= 2 || ev.highT12 >= 1) return "increased";
+  if (readinessDelta != null && readinessDelta <= -3) return "decreased";
+  if (ev.materialT12 === 1 || (readinessDelta != null && Math.abs(readinessDelta) <= 3)) return "stable";
+  return "insufficient";
+}
+
+/** Automation-opportunity state gate: capability + labour base + REAL events. */
+export function automationState(input: {
+  aiReadiness: number | null;
+  labourHeavy: boolean;
+  materialEventsT12: number;
+}): "favourable" | "stable" | "mixed" | "insufficient" {
+  const { aiReadiness: ai, labourHeavy, materialEventsT12: ev } = input;
+  if (ai == null && ev === 0) return "insufficient";
+  if ((ai != null && ai >= 70 && labourHeavy) || (ai != null && ai >= 60 && ev >= 2)) return "favourable";
+  if (ai != null && ai >= 60) return "stable";
+  return "mixed";
+}
+
+/* ── commercial-model completeness guard (Sprint 2 §10) ── */
+
+export type CoverageQuality = "strong" | "partial" | "weak";
+
+export interface MixCoverage {
+  observedCount: number;
+  classifiedCount: number;
+  coverageQuality: CoverageQuality;
+}
+
+/**
+ * Dataset-completeness banding for the commercial-model mix. Thresholds
+ * (internal, documented): classification of the observed set must be broad
+ * enough that "0 observed" is a meaningful statement about the DATASET —
+ * it is never a statement about the whole market (§10 wording rules).
+ */
+export function mixCoverage(observedCount: number, classifiedCount: number): MixCoverage {
+  const ratio = observedCount > 0 ? classifiedCount / observedCount : 0;
+  const coverageQuality: CoverageQuality =
+    observedCount >= 100 && ratio >= 0.8 ? "strong" : observedCount >= 30 && ratio >= 0.5 ? "partial" : "weak";
+  return { observedCount, classifiedCount, coverageQuality };
+}
+
+/* ── delivery-cost economics (Sprint 2 §15) — macro-grounded, never fabricated ── */
+
+export interface MacroReading {
+  /** Year-over-year percent change; null = series not held or too stale. */
+  usWageYoY: number | null;
+  usCpiYoY: number | null;
+  indiaCpiYoY: number | null;
+  /** Positive = INR weakened vs USD (offshore delivery cheaper in USD terms). */
+  inrPerUsdYoY: number | null;
+}
+
+export function deliveryCostState(m: MacroReading): {
+  state: "favourable" | "stable" | "unfavourable" | "mixed" | "insufficient";
+  reading: string | null;
+  signals: number;
+} {
+  const votes: Array<"buyer" | "supplier"> = [];
+  if (m.usWageYoY != null) votes.push(m.usWageYoY >= 4 ? "supplier" : "buyer");
+  if (m.indiaCpiYoY != null) votes.push(m.indiaCpiYoY >= 6 ? "supplier" : "buyer");
+  if (m.inrPerUsdYoY != null) votes.push(m.inrPerUsdYoY >= 2 ? "buyer" : m.inrPerUsdYoY <= -2 ? "supplier" : "buyer");
+  if (m.usCpiYoY != null) votes.push(m.usCpiYoY >= 4 ? "supplier" : "buyer");
+  const signals = votes.length;
+  if (signals < 2) return { state: "insufficient", reading: null, signals };
+  const buyer = votes.filter((v) => v === "buyer").length;
+  const supplier = signals - buyer;
+  if (buyer >= supplier + 2) return { state: "favourable", reading: "Underlying delivery economics lean buyer-favourable on the observed wage, inflation and FX series.", signals };
+  if (supplier >= buyer + 2) return { state: "unfavourable", reading: "Underlying delivery economics lean supplier-favourable — input costs are rising faster than currency relief.", signals };
+  if (buyer !== supplier) return { state: "mixed", reading: "Delivery-economics signals point in different directions across wages, inflation and FX.", signals };
+  return { state: "stable", reading: "Observed wage, inflation and FX series are broadly offsetting.", signals };
+}
+
 /* ── historical modes: reconstructed history may never claim snapshot status (§18) ── */
 export type HistoricalMode = "reconstructed" | "observed_snapshot";
 

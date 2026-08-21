@@ -92,13 +92,23 @@ Therefore:
   "observed end-of-term activity".
 - WINDOWS: market renewal dates never establish a negotiating window for
   the reader — their contract dates are unknown. Never write "the
-  negotiating window is open" or instruct the reader to act by a market
-  date. Say instead: "observed renewal activity is concentrating,
-  potentially improving the commercial backdrop for buyers with comparable
-  agreements".
+  negotiating window is open", never assert that a negotiating window
+  exists ("this is a genuine negotiating window"), and never urge action
+  "now" on renewal or pricing timing unless the sentence is framed to
+  buyers with comparable observed agreements. Say instead: "observed
+  renewal activity is concentrating, potentially improving the commercial
+  backdrop for buyers with comparable agreements".
 - Buyer-LEVEL readings (buyer leverage, pricing pressure, opportunity
   levels, "your market", "your position") may be addressed to the reader;
   contract-level facts may not.
+- DATASET ABSENCE: an absence in the observed dataset is never an absence
+  in the market. Allowed: "no consumption-based pricing was identified in
+  the observed agreement dataset". Not allowed: "the market has no
+  consumption-based pricing". The same applies to AI capability events and
+  every other observed family — always scope absence claims to the dataset.
+- AI capability events in the context have already passed a materiality
+  gate; where the context reports none, that means none cleared the gate in
+  the observed dataset, not that nothing happened in the market.
 
 Never expose source weightings, formulas, model logic or proprietary
 inference methodology.
@@ -273,7 +283,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v5: data-engine sprint 1 — procurement flow, EDGAR financials, observed
   // snapshots and data-as-of framing entered the context.
-  const key = ["insight", "v5", tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v8", tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

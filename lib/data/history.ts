@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { q } from "@/lib/db";
-import { assertHistoryMode, type HistoricalMode } from "@/lib/metrics/rules";
+import { assertHistoryMode, mixCoverage, type HistoricalMode, type MixCoverage } from "@/lib/metrics/rules";
 
 /**
  * Reconstructed 12-month+ history (sprint §9/§15).
@@ -31,6 +31,8 @@ export interface HistorySeries {
   points: HistoryPoint[];
   source: string;
   note: string;
+  /** §10 completeness guard — how much of the observed set the series classifies. */
+  coverage?: MixCoverage;
 }
 
 function reconstructed(series: Omit<HistorySeries, "mode">): HistorySeries {
@@ -104,23 +106,42 @@ export const getPricingModelMixByYear = cache(async (tickersKey: string): Promis
   if (tickers.length === 0) {
     return reconstructed({ id: "pricing-mix", label: "Commercial-model mix", unit: "pct_consumption", points: [], source: "Curated contract spine", note: "" });
   }
-  const rows = await q<{ yr: string; total: string; consumption: string }>(
-    `SELECT extract(year FROM d.start_date)::int::text AS yr,
-            count(*) AS total,
-            count(*) FILTER (WHERE sd.pricing_method_raw IN ('Subscription based', 'Performance related')) AS consumption
-       FROM deal d
-       JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
-       LEFT JOIN stg_curated_deal sd
-         ON sd.source_system = d.source_system
-        AND d.deal_id = substr(encode(digest('deal:' || sd.source_system || ':' || sd.source_record_id, 'sha256'), 'hex'), 1, 32)
-      WHERE d.source_system = 'contract_tracker'
-        AND x.external_id = ANY($1::text[])
-        AND d.start_date >= current_date - interval '4 years'
-        AND d.start_date <= current_date
-      GROUP BY 1 ORDER BY 1`,
-    [tickers],
-  );
+  const [rows, windowCounts] = await Promise.all([
+    q<{ yr: string; total: string; consumption: string; classified: string }>(
+      `SELECT extract(year FROM d.start_date)::int::text AS yr,
+              count(*) AS total,
+              count(*) FILTER (WHERE sd.pricing_method_raw IN ('Subscription based', 'Performance related')) AS consumption,
+              count(*) FILTER (WHERE sd.pricing_method_raw IS NOT NULL) AS classified
+         FROM deal d
+         JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
+         LEFT JOIN stg_curated_deal sd
+           ON sd.source_system = d.source_system
+          AND d.deal_id = substr(encode(digest('deal:' || sd.source_system || ':' || sd.source_record_id, 'sha256'), 'hex'), 1, 32)
+        WHERE d.source_system = 'contract_tracker'
+          AND x.external_id = ANY($1::text[])
+          AND d.start_date >= current_date - interval '4 years'
+          AND d.start_date <= current_date
+        GROUP BY 1 ORDER BY 1`,
+      [tickers],
+    ),
+    // §10: the OBSERVED universe spans both commercial feeds; only the TG
+    // tracker feed carries a pricing-method field. Coverage must say so.
+    q<{ source_system: string; c: string }>(
+      `SELECT d.source_system, count(*) AS c
+         FROM deal d
+         JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
+        WHERE d.source_system = ANY($2::text[])
+          AND x.external_id = ANY($1::text[])
+          AND d.start_date >= current_date - interval '4 years'
+          AND d.start_date <= current_date
+        GROUP BY 1`,
+      [tickers, COMMERCIAL_SYSTEMS],
+    ),
+  ]);
+  const observedTotal = windowCounts.reduce((a, r) => a + Number(r.c), 0);
+  const classifiedTotal = rows.reduce((a, r) => a + Number(r.classified), 0);
   return reconstructed({
+    coverage: mixCoverage(observedTotal, classifiedTotal),
     id: "pricing-mix",
     label: "Consumption/outcome-shaped share of observed agreements",
     unit: "pct",

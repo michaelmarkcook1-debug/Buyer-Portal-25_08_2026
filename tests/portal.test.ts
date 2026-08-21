@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { allowedNumbers, validateInsight } from "@/lib/insight/validate";
 import { baselineFrom, parseCookieValue, scopedTickers, tickersFromParam } from "@/lib/scope-core";
 import {
+  aiCapabilityChange,
   allowedAiEnterprisePillar,
   assertHistoryMode,
+  automationState,
   capConfidenceByAge,
+  deliveryCostState,
   headroomState,
   historyModeLabel,
   isAllowedPricingSource,
+  mixCoverage,
   procurementHeatState,
 } from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
@@ -152,6 +156,26 @@ describe("completeness & window hardening (final truth-safety pass)", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("blocks possessive-less 'expiring books' (sprint 2 tightening)", () => {
+    const r = validateInsight("Vendors are defending large expiring books while demand cools.", context);
+    expect(r.ok).toBe(false);
+  });
+
+  it("blocks 'order books' and asserted negotiating windows (sprint 2 tightening)", () => {
+    expect(validateInsight("Starved order books push vendors into defensive pricing.", context).ok).toBe(false);
+    expect(validateInsight("This is a genuine negotiating window, not just a cyclical dip.", context).ok).toBe(false);
+  });
+
+  it("blocks reader-directed 'now' urgency on renewal timing without market framing", () => {
+    const r = validateInsight("Buyers should pressure-test renewal pricing now while validating staffing.", context);
+    expect(r.ok).toBe(false);
+    const ok = validateInsight(
+      "Buyers with comparable observed agreements should pressure-test renewal pricing now against the market record.",
+      context,
+    );
+    expect(ok.ok).toBe(true);
+  });
+
   it("blocks authoritative 'vendor commitments'", () => {
     const r = validateInsight("Vendor commitments of $46.6M reach end-of-term this year.", context);
     expect(r.ok).toBe(false);
@@ -263,5 +287,82 @@ describe("opportunity banding", () => {
   it("clamps at the band edges", () => {
     expect(shiftLevel("very-high", 1)).toBe("very-high");
     expect(shiftLevel("low", -1)).toBe("low");
+  });
+});
+
+/* ── Sprint 2 (§29): AI events, completeness guard, delivery-cost honesty ── */
+
+describe("AI capability change — materiality gate (sprint 2 §6/§7)", () => {
+  it("a generic announcement alone can never raise the AI change state", () => {
+    // Generic announcements are materiality 1 and never reach the portal
+    // (facts query gates at >=3), so their event counts are zero here.
+    expect(aiCapabilityChange({ materialT12: 0, highT12: 0 }, null)).toBe("insufficient");
+    expect(automationState({ aiReadiness: null, labourHeavy: true, materialEventsT12: 0 })).toBe("insufficient");
+  });
+
+  it("gated events move the 12-month state; readiness delta alone reads stable", () => {
+    expect(aiCapabilityChange({ materialT12: 2, highT12: 0 }, null)).toBe("increased");
+    expect(aiCapabilityChange({ materialT12: 3, highT12: 1 }, null)).toBe("materially-increased");
+    expect(aiCapabilityChange({ materialT12: 0, highT12: 0 }, 1)).toBe("stable");
+    expect(aiCapabilityChange({ materialT12: 0, highT12: 0 }, -5)).toBe("decreased");
+  });
+
+  it("automation favourable needs capability AND labour base, or capability AND real events", () => {
+    expect(automationState({ aiReadiness: 75, labourHeavy: true, materialEventsT12: 0 })).toBe("favourable");
+    expect(automationState({ aiReadiness: 65, labourHeavy: false, materialEventsT12: 2 })).toBe("favourable");
+    expect(automationState({ aiReadiness: 65, labourHeavy: false, materialEventsT12: 0 })).toBe("stable");
+    expect(automationState({ aiReadiness: 40, labourHeavy: true, materialEventsT12: 5 })).toBe("mixed");
+  });
+});
+
+describe("completeness guard (sprint 2 §10) — dataset absence is never market absence", () => {
+  const context = JSON.stringify({ mix: "0 consumption-based agreements observed", n: 240 });
+
+  it("blocks market-wide absence claims", () => {
+    for (const bad of [
+      "The market has no consumption-based pricing.",
+      "No consumption-based pricing exists in the market.",
+      "Nowhere in the industry is gain-sharing present.",
+    ]) {
+      expect(validateInsight(bad, context).ok).toBe(false);
+    }
+  });
+
+  it("allows dataset-scoped absence claims", () => {
+    const ok = validateInsight(
+      "No consumption-based pricing was identified in the observed agreement dataset of 240 agreements.",
+      context,
+    );
+    expect(ok.ok).toBe(true);
+  });
+
+  it("coverage banding never claims strong coverage on thin classification", () => {
+    expect(mixCoverage(240, 220).coverageQuality).toBe("strong");
+    expect(mixCoverage(240, 60).coverageQuality).toBe("weak");
+    expect(mixCoverage(40, 25).coverageQuality).toBe("partial");
+    expect(mixCoverage(0, 0).coverageQuality).toBe("weak");
+  });
+});
+
+describe("delivery-cost economics (sprint 2 §15) — macro-grounded, never fabricated", () => {
+  it("below two fresh series the state is insufficient — no fabricated blend", () => {
+    expect(deliveryCostState({ usWageYoY: 4.5, usCpiYoY: null, indiaCpiYoY: null, inrPerUsdYoY: null }).state).toBe("insufficient");
+    expect(deliveryCostState({ usWageYoY: null, usCpiYoY: null, indiaCpiYoY: null, inrPerUsdYoY: null }).state).toBe("insufficient");
+  });
+
+  it("direction requires a clear majority of series; splits read mixed/stable", () => {
+    expect(
+      deliveryCostState({ usWageYoY: 2.0, usCpiYoY: 2.1, indiaCpiYoY: 3.0, inrPerUsdYoY: 3.5 }).state,
+    ).toBe("favourable");
+    expect(
+      deliveryCostState({ usWageYoY: 5.2, usCpiYoY: 4.8, indiaCpiYoY: 7.1, inrPerUsdYoY: -3.0 }).state,
+    ).toBe("unfavourable");
+  });
+
+  it("stale FX/wage series are dropped by the freshness cap before they reach the read", () => {
+    // The resolver's per-series ceilings feed capConfidenceByAge-style gating;
+    // the rule itself is exercised here: stale asOf degrades confidence.
+    expect(capConfidenceByAge("high", "2025-01-01", { maxFreshDays: 45, today: "2026-08-21" })).toBe("medium");
+    expect(capConfidenceByAge("high", "2026-08-10", { maxFreshDays: 45, today: "2026-08-21" })).toBe("high");
   });
 });

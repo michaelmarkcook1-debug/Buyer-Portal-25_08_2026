@@ -709,6 +709,98 @@ export const getDevelopments = cache(async (tickersKey: string, limit = 30): Pro
   return merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, limit);
 });
 
+/* ───────────────────────── AI capability events (canonical ai_shift signals) ───────────────────────── */
+
+export interface AiEvent {
+  ticker: string;
+  eventType: string;
+  headline: string;
+  body: string | null;
+  materiality: number;
+  date: string;
+}
+
+export interface VendorAiEvents {
+  events: AiEvent[];
+  materialT12: number;
+  highT12: number;
+  latestDate: string | null;
+}
+
+/**
+ * Materiality-gated AI/automation capability events, derived upstream from
+ * curated sources onto the canonical signal model. Only materiality ≥3 events
+ * reach the metric layer — a generic announcement never moves a metric (§6).
+ */
+export const getAiEvents = cache(async (tickersKey: string): Promise<Map<string, VendorAiEvents>> => {
+  const tickers = tickersKey.split(",").filter(Boolean);
+  if (tickers.length === 0) return new Map();
+  const rows = await q<{ ticker: string; headline: string; body: string | null; materiality: number; d: string }>(
+    `SELECT x.external_id AS ticker, s.headline, s.body, s.materiality,
+            to_char(s.digest_date, 'YYYY-MM-DD') AS d
+       FROM signal s
+       JOIN xref_identity x ON x.ag_provider_id = s.ag_provider_id AND x.system = 'ticker'
+      WHERE s.signal_type = 'ai_shift'
+        AND s.materiality >= 3
+        AND x.external_id = ANY($1::text[])
+        AND s.digest_date > current_date - interval '18 months'
+      ORDER BY s.digest_date DESC`,
+    [tickers],
+  );
+  const out = new Map<string, VendorAiEvents>();
+  const t12 = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+  for (const r of rows) {
+    const entry = out.get(r.ticker) ?? { events: [], materialT12: 0, highT12: 0, latestDate: null };
+    const type = r.headline.match(/^\[([a-z_]+)\]/)?.[1] ?? "event";
+    entry.events.push({ ticker: r.ticker, eventType: type, headline: r.headline.replace(/^\[[a-z_]+\]\s*/, ""), body: r.body, materiality: r.materiality, date: r.d });
+    if (r.d >= t12) {
+      entry.materialT12++;
+      if (r.materiality >= 5) entry.highT12++;
+    }
+    if (!entry.latestDate || r.d > entry.latestDate) entry.latestDate = r.d;
+    out.set(r.ticker, entry);
+  }
+  return out;
+});
+
+/* ───────────────────────── Macro/FX/wage deltas (market-level context) ───────────────────────── */
+
+export interface MacroSeriesReading {
+  seriesId: string;
+  label: string | null;
+  latest: number;
+  latestDate: string;
+  yoyPct: number | null;
+}
+
+/** Latest value + year-over-year change per landed macro series. */
+export const getMacroReadings = cache(async (): Promise<Map<string, MacroSeriesReading>> => {
+  const rows = await q<{ series_id: string; label: string | null; latest: number; latest_date: string; prior: number | null }>(
+    `WITH latest AS (
+       SELECT DISTINCT ON (series_id) series_id, series_label AS label, value AS latest, observation_date AS latest_date
+         FROM stg_macro_series WHERE value IS NOT NULL
+        ORDER BY series_id, observation_date DESC
+     )
+     SELECT l.series_id, l.label, l.latest, l.latest_date,
+            (SELECT m.value FROM stg_macro_series m
+              WHERE m.series_id = l.series_id AND m.value IS NOT NULL
+                AND m.observation_date <= to_char(l.latest_date::date - interval '365 days', 'YYYY-MM-DD')
+              ORDER BY m.observation_date DESC LIMIT 1) AS prior
+       FROM latest l`,
+  );
+  const out = new Map<string, MacroSeriesReading>();
+  for (const r of rows) {
+    out.set(r.series_id, {
+      seriesId: r.series_id,
+      label: r.label,
+      latest: r.latest,
+      latestDate: r.latest_date,
+      yoyPct: r.prior == null || r.prior === 0 ? null : Number((((r.latest - r.prior) / r.prior) * 100).toFixed(2)),
+    });
+  }
+  return out;
+});
+
 /* ───────────────────────── Scope service-line breakdown ───────────────────────── */
 
 export interface ScopeLine {
