@@ -229,7 +229,13 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
           ? "stable"
           : "unfavourable";
     const movement = ratioMove(d.inPlay12, d.expiredPast12);
-    const confidence: Confidence = d.contracts >= 10 ? "high" : d.contracts >= 3 ? "medium" : "low";
+    // Volume earns confidence; the spine's own data age then caps it — stale
+    // contract evidence must not read confident (freeze directive §3).
+    const confidence: Confidence = capConfidenceByAge(
+      d.contracts >= 10 ? "high" : d.contracts >= 3 ? "medium" : "low",
+      v.spineDataAsOf,
+      { maxFreshDays: 120 },
+    );
     buyerLeverage = metric(
       "buyerLeverage",
       "Buyer Leverage",
@@ -747,7 +753,10 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "AI Productivity Opportunity",
       state,
       eventMove,
-      ai != null && materialT12 > 0 ? "medium" : ai != null ? "medium" : "low",
+      // Confidence is EARNED by corroboration (freeze directive §7): a strong
+      // readiness score confirmed by a high-materiality gated event reads
+      // high; a single family reads medium; neither reads low.
+      ai != null && ai >= 70 && highT12 >= 1 ? "high" : ai != null ? "medium" : "low",
       state === "favourable" && (aiChange === "materially-increased" || aiChange === "increased")
         ? "Their AI delivery capability has materially advanced over the observed 12 months — productivity assumptions set earlier deserve challenge."
         : state === "favourable"
@@ -784,7 +793,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         "Automation Opportunity",
         auto,
         eventMove,
-        ai != null ? "medium" : "low",
+        ai != null && ai >= 70 && highT12 >= 1 && labourHeavy ? "high" : ai != null ? "medium" : "low",
         auto === "favourable"
           ? "Advanced automation capability over a labour-heavy delivery base — the buyer's benefit case is live."
           : null,
@@ -832,8 +841,14 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Gain-Sharing Opportunity",
       state,
       eventMove,
-      // Fix 4: baseline inputs alone earn low confidence; change evidence earns medium.
-      capabilityUp || labourDown || commercialModelEvent != null || materialT12 > 0 ? "medium" : "low",
+      // Fix 4 + freeze §7: baseline inputs alone earn low; change evidence
+      // earns medium; an observed commercial-model disclosure corroborated by
+      // capability or labour movement earns high.
+      commercialModelEvent != null && (capabilityUp || labourDown)
+        ? "high"
+        : capabilityUp || labourDown || commercialModelEvent != null || materialT12 > 0
+          ? "medium"
+          : "low",
       state === "favourable" && commercialModelEvent
         ? "Their own disclosures monetise the productivity shift — gains exist that commercial assumptions set earlier will not reflect."
         : state === "favourable"
@@ -876,7 +891,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "Market-Test Opportunity",
       state,
       "insufficient",
-      "medium",
+      capConfidenceByAge("medium", v.spineDataAsOf, { maxFreshDays: 120 }),
       state === "favourable"
         ? "Credible alternatives exist in-scope while observed renewal activity concentrates."
         : state === "unfavourable"

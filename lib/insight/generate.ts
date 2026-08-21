@@ -1,6 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import type { MarketIntel, VendorIntel } from "@/lib/metrics/types";
+import type { MarketIntel, VendorIntel, WatchSignal } from "@/lib/metrics/types";
+import { buildWatchSignals } from "@/lib/metrics/watch";
 import type { Scenario } from "@/lib/scenarios";
 import { generateStructured, llmAvailability } from "./llm";
 import { validateInsight, VALIDATOR_VERSION } from "./validate";
@@ -170,7 +171,7 @@ function vendorBlock(v: VendorIntel, detail: boolean): string {
 export function buildContext(
   intel: MarketIntel,
   tab: InsightTab,
-  opts: { focalTicker?: string; scenario?: Scenario | null } = {},
+  opts: { focalTicker?: string; scenario?: Scenario | null; signals?: WatchSignal[] } = {},
 ): string {
   const focal = opts.focalTicker ? intel.vendors.find((v) => v.ticker === opts.focalTicker) : undefined;
   const insufficiencies: string[] = [];
@@ -223,6 +224,15 @@ export function buildContext(
     tab === "scenarios" && !opts.scenario
       ? "No scenario is selected yet. From the current baseline evidence only, judge which market variable — demand/deal flow, delivery-cost economics, AI capability, talent capacity, renewal concentration, or vendor financial position — currently has the greatest potential to change the buyer's commercial position across the selected vendors, and why. Do not invent modelled outcomes or hypothetical numbers; this is an interpretation of present sensitivity, grounded in the supplied context."
       : OBJECTIVES[tab];
+  if (opts.signals?.length) {
+    sections.push("", "CURRENT DATED SIGNALS (deterministic, evidence-gated — the freshest developments in this market):");
+    for (const sg of opts.signals.slice(0, 5)) {
+      sections.push(
+        `  ${sg.classification}: ${sg.headline}${sg.change ? ` (${sg.change})` : ""} — ${sg.implication}`,
+      );
+    }
+  }
+
   sections.push("", `ANALYTICAL OBJECTIVE FOR THIS BRIEFING: ${objective}`);
   return sections.filter((s) => s !== "").join("\n");
 }
@@ -285,12 +295,15 @@ export async function getInsight(
   const availability = llmAvailability();
   if (!availability.ok) return { status: "not-configured", reason: availability.reason };
 
-  const context = buildContext(intel, tab, opts);
+  // Freshest dated signals ground the briefing (freeze directive §4/§8) —
+  // deterministic, evidence-gated, computed with the runtime's own rules.
+  const signals = await buildWatchSignals(intel, [...intel.scope.tickers].sort().join(","));
+  const context = buildContext(intel, tab, { ...opts, signals });
   const dataVersion = `${intel.updatedAt ?? ""}|${intel.spine.lastIngest}`;
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v9", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v10", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
