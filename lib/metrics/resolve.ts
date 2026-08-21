@@ -35,6 +35,7 @@ import {
   aiCapabilityChange,
   automationState,
   capConfidenceByAge,
+  deliveryCostForBand,
   deliveryCostState,
   gainShareLevel,
   headroomState,
@@ -44,8 +45,9 @@ import {
   pricingRead,
   procurementHeatState,
   ratioMove,
-  type MacroReading,
+  type MacroSeriesSet,
 } from "./rules";
+import { BAND_LABEL, deliveryExposure } from "./exposure";
 import { scopedTickers, type MarketScope } from "@/lib/market-scope";
 import { money, count, signed, shortDate } from "@/lib/format";
 import {
@@ -122,10 +124,12 @@ interface VendorInputs {
   procWinners180: number;
   /** Materiality-gated AI capability events (canonical ai_shift signals). */
   aiEvents: VendorAiEvents | undefined;
-  /** Market-level macro reading (already freshness-filtered) — same for every vendor. */
-  macro: MacroReading;
+  /** Market-level macro readings (already freshness-filtered) — same for every vendor. */
+  macro: MacroSeriesSet;
   /** Pre-built basis lines for the macro series that passed the freshness gate. */
   macroBasis: Basis[];
+  /** Per-series basis lines, so band-aware reads cite only the series they used. */
+  macroBasisBySeries: Record<string, Basis>;
   macroAsOf: string | null;
   /** Other scoped vendors active in this vendor's top service line. */
   alternativesInTopLine: number;
@@ -500,6 +504,13 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     if (d && d.contracts >= 3)
       basis.push({ text: `Observed commercial awards ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two spine windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
     if (eventCountBasis) basis.push(eventCountBasis);
+    const rpoPrim = v.prims?.get("rpo_backlog_usd");
+    if (rpoPrim) {
+      basis.push({
+        text: `Contracted backlog (remaining performance obligations) ${money(rpoPrim.value)} at ${shortDate(rpoPrim.asOf)} — the provider's own disclosure definition; definitions vary and are not compared across providers.`,
+        source: "SEC EDGAR companyfacts", ownership: "market", asOf: rpoPrim.asOf,
+      });
+    }
     providerMomentum = metric(
       "providerMomentum",
       "Provider Momentum",
@@ -578,34 +589,54 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   }
 
-  /* Delivery-cost economics — CALCULATED from published macro series (BLS wage
-     index, CPI, INR/USD via FRED), never a fabricated blended rate (§15). The
-     read is market-level; vendor talent shape says how hard it bites. */
+  /* Delivery-cost economics — CALCULATED from published macro series, never a
+     fabricated blended rate (§15). Sprint 3 P4: the read is BAND-AWARE — the
+     vendor's evidenced delivery-location exposure selects which series apply.
+     Unknown exposure falls back to the market-level read at LOW confidence
+     with the fallback stated: no fake vendor precision. */
   let deliveryCostPressure: Metric;
-  if (dcRead.state === "insufficient") {
-    deliveryCostPressure = insufficientMetric(
-      "deliveryCostPressure",
-      "Delivery Cost Pressure",
-      "Fewer than two fresh macro cost series are held — no delivery-cost assessment is made.",
-    );
-  } else {
-    const basis: Basis[] = [...v.macroBasis];
-    if ((talent?.totalHeadcount ?? 0) >= 50_000) {
-      basis.push({
-        text: `Labour-heavy delivery model (headcount ${count(talent!.totalHeadcount!)}) — published wage and FX movements bear directly on their cost base.`,
-        source: "AnalystGenius talent signals", ownership: "market", asOf: talent?.sourcedAt ?? null,
-      });
+  {
+    const expo = deliveryExposure(v.ticker, cat?.hq ?? null, talent?.totalHeadcount ?? cat?.employeeCount ?? null);
+    const bandKnown = expo.band !== "insufficient";
+    const read = deliveryCostForBand(v.macro, expo.band === "insufficient" ? "mixed-global" : expo.band);
+    if (read.state === "insufficient") {
+      deliveryCostPressure = insufficientMetric(
+        "deliveryCostPressure",
+        "Delivery Cost Pressure",
+        bandKnown
+          ? `Fewer than two fresh published cost series apply to a ${BAND_LABEL[expo.band].toLowerCase()} base — no delivery-cost assessment is made.`
+          : "Fewer than two fresh macro cost series are held — no delivery-cost assessment is made.",
+      );
+    } else {
+      const basis: Basis[] = [];
+      if (expo.basis) basis.push(expo.basis);
+      if (!bandKnown) {
+        basis.push({
+          text: "Vendor delivery-location mix is not evidenced — this is the MARKET-LEVEL cost read, not a vendor-specific one.",
+          source: "Coverage note", ownership: "market",
+        });
+      }
+      for (const s of [...new Set(read.seriesUsed)]) {
+        const b = v.macroBasisBySeries[s];
+        if (b) basis.push(b);
+      }
+      if ((talent?.totalHeadcount ?? 0) >= 50_000) {
+        basis.push({
+          text: `Labour-heavy delivery model (headcount ${count(talent!.totalHeadcount!)}) — published wage and FX movements bear directly on their cost base.`,
+          source: "AnalystGenius talent signals", ownership: "market", asOf: talent?.sourcedAt ?? null,
+        });
+      }
+      deliveryCostPressure = metric(
+        "deliveryCostPressure",
+        "Delivery Cost Pressure",
+        read.state,
+        "insufficient", // point-in-time YoY readings; no trajectory is asserted
+        bandKnown && read.signals >= 2 ? "medium" : "low",
+        read.reading,
+        basis,
+        v.macroAsOf,
+      );
     }
-    deliveryCostPressure = metric(
-      "deliveryCostPressure",
-      "Delivery Cost Pressure",
-      dcRead.state,
-      "insufficient", // point-in-time YoY readings; no trajectory is asserted
-      dcRead.signals >= 3 ? "medium" : "low",
-      dcRead.reading,
-      basis,
-      v.macroAsOf,
-    );
   }
 
   /* Operational risk — AG top-issues read plus disclosure-grade events. */
@@ -1091,6 +1122,8 @@ const MACRO_FRESH_DAYS: Record<string, number> = {
   CPIAUCSL: 120, // monthly US CPI
   INDCPIALLMINMEI: 260, // monthly India CPI, long OECD source lag
   DEXINUS: 45, // daily FX
+  DEXUSEU: 45, // daily FX — USD per EUR
+  DEXUSUK: 45, // daily FX — USD per GBP
 };
 
 /**
@@ -1099,8 +1132,9 @@ const MACRO_FRESH_DAYS: Record<string, number> = {
  * deliveryCostState then honestly reports "insufficient" below two signals.
  */
 function buildMacroInputs(map: Map<string, MacroSeriesReading>): {
-  macro: MacroReading;
+  macro: MacroSeriesSet;
   macroBasis: Basis[];
+  macroBasisBySeries: Record<string, Basis>;
   macroAsOf: string | null;
 } {
   const today = Date.now();
@@ -1114,29 +1148,47 @@ function buildMacroInputs(map: Map<string, MacroSeriesReading>): {
   const usCpi = fresh("CPIAUCSL");
   const inCpi = fresh("INDCPIALLMINMEI");
   const fx = fresh("DEXINUS");
+  const eur = fresh("DEXUSEU");
+  const gbp = fresh("DEXUSUK");
 
-  const macroBasis: Basis[] = [];
+  const macroBasisBySeries: Record<string, Basis> = {};
   if (wage)
-    macroBasis.push({ text: `US employment cost index ${signedPct(wage.yoyPct!)} YoY (period ending ${shortDate(wage.latestDate)}).`, source: "FRED — BLS Employment Cost Index", ownership: "market", asOf: wage.latestDate });
+    macroBasisBySeries.ECIWAG = { text: `US employment cost index ${signedPct(wage.yoyPct!)} YoY (period ending ${shortDate(wage.latestDate)}).`, source: "FRED — BLS Employment Cost Index", ownership: "market", asOf: wage.latestDate };
   if (usCpi)
-    macroBasis.push({ text: `US CPI ${signedPct(usCpi.yoyPct!)} YoY (period ending ${shortDate(usCpi.latestDate)}).`, source: "FRED — US CPI", ownership: "market", asOf: usCpi.latestDate });
+    macroBasisBySeries.CPIAUCSL = { text: `US CPI ${signedPct(usCpi.yoyPct!)} YoY (period ending ${shortDate(usCpi.latestDate)}).`, source: "FRED — US CPI", ownership: "market", asOf: usCpi.latestDate };
   if (inCpi)
-    macroBasis.push({ text: `India CPI ${signedPct(inCpi.yoyPct!)} YoY (period ending ${shortDate(inCpi.latestDate)}).`, source: "FRED — OECD India CPI", ownership: "market", asOf: inCpi.latestDate });
+    macroBasisBySeries.INDCPIALLMINMEI = { text: `India CPI ${signedPct(inCpi.yoyPct!)} YoY (period ending ${shortDate(inCpi.latestDate)}).`, source: "FRED — OECD India CPI", ownership: "market", asOf: inCpi.latestDate };
   if (fx)
-    macroBasis.push({
+    macroBasisBySeries.DEXINUS = {
       text: `INR moved ${signedPct(fx.yoyPct!)} vs USD over 12 months (${fx.yoyPct! >= 0 ? "rupee weakened — offshore delivery cheaper in USD terms" : "rupee strengthened — offshore delivery dearer in USD terms"}; as of ${shortDate(fx.latestDate)}).`,
       source: "FRED — INR/USD daily rate", ownership: "market", asOf: fx.latestDate,
-    });
+    };
+  if (eur)
+    macroBasisBySeries.DEXUSEU = {
+      text: `EUR moved ${signedPct(eur.yoyPct!)} vs USD over 12 months (${eur.yoyPct! >= 0 ? "euro strengthened — European delivery dearer in USD terms" : "euro weakened — European delivery cheaper in USD terms"}; as of ${shortDate(eur.latestDate)}).`,
+      source: "FRED — USD/EUR daily rate", ownership: "market", asOf: eur.latestDate,
+    };
+  if (gbp)
+    macroBasisBySeries.DEXUSUK = {
+      text: `GBP moved ${signedPct(gbp.yoyPct!)} vs USD over 12 months (as of ${shortDate(gbp.latestDate)}).`,
+      source: "FRED — USD/GBP daily rate", ownership: "market", asOf: gbp.latestDate,
+    };
 
-  const dates = [wage, usCpi, inCpi, fx].filter(Boolean).map((r) => r!.latestDate);
+  const core = [wage, usCpi, inCpi, fx];
+  const dates = [...core, eur, gbp].filter(Boolean).map((r) => r!.latestDate);
   return {
     macro: {
       usWageYoY: wage?.yoyPct ?? null,
       usCpiYoY: usCpi?.yoyPct ?? null,
       indiaCpiYoY: inCpi?.yoyPct ?? null,
       inrPerUsdYoY: fx?.yoyPct ?? null,
+      eurPerUsdYoY: eur?.yoyPct ?? null,
+      gbpPerUsdYoY: gbp?.yoyPct ?? null,
     },
-    macroBasis,
+    macroBasis: (["ECIWAG", "CPIAUCSL", "INDCPIALLMINMEI", "DEXINUS"] as const)
+      .map((k) => macroBasisBySeries[k])
+      .filter((b): b is Basis => Boolean(b)),
+    macroBasisBySeries,
     macroAsOf: dates.length ? dates.sort().at(-1)! : null,
   };
 }
@@ -1170,7 +1222,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       getMacroReadings(),
     ]);
 
-  const { macro, macroBasis, macroAsOf } = buildMacroInputs(macroMap);
+  const { macro, macroBasis, macroBasisBySeries, macroAsOf } = buildMacroInputs(macroMap);
 
   /* Alternatives: which scoped vendors share a top service line. */
   const topLineOf = new Map<string, string | null>();
@@ -1208,6 +1260,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       aiEvents: aiEvents.get(ticker),
       macro,
       macroBasis,
+      macroBasisBySeries,
       macroAsOf,
       alternativesInTopLine: alternatives,
       scopeVendorCount: tickers.length,

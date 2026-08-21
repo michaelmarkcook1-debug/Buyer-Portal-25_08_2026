@@ -446,3 +446,49 @@ describe("insight cache hardening (sprint 3 fix 1)", () => {
     expect(r.blocked).toEqual([]);
   });
 });
+
+/* ── Sprint 3 Stage 2: band-aware delivery economics (P4) ── */
+
+import { deliveryCostForBand } from "@/lib/metrics/rules";
+import { deliveryExposure } from "@/lib/metrics/exposure";
+
+describe("delivery-location economics (sprint 3 P4)", () => {
+  const macro = {
+    usWageYoY: 5.1, usCpiYoY: 4.4, indiaCpiYoY: 3.0, inrPerUsdYoY: 9.0,
+    eurPerUsdYoY: 6.0, gbpPerUsdYoY: 4.0,
+  };
+
+  it("vendor exposure differences produce different states from the SAME macro data", () => {
+    const india = deliveryCostForBand(macro, "india-heavy");     // weak INR + soft India CPI vs hot US-CPI escalator -> split
+    const us = deliveryCostForBand(macro, "us-heavy");           // hot US wages + CPI -> supplier
+    const europe = deliveryCostForBand(macro, "europe-heavy");   // stronger EUR/GBP -> supplier
+    expect(india.state).toBe("mixed"); // 2-1 split reads mixed, honestly
+    // with a soft US-CPI escalator the India read is cleanly buyer-favourable
+    expect(deliveryCostForBand({ ...macro, usCpiYoY: 3.2 }, "india-heavy").state).toBe("favourable");
+    expect(us.state).toBe("unfavourable");
+    expect(europe.state).toBe("unfavourable");
+  });
+
+  it("missing regional series read insufficient — never a fabricated blend", () => {
+    const r = deliveryCostForBand({ ...macro, eurPerUsdYoY: null, gbpPerUsdYoY: null }, "europe-heavy");
+    expect(r.state).toBe("insufficient");
+  });
+
+  it("neutral FX moves cast no vote", () => {
+    const r = deliveryCostForBand({ ...macro, inrPerUsdYoY: 0.5, indiaCpiYoY: null, usCpiYoY: null }, "india-heavy");
+    expect(r.signals).toBe(0);
+    expect(r.state).toBe("insufficient");
+  });
+
+  it("unknown exposure yields an insufficient band, not fake precision", () => {
+    expect(deliveryExposure("ZZZ", null, null).band).toBe("insufficient");
+    // a 100k+ global operator's HQ alone is NOT delivery-mix evidence
+    expect(deliveryExposure("ZZZ", "Paris, France", 250_000).band).toBe("insufficient");
+    // India HQ = the provider's own filings describe India-centred delivery
+    expect(deliveryExposure("ZZZ", "Mumbai, India", 600_000).band).toBe("india-heavy");
+    // documented exception with cited filing evidence
+    const ctsh = deliveryExposure("CTSH", "Teaneck, US", 340_000);
+    expect(ctsh.band).toBe("india-heavy");
+    expect(ctsh.basis?.text).toContain("10-K");
+  });
+});

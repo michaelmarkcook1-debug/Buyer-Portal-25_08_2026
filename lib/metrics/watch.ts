@@ -1,5 +1,5 @@
 import "server-only";
-import { getDevelopments, type Development } from "@/lib/data/facts";
+import { getAiEvents, getDevelopments, type Development } from "@/lib/data/facts";
 import { money, shortDate, signed } from "@/lib/format";
 import type { MarketIntel, WatchSignal } from "./types";
 
@@ -161,6 +161,47 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         sourceUrl: null,
       });
     }
+  }
+
+  /* 3 — materiality-gated commercial AI events (sprint 3 P2): only events
+     that cleared the upstream gate, belong to a commercially meaningful
+     family, and are recent surface here — a feed refreshing, or announcement
+     volume rising, never creates news on its own. One strongest per vendor. */
+  const COMMERCIAL_CLS: Record<string, "ACT" | "WATCH"> = {
+    pricing_model_change: "ACT",
+    productivity_disclosure: "WATCH",
+    ai_revenue_or_bookings: "WATCH",
+    workforce_change: "WATCH",
+    delivery_model_change: "WATCH",
+  };
+  const IMPLICATION: Record<string, string> = {
+    pricing_model_change: "The vendor's own commercial model is moving — buyers negotiating terms should test whether legacy pricing structures still apply.",
+    productivity_disclosure: "The vendor is disclosing productivity economics — a basis to challenge staffing and baseline assumptions in comparable work.",
+    ai_revenue_or_bookings: "AI work is showing up in the vendor's own commercial reporting — capability claims now carry revenue evidence.",
+    workforce_change: "The delivery workforce is being redesigned — decision-relevant for capacity and pricing assumptions on multi-year commitments.",
+    delivery_model_change: "The delivery model itself is changing — engagement structures priced on the old model deserve review.",
+  };
+  const aiEvents = await getAiEvents(tickersKey);
+  const cutoff45 = new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10);
+  for (const [ticker, ev] of aiEvents) {
+    const name = nameOf.get(ticker);
+    if (!name) continue;
+    const strongest = ev.events
+      .filter((e) => e.materiality >= 3 && COMMERCIAL_CLS[e.eventType] && e.date >= cutoff45)
+      .sort((a, b) => b.materiality - a.materiality || (a.date < b.date ? 1 : -1))[0];
+    if (!strongest) continue;
+    signals.push({
+      classification: COMMERCIAL_CLS[strongest.eventType]!,
+      tickers: [ticker],
+      vendors: [name],
+      headline: `${name}: ${strongest.headline.slice(0, 140)}`,
+      implication: IMPLICATION[strongest.eventType]!,
+      opportunityType: strongest.eventType === "pricing_model_change" ? "gain-sharing" : null,
+      change: `Observed ${shortDate(strongest.date)} (materiality-gated event)`,
+      confidence: strongest.materiality >= 5 ? "high" : "medium",
+      date: strongest.date,
+      sourceUrl: null,
+    });
   }
 
   /* Rank: ACT first, then recency, then confidence. One signal per (class, vendor). */

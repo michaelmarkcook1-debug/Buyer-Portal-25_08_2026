@@ -195,6 +195,79 @@ export function deliveryCostState(m: MacroReading): {
   return { state: "stable", reading: "Observed wage, inflation and FX series are broadly offsetting.", signals };
 }
 
+/* ── band-aware delivery-cost economics (sprint 3 P4) ────────────────────────
+   The macro series that matter depend on where the vendor actually delivers
+   from. Bands come from evidence (lib/metrics/exposure.ts); this function
+   only selects and reads the relevant published series. */
+
+export interface MacroSeriesSet extends MacroReading {
+  /** USD per EUR, YoY % — positive = euro stronger = European delivery dearer in USD. */
+  eurPerUsdYoY: number | null;
+  /** USD per GBP, YoY % — same direction. */
+  gbpPerUsdYoY: number | null;
+}
+
+export type DeliveryBand = "india-heavy" | "india-material" | "europe-heavy" | "us-heavy" | "mixed-global";
+
+export function deliveryCostForBand(m: MacroSeriesSet, band: DeliveryBand): {
+  state: "favourable" | "stable" | "unfavourable" | "mixed" | "insufficient";
+  reading: string | null;
+  signals: number;
+  seriesUsed: string[];
+} {
+  const votes: Array<{ s: "buyer" | "supplier"; series: string }> = [];
+  // FX: only a move beyond ±2% YoY is a vote; the neutral band votes nothing.
+  const fx = (yoy: number | null, series: string, positiveIsBuyer: boolean) => {
+    if (yoy == null || Math.abs(yoy) < 2) return;
+    votes.push({ s: yoy > 0 === positiveIsBuyer ? "buyer" : "supplier", series });
+  };
+  const lvl = (yoy: number | null, series: string, supplierAt: number) => {
+    if (yoy == null) return;
+    votes.push({ s: yoy >= supplierAt ? "supplier" : "buyer", series });
+  };
+  switch (band) {
+    case "india-heavy":
+      fx(m.inrPerUsdYoY, "DEXINUS", true);
+      lvl(m.indiaCpiYoY, "INDCPIALLMINMEI", 6);
+      lvl(m.usCpiYoY, "CPIAUCSL", 4); // common contractual escalator reference
+      break;
+    case "india-material":
+      lvl(m.usWageYoY, "ECIWAG", 4);
+      lvl(m.usCpiYoY, "CPIAUCSL", 4);
+      fx(m.inrPerUsdYoY, "DEXINUS", true);
+      lvl(m.indiaCpiYoY, "INDCPIALLMINMEI", 6);
+      break;
+    case "europe-heavy":
+      fx(m.eurPerUsdYoY, "DEXUSEU", false);
+      fx(m.gbpPerUsdYoY, "DEXUSUK", false);
+      break;
+    case "us-heavy":
+      lvl(m.usWageYoY, "ECIWAG", 4);
+      lvl(m.usCpiYoY, "CPIAUCSL", 4);
+      break;
+    case "mixed-global":
+      lvl(m.usWageYoY, "ECIWAG", 4);
+      lvl(m.usCpiYoY, "CPIAUCSL", 4);
+      lvl(m.indiaCpiYoY, "INDCPIALLMINMEI", 6);
+      fx(m.inrPerUsdYoY, "DEXINUS", true);
+      fx(m.eurPerUsdYoY, "DEXUSEU", false);
+      break;
+  }
+  const signals = votes.length;
+  const seriesUsed = votes.map((v) => v.series);
+  if (signals < 2) return { state: "insufficient", reading: null, signals, seriesUsed };
+  const buyer = votes.filter((v) => v.s === "buyer").length;
+  const supplier = signals - buyer;
+  const label = band.replace(/-/g, " ");
+  if (buyer >= supplier + 2)
+    return { state: "favourable", reading: `For a ${label} delivery base, the relevant published cost series currently lean buyer-favourable.`, signals, seriesUsed };
+  if (supplier >= buyer + 2)
+    return { state: "unfavourable", reading: `For a ${label} delivery base, the relevant published cost series lean supplier-favourable — input costs are rising faster than currency relief.`, signals, seriesUsed };
+  if (buyer !== supplier)
+    return { state: "mixed", reading: `For a ${label} delivery base, the relevant published cost series point in different directions.`, signals, seriesUsed };
+  return { state: "stable", reading: `For a ${label} delivery base, the relevant published cost series are broadly offsetting.`, signals, seriesUsed };
+}
+
 /* ── pricing discrimination (sprint 3 fix 3) ─────────────────────────────────
    State is driven by VENDOR-SPECIFIC evidence only. A market-wide macro
    tailwind is context: it can colour the basis and never the state, so one
