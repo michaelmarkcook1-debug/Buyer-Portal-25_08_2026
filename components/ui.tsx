@@ -1,0 +1,245 @@
+import type { ReactNode } from "react";
+import type { Confidence, MetricState, Movement, OpportunityLevel, WatchClass } from "@/lib/metrics/types";
+
+/* ── surfaces ─────────────────────────────────────────────────────── */
+
+/** The base card: hairline, soft radius, gold-rimmed glass at hero weight. */
+export function Panel({
+  children,
+  className = "",
+  hero = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  hero?: boolean;
+}) {
+  return (
+    <section
+      className={className}
+      style={{
+        background: hero ? "var(--bg-glass)" : "var(--bg-elev-1)",
+        border: "1px solid var(--surface-line)",
+        borderRadius: hero ? "var(--radius-card)" : "var(--radius-md)",
+        boxShadow: hero ? "var(--shadow-glass)" : "var(--shadow-1)",
+        ...(hero ? { backdropFilter: "blur(18px) saturate(140%)", WebkitBackdropFilter: "blur(18px) saturate(140%)" } : {}),
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+export function SectionHeader({
+  eyebrow,
+  title,
+  aside,
+}: {
+  eyebrow: string;
+  title: string;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h2 className="display mt-1.5 text-[1.55rem] text-[var(--fg)]">{title}</h2>
+      </div>
+      {aside ? <div className="text-sm sm:shrink-0" style={{ color: "var(--fg-muted)" }}>{aside}</div> : null}
+    </div>
+  );
+}
+
+export function Hairline({ className = "" }: { className?: string }) {
+  return <hr className={`rule ${className}`} />;
+}
+
+/* ── semantic display language (spec §18/§19) ─────────────────────── */
+
+export const STATE_LABEL: Record<MetricState, string> = {
+  favourable: "Favourable",
+  stable: "Stable",
+  unfavourable: "Unfavourable",
+  mixed: "Mixed",
+  insufficient: "Insufficient evidence",
+};
+
+const STATE_INK: Record<MetricState, string> = {
+  favourable: "var(--data-positive-ink)",
+  stable: "var(--fg-muted)",
+  unfavourable: "var(--data-risk-ink)",
+  mixed: "var(--data-watch-ink)",
+  insufficient: "var(--fg-dim)",
+};
+
+export const MOVEMENT_LABEL: Record<Movement, string> = {
+  "materially-improving": "Materially improving",
+  improving: "Improving",
+  stable: "Stable",
+  deteriorating: "Deteriorating",
+  "materially-deteriorating": "Materially deteriorating",
+  insufficient: "No direction held",
+};
+
+const MOVEMENT_GLYPH: Record<Movement, string> = {
+  "materially-improving": "↑",
+  improving: "↗",
+  stable: "→",
+  deteriorating: "↘",
+  "materially-deteriorating": "↓",
+  insufficient: "—",
+};
+
+export const CONFIDENCE_LABEL: Record<Confidence, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  insufficient: "Insufficient evidence",
+};
+
+export const LEVEL_LABEL: Record<OpportunityLevel, string> = {
+  "very-high": "Very High",
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  insufficient: "Insufficient evidence",
+};
+
+const LEVEL_INK: Record<OpportunityLevel, string> = {
+  "very-high": "var(--accent-ink)",
+  high: "var(--data-positive-ink)",
+  medium: "var(--fg-muted)",
+  low: "var(--fg-dim)",
+  insufficient: "var(--fg-dim)",
+};
+
+/* ── semantic atoms — colour is never the sole carrier ────────────── */
+
+export function StateText({ state, className = "" }: { state: MetricState; className?: string }) {
+  return (
+    <span className={`mark-dir font-medium ${className}`} style={{ color: STATE_INK[state] }}>
+      {STATE_LABEL[state]}
+    </span>
+  );
+}
+
+export function MovementText({ movement, className = "" }: { movement: Movement; className?: string }) {
+  const muted = movement === "insufficient" || movement === "stable";
+  const ink = movement.includes("improving")
+    ? "var(--data-positive-ink)"
+    : movement.includes("deteriorating")
+      ? "var(--data-risk-ink)"
+      : "var(--fg-dim)";
+  return (
+    <span className={`tabular ${className}`} style={{ color: muted ? "var(--fg-dim)" : ink }}>
+      <span aria-hidden="true">{MOVEMENT_GLYPH[movement]} </span>
+      {MOVEMENT_LABEL[movement]}
+    </span>
+  );
+}
+
+export function ConfidenceText({ confidence }: { confidence: Confidence }) {
+  return (
+    <span className="eyebrow" style={{ letterSpacing: "0.14em" }}>
+      Confidence: {CONFIDENCE_LABEL[confidence]}
+    </span>
+  );
+}
+
+export function LevelText({ level, className = "" }: { level: OpportunityLevel; className?: string }) {
+  if (level === "insufficient") {
+    return (
+      <span className={`italic ${className}`} style={{ color: "var(--fg-dim)" }}>
+        Insufficient evidence
+      </span>
+    );
+  }
+  return (
+    <span className={`mark-dir font-medium ${className}`} style={{ color: LEVEL_INK[level] }}>
+      {LEVEL_LABEL[level]}
+    </span>
+  );
+}
+
+/* ── ACT / WATCH / KNOW — the only classifications (spec §26) ─────── */
+
+const CLASS_STYLE: Record<WatchClass, { bg: string; fg: string; ring: string }> = {
+  ACT: { bg: "var(--accent-fill)", fg: "#07142a", ring: "transparent" },
+  WATCH: { bg: "var(--data-watch-soft)", fg: "var(--data-watch-ink)", ring: "color-mix(in srgb, var(--data-watch) 40%, transparent)" },
+  KNOW: { bg: "var(--data-neutral-soft)", fg: "var(--data-neutral-ink)", ring: "color-mix(in srgb, var(--data-neutral) 35%, transparent)" },
+};
+
+export function ClassChip({ cls }: { cls: WatchClass }) {
+  const s = CLASS_STYLE[cls];
+  return (
+    <span
+      className="code inline-flex items-center rounded-[6px] px-2 py-0.5 text-[11px] font-semibold tracking-[0.14em]"
+      style={{ background: s.bg, color: s.fg, boxShadow: `inset 0 0 0 1px ${s.ring}` }}
+    >
+      {cls}
+    </span>
+  );
+}
+
+/* ── small atoms ──────────────────────────────────────────────────── */
+
+export function Eyebrow({ children }: { children: ReactNode }) {
+  return <div className="eyebrow">{children}</div>;
+}
+
+/**
+ * A supporting fact with its source — the receipts, always below the
+ * conclusion. Facts carry their evidence ownership: everything the portal
+ * holds today is market/public observation, and is labelled as such so a
+ * third-party contract can never read as the buyer's own.
+ */
+export function BasisList({
+  basis,
+  className = "",
+}: {
+  basis: Array<{ text: string; source: string; ownership?: "market" | "buyer"; asOf?: string | null }>;
+  className?: string;
+}) {
+  if (basis.length === 0) return null;
+  return (
+    <ul className={`m-0 list-none space-y-1.5 p-0 ${className}`}>
+      {basis.map((b, i) => (
+        <li key={i} className="text-[0.86rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          {b.text}{" "}
+          <span className="code text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+            · {b.source}
+            {b.asOf ? ` · ${b.asOf}` : ""}
+            {b.ownership === "market" ? " · market evidence" : b.ownership === "buyer" ? " · buyer-owned" : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The honest-absence state — designed, never defaulted (spec §30). */
+export function EmptyEvidence({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      className="rounded-[var(--radius-md)] border border-dashed px-5 py-4"
+      style={{ borderColor: "var(--surface-line)", color: "var(--fg-muted)" }}
+    >
+      <div className="font-medium" style={{ color: "var(--fg)" }}>
+        {title}
+      </div>
+      <p className="mt-1 mb-0 text-[0.9rem] leading-relaxed">{body}</p>
+    </div>
+  );
+}
+
+/** Modelled-value marker — scenario outputs are never dressed as evidence. */
+export function ModelledTag({ note }: { note: string }) {
+  return (
+    <span
+      className="code inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[0.66rem] uppercase tracking-[0.12em]"
+      style={{ background: "var(--rail-soft)", color: "var(--rail-ink)" }}
+      title={note}
+    >
+      Modelled
+    </span>
+  );
+}

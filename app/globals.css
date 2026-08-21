@@ -1,0 +1,450 @@
+@import "tailwindcss";
+
+/*
+  AnalystGenius — Services Buyer Portal
+
+  Design system: AnalystGenius "Brand Pack & Design System v2", adopted from the
+  authoritative token file (`AG NEW UI:UX/src/styles/tokens.css`). Navy · gold ·
+  teal. Token NAMES are kept identical to the brand pack (--bg, --fg, --accent,
+  --rail, --data-*) so the system stays recognisable across the estate.
+
+  Two deliberate deviations, both documented:
+
+  1. DARK IS THE DEFAULT. The corporate UI defaults to cream; this portal is an
+     executive intelligence environment whose approved direction calls for deep
+     navy foundations with restrained gold and teal. The brand pack's own dark
+     palette is used verbatim; light remains available via [data-theme="light"].
+
+  2. TEXT-SAFE VARIANTS. A few brand colours fail WCAG AA as TEXT and are used
+     here as signal, not decoration. Each gets an "-ink" variant (hue preserved),
+     while the original value remains for fills, rims and rules:
+       light  gold  #B28A4A  2.75:1 → --accent-ink  #886738
+       light  watch #B88746  2.76:1 → --data-watch-ink #876331
+       dark   risk  #9A3B3B  2.49:1 → --data-risk-ink  #C66969
+       dark   teal  #4A7E96  ~4.2:1 → --rail-ink       #5390AB
+       dark   positive #0D7F73     → --data-positive-ink #109A8B
+     These corrections were verified numerically in the SourcingGenius design
+     pass (2026-08); the brand pack's own --accent-strong anticipates the gold fix.
+*/
+
+@theme {
+  --font-sans: "Manrope Variable", Manrope, Inter, system-ui, -apple-system, sans-serif;
+  --font-display: "Cormorant Garamond Variable", "Cormorant Garamond", "Libre Baskerville", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  /* ── Brand pack palette — verbatim ─────────────────────────────────── */
+  --ag-light-canvas: #f8f4f1;
+  --ag-light-canvas-soft: #fffdf9;
+  --ag-light-surface: rgba(255, 255, 255, 0.74);
+  --ag-light-surface-solid: #f3eee8;
+  --ag-light-ink: #07142a;
+  --ag-light-ink-muted: #596275;
+  --ag-light-navy: #1a2d4c;
+  --ag-light-navy-soft: #334968;
+  --ag-light-gold: #b28a4a;
+  --ag-light-gold-soft: #d8b885;
+  --ag-light-gold-pale: #e9d7b6;
+  --ag-light-teal: #2f6f82;
+  --ag-light-line: rgba(26, 45, 76, 0.16);
+  --ag-light-glass: rgba(255, 255, 255, 0.54);
+
+  --ag-dark-canvas: #040b19;
+  --ag-dark-canvas-soft: #070e1a;
+  --ag-dark-surface: rgba(10, 22, 38, 0.78);
+  --ag-dark-surface-solid: #0e1d2d;
+  --ag-dark-ink: #f8f4f1;
+  --ag-dark-ink-muted: #aeb2ad;
+  --ag-dark-navy: #061728;
+  --ag-dark-navy-lift: #0e2335;
+  --ag-dark-navy-arc: #153145;
+  --ag-dark-teal: #235269;
+  --ag-dark-teal-bright: #4a7e96;
+  --ag-dark-gold: #b88746;
+  --ag-dark-gold-bright: #d8b885;
+  --ag-dark-gold-glow: #f2dfbc;
+  --ag-dark-line: rgba(216, 184, 133, 0.22);
+  --ag-dark-glass: rgba(7, 14, 26, 0.64);
+
+  /* ── Typography scale — brand pack ─────────────────────────────────── */
+  --fs-hero: clamp(2.4rem, 4.8vw, 4.4rem);
+  --fs-display: clamp(1.6rem, 2.4vw, 2.4rem);
+  --fs-h1: 1.6rem;
+  --fs-h2: 1.18rem;
+  --fs-body: 0.95rem;
+  --fs-small: 0.82rem;
+  --fs-micro: 0.7rem;
+
+  --tracking-display: -0.018em;
+  --tracking-tight: -0.01em;
+  --tracking-eyebrow: 0.22em;
+  --tracking-mono: 0.04em;
+
+  /* ── Spacing & geometry — brand pack ───────────────────────────────── */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 72px;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-card: 24px;
+  --radius-card-lg: 32px;
+  --radius-hero: 44px;
+  --radius-pill: 9999px;
+
+  --grid-gutter: clamp(16px, 2.4vw, 28px);
+  --max-width: 1440px;
+
+  /* ── Motion — brand pack ("subtle, premium, executive") ────────────── */
+  --motion-fast: 140ms;
+  --motion-standard: 220ms;
+  --motion-slow: 420ms;
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-glide: cubic-bezier(0.65, 0, 0.05, 1);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DEFAULT THEME — the brand pack's dark palette. Navy canvas, gold accent,
+   teal rail. Deep, calm, executive.
+   ══════════════════════════════════════════════════════════════════════ */
+:root {
+  --bg: var(--ag-dark-canvas);
+  --bg-elev-1: var(--ag-dark-surface);
+  --bg-elev-2: var(--ag-dark-canvas-soft);
+  --bg-glass: var(--ag-dark-glass);
+  --surface-solid: var(--ag-dark-surface-solid);
+  --surface-2: var(--ag-dark-navy-lift);
+  --surface-line: var(--ag-dark-line);
+  --surface-line-soft: rgba(216, 184, 133, 0.12);
+  --surface-rule: rgba(216, 184, 133, 0.3);
+
+  --fg: var(--ag-dark-ink);            /* 15.6:1 on canvas */
+  --fg-strong: #ffffff;
+  --fg-muted: var(--ag-dark-ink-muted); /* 7.9:1 */
+  --fg-faint: var(--ag-dark-ink-muted);
+  --fg-dim: #7e8ea7;                    /* 5.1:1 — small labels still pass */
+
+  --navy: var(--ag-dark-navy);
+  --navy-soft: var(--ag-dark-navy-lift);
+  --on-navy: var(--ag-dark-ink);
+  --on-navy-muted: var(--ag-dark-ink-muted);
+
+  --accent: var(--ag-dark-gold-bright);   /* 9.0:1 — text-safe in dark */
+  --accent-ink: var(--ag-dark-gold-bright);
+  --accent-strong: var(--ag-dark-gold-glow);
+  --accent-fill: var(--ag-dark-gold);
+  --accent-soft: rgba(216, 184, 133, 0.16);
+  --rail: var(--ag-dark-teal-bright);
+  --rail-ink: #5390ab;                    /* 4.8:1 — text-safe teal */
+  --rail-soft: rgba(74, 126, 150, 0.18);
+  --focus: var(--ag-dark-gold-glow);
+
+  /* Data extremes — refined, never traffic-light. Dark text-safe values. */
+  --data-positive: #0d7f73;
+  --data-positive-ink: #109a8b;           /* 4.9:1 */
+  --data-positive-soft: rgba(16, 154, 139, 0.14);
+  --data-exceptional: var(--ag-dark-gold-bright);
+  --data-exceptional-ink: var(--ag-dark-gold-bright);
+  --data-exceptional-soft: rgba(216, 184, 133, 0.14);
+  --data-neutral: #6a7283;
+  --data-neutral-ink: #8f97a8;            /* 4.6:1 */
+  --data-neutral-soft: rgba(142, 150, 168, 0.12);
+  --data-watch: var(--ag-dark-gold);
+  --data-watch-ink: #b88746;              /* 5.3:1 */
+  --data-watch-soft: rgba(184, 135, 70, 0.14);
+  --data-risk: #9a3b3b;
+  --data-risk-ink: #c66969;               /* 4.6:1 */
+  --data-risk-soft: rgba(198, 105, 105, 0.14);
+  --data-critical: #6f1d2d;
+  --data-critical-ink: #e07a8c;           /* 5.2:1 */
+  --data-critical-soft: rgba(224, 122, 140, 0.14);
+
+  --chart-1: var(--ag-dark-gold-bright);
+  --chart-2: var(--ag-dark-teal-bright);
+  --chart-3: var(--ag-dark-gold-glow);
+  --chart-4: var(--ag-light-gold-soft);
+  --chart-5: var(--ag-dark-ink-muted);
+
+  --halo: radial-gradient(60% 60% at 50% 40%,
+      rgba(216, 184, 133, 0.34) 0%, rgba(74, 126, 150, 0.18) 40%, rgba(4, 11, 25, 0) 78%);
+
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 2px 0 rgba(0, 0, 0, 0.4), 0 22px 44px rgba(0, 0, 0, 0.55);
+  --shadow-glass: 0 30px 80px -30px rgba(0, 0, 0, 0.7),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 0 0 1px rgba(216, 184, 133, 0.2);
+  --shadow-hero: 0 60px 160px -40px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(216, 184, 133, 0.3);
+
+  color-scheme: dark;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHT — the brand pack's default palette, available by attribute.
+   ══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  --bg: var(--ag-light-canvas);
+  --bg-elev-1: var(--ag-light-surface);
+  --bg-elev-2: var(--ag-light-canvas-soft);
+  --bg-glass: var(--ag-light-glass);
+  --surface-solid: var(--ag-light-surface-solid);
+  --surface-2: var(--ag-light-surface-solid);
+  --surface-line: var(--ag-light-line);
+  --surface-line-soft: rgba(26, 45, 76, 0.09);
+  --surface-rule: rgba(26, 45, 76, 0.22);
+
+  --fg: var(--ag-light-ink);
+  --fg-strong: #03091a;
+  --fg-muted: var(--ag-light-ink-muted);
+  --fg-faint: var(--ag-light-ink-muted);
+  --fg-dim: #7a8395;
+
+  --navy: var(--ag-light-navy);
+  --navy-soft: var(--ag-light-navy-soft);
+  --on-navy: #f8f4f1;                     /* constant ground → constant type */
+  --on-navy-muted: #c8cedb;
+
+  --accent: var(--ag-light-gold);
+  --accent-ink: #886738;                  /* 4.5:1 — brand gold cannot carry light text */
+  --accent-strong: #8a6a32;
+  --accent-fill: var(--ag-light-gold);
+  --accent-soft: rgba(178, 138, 74, 0.14);
+  --rail: var(--ag-light-teal);
+  --rail-ink: var(--ag-light-teal);       /* 4.9:1 — passes in light */
+  --rail-soft: rgba(47, 111, 130, 0.14);
+  --focus: #886738;
+
+  --data-positive: #0d7f73;
+  --data-positive-ink: #0c766b;
+  --data-positive-soft: #ddf3ee;
+  --data-exceptional: #d8b885;
+  --data-exceptional-ink: #88652b;
+  --data-exceptional-soft: #f7ebd2;
+  --data-neutral: #6a7283;
+  --data-neutral-ink: #656d7d;
+  --data-neutral-soft: #e4e7ec;
+  --data-watch: #b88746;
+  --data-watch-ink: #876331;
+  --data-watch-soft: #f4e7cf;
+  --data-risk: #9a3b3b;
+  --data-risk-ink: #9a3b3b;
+  --data-risk-soft: #f1dada;
+  --data-critical: #6f1d2d;
+  --data-critical-ink: #6f1d2d;
+  --data-critical-soft: #efd5dc;
+
+  --chart-1: var(--ag-light-navy);
+  --chart-2: var(--ag-light-gold);
+  --chart-3: var(--ag-light-teal);
+  --chart-4: var(--ag-light-gold-soft);
+  --chart-5: var(--ag-light-navy-soft);
+
+  --halo: radial-gradient(60% 60% at 50% 40%,
+      rgba(216, 184, 133, 0.3) 0%, rgba(47, 111, 130, 0.12) 38%, rgba(248, 244, 241, 0) 78%);
+
+  --shadow-1: 0 1px 0 rgba(7, 20, 42, 0.04), 0 4px 14px rgba(7, 20, 42, 0.06);
+  --shadow-2: 0 2px 0 rgba(7, 20, 42, 0.05), 0 18px 40px rgba(7, 20, 42, 0.1);
+  --shadow-glass: 0 30px 80px -30px rgba(7, 20, 42, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 0 0 1px rgba(216, 184, 133, 0.18);
+  --shadow-hero: 0 40px 120px -40px rgba(7, 20, 42, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 0 0 1px rgba(216, 184, 133, 0.3);
+
+  color-scheme: light;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Base
+   ══════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  /* 16px on phones (figure-dense reading surface); the tighter brand scale
+     returns once there is room for it. */
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--motion-standard) var(--ease-premium),
+    color var(--motion-standard) var(--ease-premium);
+}
+
+@media (min-width: 768px) {
+  body {
+    font-size: var(--fs-body);
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-rule);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-fill);
+  background-clip: padding-box;
+}
+
+/* Touch targets: grow the HIT AREA without growing the visual element.
+   Controls only — never links inside prose. */
+.tap {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.tap-stack {
+  align-items: flex-start;
+}
+@media (min-width: 768px) {
+  .tap {
+    min-height: 0;
+  }
+}
+
+/* ── Type primitives — brand pack ──────────────────────────────────── */
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.06;
+}
+
+.tabular,
+.numeric {
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0;
+}
+
+.code {
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-mono);
+}
+
+/* ── Surfaces ──────────────────────────────────────────────────────── */
+
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-glass);
+}
+
+.rule {
+  height: 1px;
+  background: var(--surface-rule);
+  border: 0;
+}
+
+/* Brand light — the halo, not a scanline. */
+.halo-bg {
+  background-image: var(--halo);
+  background-repeat: no-repeat;
+}
+
+/* ── Restrained skeleton (loading) — preserves layout, never bounces ── */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  border-radius: var(--radius-sm);
+  color: transparent;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%,
+      color-mix(in srgb, var(--fg) 5%, transparent) 50%, transparent 70%);
+  animation: skeleton-drift 1.8s var(--ease-soft) infinite;
+}
+@keyframes skeleton-drift {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* Tailwind's divide utilities default to currentColor; the desk uses hairlines. */
+[class*="divide-y"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--surface-line-soft);
+}
+
+/* ── Signal marks — colour is never the sole carrier of meaning ─────── */
+
+.mark-dir::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.mark-flag::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 100ms;
+    --motion-standard: 100ms;
+    --motion-slow: 100ms;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
