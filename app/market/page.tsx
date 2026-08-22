@@ -1,5 +1,5 @@
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
-import { IntelligenceStrip, MetricCard } from "@/components/MetricCard";
+import { MarketStateBand, MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import {
@@ -45,7 +45,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
       <AnalystInsightHero intel={intel} tab="market" />
 
       <section className="mt-8">
-        <IntelligenceStrip
+        <MarketStateBand
           metrics={[
             intel.strip.buyerLeverage,
             intel.strip.pricingPressure,
@@ -63,10 +63,15 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <StateText state={intel.buyerEconomics.state} className="display text-[1.7rem]" />
             <MovementText movement={intel.buyerEconomics.movement} className="text-[0.95rem]" />
           </div>
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {intel.buyerEconomics.dimensions.map((m) => (
-              <MetricCard key={m.id} m={m} />
-            ))}
+          {/* Design review §6: the strip above already carries pricing, demand,
+              intensity and AI pressure — repeat NOTHING; show only the
+              dimensions unique to this economics read. */}
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {intel.buyerEconomics.dimensions
+              .filter((m) => !["m.pricingPressure", "m.servicesDemand", "m.intensity", "m.aiPressure"].includes(m.id))
+              .map((m) => (
+                <MetricCard key={m.id} m={m} />
+              ))}
           </div>
         </Panel>
       </section>
@@ -111,9 +116,8 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="AI productivity"
           aside="Where should AI capability now be changing what buyers pay for?"
         />
-        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <MetricCard m={intel.strip.aiProductivityPressure} />
-          <Panel className="px-5 py-4 lg:col-span-2">
+        <div className="mt-5">
+          <Panel className="px-5 py-4">
             <div className="eyebrow">By vendor</div>
             <ul className="m-0 mt-2 list-none space-y-2 p-0">
               {intel.vendors.map((v) => (
@@ -164,9 +168,8 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="Deal flow in your market"
           aside={`Windows anchored at ${shortDate(intel.spine.lastIngest)}`}
         />
-        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <MetricCard m={intel.strip.servicesDemand} />
-          <Panel className="px-5 py-4 lg:col-span-2">
+        <div className="mt-5">
+          <Panel className="px-5 py-4">
             <div className="eyebrow">Notable signed agreements</div>
             {topAwards.length > 0 ? (
               <ul className="m-0 mt-2 list-none space-y-2 p-0">

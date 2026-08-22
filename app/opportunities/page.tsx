@@ -62,22 +62,28 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       <AnalystInsightHero intel={intel} tab="opportunities" />
 
       <section className="mt-8">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {stripTypes.map(({ key, label }) => {
-            const d = distribution(intel, key);
-            return (
-              <Panel key={key} className="flex min-w-0 flex-col gap-1.5 px-4 py-4">
-                <div className="eyebrow">{label}</div>
-                <LevelText level={d.best} className="text-[1.02rem]" />
-                <p className="m-0 text-[0.78rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
-                  {d.assessed === 0
-                    ? "No vendor carries sufficient evidence."
-                    : `${d.highPlus} of ${d.assessed} assessed vendors at High or above.`}
-                </p>
-              </Panel>
-            );
-          })}
-        </div>
+        <Panel className="px-0 py-0">
+          <div className="grid grid-cols-2 lg:grid-cols-5">
+            {stripTypes.map(({ key, label }, i) => {
+              const d = distribution(intel, key);
+              return (
+                <div
+                  key={key}
+                  className="flex min-w-0 flex-col gap-1 px-5 py-4"
+                  style={i > 0 ? { borderLeft: "1px solid var(--surface-line-soft)" } : undefined}
+                >
+                  <div className="eyebrow">{label}</div>
+                  <LevelText level={d.best} className="text-[1.05rem]" />
+                  <p className="m-0 text-[0.74rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                    {d.assessed === 0
+                      ? "No vendor carries sufficient evidence."
+                      : `${d.highPlus} of ${d.assessed} assessed at High or above.`}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
       </section>
 
       <section className="mt-12">
@@ -122,19 +128,33 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                           </Link>
                         </td>
                         <td className="px-4 py-3">
-                          <LevelText level={v.overall.level} />
+                          <div className="flex flex-col gap-1">
+                            <LevelText level={v.overall.level} emphasis={i === 0} />
+                            {v.overall.reason ? (
+                              <span className="max-w-[36ch] text-[0.72rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                                {v.overall.reason}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
-                        {OPPORTUNITY_TYPES.map((t) => (
-                          <td key={t} className="px-4 py-3">
-                            <Link
-                              href={`/opportunities/${v.ticker.toLowerCase()}/${t}`}
-                              className="underline-offset-4 hover:underline"
-                              style={{ textDecorationColor: "var(--accent-fill)" }}
-                            >
-                              <LevelText level={v.opportunities[t].level} className="text-[0.84rem]" />
-                            </Link>
-                          </td>
-                        ))}
+                        {(() => {
+                          /* Gold marks each vendor's DOMINANT lever only (§14):
+                             the strongest unique family per row carries the
+                             emphasis; everything else reads in standard ink. */
+                          const scored = OPPORTUNITY_TYPES.map((t) => ({ t, s: levelScore(v.opportunities[t].level) })).sort((a, b) => b.s - a.s);
+                          const dominant = scored[0]!.s > (scored[1]?.s ?? -1) ? scored[0]!.t : null;
+                          return OPPORTUNITY_TYPES.map((t) => (
+                            <td key={t} className="px-4 py-3">
+                              <Link
+                                href={`/opportunities/${v.ticker.toLowerCase()}/${t}`}
+                                className="underline-offset-4 hover:underline"
+                                style={{ textDecorationColor: "var(--accent-fill)" }}
+                              >
+                                <LevelText level={v.opportunities[t].level} className="text-[0.84rem]" emphasis={t === dominant} />
+                              </Link>
+                            </td>
+                          ));
+                        })()}
                       </tr>
                     ))}
                   </tbody>

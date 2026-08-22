@@ -104,8 +104,11 @@ export const LEVEL_LABEL: Record<OpportunityLevel, string> = {
   insufficient: "Insufficient evidence",
 };
 
+/* Gold is hierarchy, not celebration (§14): by default even Very High reads
+   in the positive ink — gold is applied only where a level is THE emphasis
+   (dominant lever, #1 rank) via the `emphasis` prop. */
 const LEVEL_INK: Record<OpportunityLevel, string> = {
-  "very-high": "var(--accent-ink)",
+  "very-high": "var(--data-positive-ink)",
   high: "var(--data-positive-ink)",
   medium: "var(--fg-muted)",
   low: "var(--fg-dim)",
@@ -145,7 +148,7 @@ export function ConfidenceText({ confidence }: { confidence: Confidence }) {
   );
 }
 
-export function LevelText({ level, className = "" }: { level: OpportunityLevel; className?: string }) {
+export function LevelText({ level, className = "", emphasis = false }: { level: OpportunityLevel; className?: string; emphasis?: boolean }) {
   if (level === "insufficient") {
     return (
       <span className={`italic ${className}`} style={{ color: "var(--fg-dim)" }}>
@@ -154,7 +157,10 @@ export function LevelText({ level, className = "" }: { level: OpportunityLevel; 
     );
   }
   return (
-    <span className={`mark-dir font-medium ${className}`} style={{ color: LEVEL_INK[level] }}>
+    <span
+      className={`mark-dir ${emphasis ? "font-semibold" : "font-medium"} ${className}`}
+      style={{ color: emphasis ? "var(--accent-ink)" : LEVEL_INK[level] }}
+    >
       {LEVEL_LABEL[level]}
     </span>
   );
@@ -165,7 +171,7 @@ export function LevelText({ level, className = "" }: { level: OpportunityLevel; 
 const CLASS_STYLE: Record<WatchClass, { bg: string; fg: string; ring: string }> = {
   ACT: { bg: "var(--accent-fill)", fg: "#07142a", ring: "transparent" },
   WATCH: { bg: "var(--data-watch-soft)", fg: "var(--data-watch-ink)", ring: "color-mix(in srgb, var(--data-watch) 40%, transparent)" },
-  KNOW: { bg: "var(--data-neutral-soft)", fg: "var(--data-neutral-ink)", ring: "color-mix(in srgb, var(--data-neutral) 35%, transparent)" },
+  KNOW: { bg: "transparent", fg: "var(--fg-dim)", ring: "var(--surface-line)" },
 };
 
 export function ClassChip({ cls }: { cls: WatchClass }) {

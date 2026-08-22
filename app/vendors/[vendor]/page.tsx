@@ -138,7 +138,7 @@ export default async function VendorDetail({
           <SectionHeader eyebrow="Relative position" title="Why manage this vendor differently" />
           <Panel className="mt-5 px-6 py-5">
             <ul className="m-0 flex list-none flex-col gap-2.5 p-0 text-[0.92rem] leading-relaxed" style={{ color: "var(--fg)" }}>
-              <li>{focal.differentiation.strongest}</li>
+              <li className="text-[1.02rem] font-medium" style={{ color: "var(--fg)" }}>{focal.differentiation.strongest}</li>
               {focal.differentiation.weakest ? <li style={{ color: "var(--fg-muted)" }}>{focal.differentiation.weakest}</li> : null}
               {focal.differentiation.relatives.map((r) => (
                 <li key={r} style={{ color: "var(--fg-muted)" }}>{r}</li>
@@ -268,7 +268,7 @@ export default async function VendorDetail({
                         <td className="px-4 py-2.5">
                           <span
                             className="mark-dir tabular"
-                            style={{ color: e.daysRemaining <= 183 ? "var(--data-watch-ink)" : "var(--fg-muted)" }}
+                            style={{ color: e.daysRemaining <= 60 ? "var(--data-watch-ink)" : "var(--fg-muted)" }}
                           >
                             {shortDate(e.endDate)} · {monthsRemaining(e.daysRemaining)} remaining
                           </span>

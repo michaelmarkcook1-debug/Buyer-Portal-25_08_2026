@@ -417,12 +417,13 @@ a {
 .mark-dir::before {
   content: "";
   display: inline-block;
-  width: 14px;
-  height: 2px;
-  margin-right: 8px;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
   vertical-align: middle;
   background: currentColor;
-  border-radius: 1px;
+  opacity: 0.85;
+  border-radius: 999px;
 }
 
 .mark-flag::before {

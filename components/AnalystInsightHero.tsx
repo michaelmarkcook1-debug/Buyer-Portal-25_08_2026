@@ -24,11 +24,12 @@ const TAB_LABEL: Record<InsightTab, string> = {
 
 function Frame({ tab, children }: { tab: InsightTab; children: React.ReactNode }) {
   return (
-    <Panel hero className="px-6 py-6 sm:px-9 sm:py-8">
+    <Panel hero className="px-6 py-7 sm:px-10 sm:py-9">
       <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
         Analyst Insight · {TAB_LABEL[tab]}
       </div>
-      <div className="mt-3">{children}</div>
+      <div aria-hidden="true" className="mt-3 h-px w-10" style={{ background: "var(--accent-fill)", opacity: 0.7 }} />
+      <div className="mt-4">{children}</div>
     </Panel>
   );
 }
@@ -66,31 +67,52 @@ function InsightResultView({
   }
 
   if (result.status === "blocked") {
+    // Calm, factual refusal — an integrity note, never an alarm banner.
     return (
       <div
-        className="rounded-[var(--radius-md)] px-4 py-3"
-        style={{ background: "var(--data-risk-soft)" }}
+        className="rounded-[var(--radius-md)] border border-dashed px-5 py-4"
+        style={{ borderColor: "var(--surface-line)" }}
       >
-        <div className="font-medium" style={{ color: "var(--data-risk-ink)" }}>
-          Analyst Insight withheld.
+        <div className="font-medium" style={{ color: "var(--fg)" }}>
+          Briefing withheld by the grounding check.
         </div>
-        <p className="mt-1 mb-0 text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-          The generated briefing failed grounding validation and is not shown.{" "}
-          {result.reasons[0] ?? ""}
+        <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          The generated analysis did not pass validation against the underlying evidence and is not
+          shown. The canonical intelligence below is unaffected.
         </p>
       </div>
     );
   }
 
+  /* Editorial lede: the first sentence carries the page — display scale —
+     with the remainder set as body prose beneath it. */
+  const text = result.text.trim();
+  const sentenceCut = text.search(/(?<=[.!?])\s+(?=[A-Z“"'])/);
+  const colonCut = text.indexOf(": ");
+  // Prefer whichever editorial break lands in kicker range; colon breaks
+  // ("…is X: the detail…") make natural analyst-note ledes.
+  const candidates = [sentenceCut, colonCut >= 0 ? colonCut + 1 : -1].filter((c) => c > 40 && c < 230);
+  const cut = candidates.length ? Math.min(...candidates) : -1;
+  const lede = cut > 0 ? text.slice(0, cut) : null;
+  const body = lede ? text.slice(cut).trim() : text;
+
   return (
     <>
+      {lede ? (
+        <p
+          className="display m-0 max-w-[52ch] text-[1.55rem] leading-[1.35] sm:text-[1.72rem]"
+          style={{ color: "var(--fg)" }}
+        >
+          {lede}
+        </p>
+      ) : null}
       <p
-        className="display m-0 max-w-[64ch] whitespace-pre-line text-[1.28rem] leading-[1.52] sm:text-[1.4rem]"
-        style={{ color: "var(--fg)" }}
+        className={`display m-0 max-w-[64ch] whitespace-pre-line text-[1.12rem] leading-[1.6] sm:text-[1.18rem] ${lede ? "mt-4" : ""}`}
+        style={{ color: "var(--fg)", opacity: 0.92 }}
       >
-        {result.text}
+        {body}
       </p>
-      <div className="code mt-4 text-[0.68rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code mt-5 text-[0.68rem]" style={{ color: "var(--fg-dim)" }}>
         Grounded in the canonical intelligence below · interpretation, not additional data
         {scenario ? ` · modelled under “${scenario.label}”` : ""}
       </div>

@@ -1,10 +1,10 @@
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
-import { IntelligenceStrip } from "@/components/MetricCard";
+import { MarketStateBand } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { SignalCard } from "@/components/SignalCard";
 import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import { VendorComparison } from "@/components/VendorComparison";
-import { EmptyEvidence, MovementText, Panel, SectionHeader } from "@/components/ui";
+import { ClassChip, EmptyEvidence, MovementText, Panel, SectionHeader } from "@/components/ui";
 import { getDevelopments } from "@/lib/data/facts";
 import { money, shortDate } from "@/lib/format";
 import { SEC_MEANING } from "@/lib/metrics/watch";
@@ -52,7 +52,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
       <AnalystInsightHero intel={intel} tab="home" />
 
       <section className="mt-8">
-        <IntelligenceStrip
+        <MarketStateBand
           metrics={[
             intel.strip.buyerLeverage,
             intel.strip.pricingPressure,
@@ -71,7 +71,51 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
         />
         <div className="mt-5 space-y-3">
           {intel.watch.length > 0 ? (
-            intel.watch.map((s, i) => <SignalCard key={i} s={s} />)
+            (() => {
+              /* Presentation-level grouping (design review §5): the same
+                 renewal-concentration reading across several vendors renders
+                 as ONE comparative card instead of near-identical repeats. */
+              const isRenewal = (h: string) => h.includes("observed renewal activity concentrating");
+              const renewal = intel.watch.filter((s) => isRenewal(s.headline));
+              const rest = intel.watch.filter((s) => !isRenewal(s.headline));
+              const restActs = rest.filter((s) => s.classification === "ACT");
+              const restOther = rest.filter((s) => s.classification !== "ACT");
+              return (
+                <>
+                  {restActs.map((s, i) => (
+                    <SignalCard key={`a${i}`} s={s} />
+                  ))}
+                  {renewal.length >= 2 ? (
+                    <Panel className="px-5 py-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <ClassChip cls={renewal[0]!.classification} />
+                        <span className="font-medium" style={{ color: "var(--fg)" }}>
+                          Observed renewal activity concentrating across {renewal.length} selected vendors
+                        </span>
+                      </div>
+                      <ul className="m-0 mt-3 list-none space-y-2 p-0">
+                        {renewal.map((s) => (
+                          <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.84rem]">
+                            <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
+                            <span className="min-w-0 flex-1" style={{ color: "var(--fg-muted)" }}>
+                              {s.implication.split(". ")[0]}.{s.change ? ` ${s.change}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="code mt-3 text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+                        Market record — their defensive exposure, never the reader's contracts.
+                      </div>
+                    </Panel>
+                  ) : (
+                    renewal.map((s, i) => <SignalCard key={`n${i}`} s={s} />)
+                  )}
+                  {restOther.map((s, i) => (
+                    <SignalCard key={`o${i}`} s={s} />
+                  ))}
+                </>
+              );
+            })()
           ) : (
             <EmptyEvidence
               title="No material change detected across your selected vendors today."
@@ -88,7 +132,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
           aside="Greatest buyer opportunity first"
         />
         <div className="mt-5">
-          <VendorComparison vendors={intel.vendors} variant="opportunity" />
+          <VendorComparison vendors={intel.scope.mode === "whole_market" ? intel.vendors.slice(0, 8) : intel.vendors} variant="opportunity" />
+          {intel.scope.mode === "whole_market" && intel.vendors.length > 8 ? (
+            <p className="mt-3 mb-0 text-[0.8rem]" style={{ color: "var(--fg-muted)" }}>
+              Showing the strongest 8 of {intel.vendors.length} covered vendors — the full comparison lives in Vendors.
+            </p>
+          ) : null}
         </div>
       </section>
 

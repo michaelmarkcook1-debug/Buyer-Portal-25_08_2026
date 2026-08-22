@@ -107,37 +107,6 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
         </div>
       </section>
 
-      <section className="mt-12">
-        <SectionHeader eyebrow="Opportunity" title="Commercial opportunity by vendor" />
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-          {intel.vendors.map((v) => (
-            <Panel key={v.ticker} className="px-5 py-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <Link
-                  href={`/vendors/${v.ticker.toLowerCase()}`}
-                  className="font-medium underline-offset-4 hover:underline"
-                  style={{ color: "var(--fg)", textDecorationColor: "var(--accent-fill)" }}
-                >
-                  {v.name}
-                </Link>
-                <LevelText level={v.overall.level} />
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-                {OPPORTUNITY_TYPES.map((t) => (
-                  <Link
-                    key={t}
-                    href={`/opportunities/${v.ticker.toLowerCase()}/${t}`}
-                    className="flex items-baseline justify-between gap-3 rounded px-1 py-0.5 text-[0.82rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
-                  >
-                    <span className="eyebrow text-[0.58rem]">{OPPORTUNITY_LABELS[t]}</span>
-                    <LevelText level={v.opportunities[t].level} className="text-[0.8rem]" />
-                  </Link>
-                ))}
-              </div>
-            </Panel>
-          ))}
-        </div>
-      </section>
     </PortalShell>
   );
 }
