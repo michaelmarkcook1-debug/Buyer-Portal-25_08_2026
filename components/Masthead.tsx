@@ -20,17 +20,17 @@ export function Masthead({ active, dateLabel }: { active: NavId; dateLabel: stri
     <header style={{ background: "var(--navy)", borderBottom: "1px solid var(--surface-line-soft)" }}>
       <div className="mx-auto flex max-w-[var(--max-width)] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3 sm:px-8 sm:py-4">
         <Link href="/" className="flex items-center gap-3">
-          <div
-            className="code flex h-9 w-9 items-center justify-center text-[0.78rem] font-bold"
-            style={{
-              background: "linear-gradient(135deg, var(--navy-soft), var(--navy))",
-              color: "var(--on-navy)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "inset 0 0 0 1px rgba(216, 184, 133, 0.38)",
-            }}
-          >
-            AG
-          </div>
+          {/* Approved brand mark — white variant on the navy masthead (the
+              supplied asset, untouched; the indigo variant is used only on
+              light grounds). 372px source stays sharp at 3x DPI. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/ag-mark-on-dark.png"
+            alt="AnalystGenius"
+            width={34}
+            height={34}
+            className="h-[30px] w-[30px] shrink-0 select-none sm:h-[34px] sm:w-[34px]"
+          />
           <div>
             <h1
               className="display m-0 whitespace-nowrap text-[17px] font-normal sm:text-[21px]"

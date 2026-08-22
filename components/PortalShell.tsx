@@ -152,6 +152,21 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           interpretation. Inference methodology is proprietary and is not exposed. {blocked.reason}{" "}
           Where evidence is insufficient, the portal says so rather than estimating.
         </p>
+        {/* Approved brand mark — indigo variant, deliberately set on a warm-white
+            tile so the mark sits on a light ground (per brand rule). One
+            placement only; the masthead carries the white variant. */}
+        <div className="mt-5 flex items-center gap-3">
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)]"
+            style={{ background: "var(--warm-white, #f6f1e7)" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/ag-mark-on-light.png" alt="" width={22} height={22} className="h-[22px] w-[22px] select-none" />
+          </span>
+          <span className="code text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+            AnalystGenius · Buyer Portal
+          </span>
+        </div>
       </div>
     </footer>
   );
