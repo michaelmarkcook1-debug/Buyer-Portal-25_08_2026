@@ -149,6 +149,15 @@ Do not use phrases such as:
 - leverage emerging opportunities
 unless the sentence contains a specific substantive recommendation.
 
+VOCABULARY — two separate evidence families that must never be conflated:
+- COMMERCIAL CONTRACT evidence is measured in "signings" / "commercial
+  contract activity". Never call a commercial signing an "award".
+- PUBLIC PROCUREMENT evidence is measured in "awards" / "procurement
+  activity". Never call a procurement award a "signing".
+The reader must be able to tell the two families apart from your wording
+alone, because they move on different windows and can legitimately point in
+opposite directions.
+
 LENGTH: aim for 130-155 words. Spend them on judgement, causality,
 implication and what the buyer should do — not on reciting metrics the reader
 can already see, repeating the same evidence twice, or qualifying a point that
@@ -360,7 +369,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v15", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v16", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

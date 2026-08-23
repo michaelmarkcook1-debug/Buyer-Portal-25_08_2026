@@ -35,6 +35,13 @@ function Cell({ v, col }: { v: VendorIntel; col: string }) {
         <span className="inline-flex flex-col gap-0.5">
           <span className="inline-flex items-center gap-1.5">
             <LevelText level={v.overall.level} />
+            {/* Restrained qualifier, not a confidence index: the level stands,
+                but the comparative position rests on thinner evidence. */}
+            {v.overall.evidenceQualifier === "directional" ? (
+              <span className="eyebrow" style={{ color: "var(--fg-dim)", letterSpacing: "0.12em" }}>
+                Evidence limited
+              </span>
+            ) : null}
             {v.overall.modelled ? <ModelledTag note={v.overall.modelled} /> : null}
           </span>
           {v.overall.reason ? (

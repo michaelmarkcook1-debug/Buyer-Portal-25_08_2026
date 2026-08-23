@@ -169,6 +169,19 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                     </tbody>
                   </table>
                 </div>
+                {/* §6: where every vendor already sits in the top band, the
+                    overall column cannot move. Say so once, beneath the table,
+                    rather than repeating it on every row. */}
+                {result.vendors.length > 0
+                  && result.vendors.every((v) => {
+                    const base = intel.vendors.find((b) => b.ticker === v.ticker);
+                    return v.overall.level === "very-high" && base?.overall.level === "very-high";
+                  }) ? (
+                  <p className="m-0 border-t px-5 py-3 text-[0.8rem]" style={{ color: "var(--fg-dim)", borderColor: "var(--surface-line-soft)" }}>
+                    Overall opportunity stays Very High because these vendors were already in the top
+                    band — read the family column for what this scenario actually moves.
+                  </p>
+                ) : null}
               </Panel>
             </div>
           </section>

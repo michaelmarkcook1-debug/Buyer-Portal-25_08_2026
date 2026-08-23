@@ -23,6 +23,7 @@ import {
 } from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
+import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { buildCalls } from "@/components/WholeMarketLenses";
 
 /**
@@ -895,5 +896,49 @@ describe("formatting and disclosure invariants", () => {
     // §3: retained history must not be labelled "deal flow"
     expect(METRIC_REGISTRY["commercialDealFlow"]!.comparison).toBe("rolling_12m_vs_prior_12m");
     expect(METRIC_REGISTRY["quarterlySigningHistory"]).toBeUndefined(); // not a portal metric
+  });
+});
+
+describe("thin-evidence calibration (2026-08-23)", () => {
+  const opp = (level: string, confidence = "medium") => ({ level, confidence } as never);
+  const opps = (levels: Record<string, string>, conf = "medium") =>
+    ({
+      pricing: opp(levels.pricing ?? "medium", conf),
+      automation: opp(levels.automation ?? "medium", conf),
+      "gain-sharing": opp(levels["gain-sharing"] ?? "medium", conf),
+      "commercial-leverage": opp(levels["commercial-leverage"] ?? "medium", conf),
+      "market-test": opp(levels["market-test"] ?? "medium", conf),
+    } as never);
+
+  it("zero current signings alone cannot produce an unqualified top band", () => {
+    // one strong family, no corroboration, no activity in the current window
+    const r = evidenceSufficiency(opps({ pricing: "very-high" }), 0);
+    expect(r).toBe("directional");
+  });
+
+  it("zero signings WITH corroboration from other families stays supported", () => {
+    const r = evidenceSufficiency(opps({ pricing: "very-high", automation: "high", "gain-sharing": "high" }), 0);
+    expect(r).toBe("supported");
+  });
+
+  it("evidence depth is corroboration, not contract volume", () => {
+    // a vendor with activity is supported even on a single strong family:
+    // volume must never decide the ranking
+    expect(evidenceSufficiency(opps({ pricing: "very-high" }), 12)).toBe("supported");
+    // and thin corroboration with NO activity is directional regardless of level
+    expect(evidenceSufficiency(opps({ pricing: "very-high", automation: "very-high" }, "low"), 0)).toBe("directional");
+  });
+
+  it("low-confidence families do not count as corroboration", () => {
+    expect(evidenceSufficiency(opps({ pricing: "very-high", automation: "high" }, "low"), 0)).toBe("directional");
+  });
+
+  it("commercial signings and procurement awards stay lexically distinct", () => {
+    const commercial = METRIC_REGISTRY["commercialDealFlow"]!;
+    const procurement = METRIC_REGISTRY["procurementAwardFlow"]!;
+    expect(commercial.meaning).toMatch(/signing/i);
+    expect(commercial.meaning).not.toMatch(/\baward/i);
+    expect(procurement.meaning).toMatch(/award/i);
+    expect(procurement.meaning).not.toMatch(/\bsigning/i);
   });
 });

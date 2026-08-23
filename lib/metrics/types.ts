@@ -90,6 +90,10 @@ export interface Opportunity {
   investigate: string[];
   /** Plain-language explanation of the level (sprint 4 §10) — drivers, no weights. */
   reason?: string;
+  /** Set when the level holds but the evidence behind a comparative position
+   * is materially thinner than peers. Governs ranking confidence and a
+   * restrained buyer-facing qualifier — never a confidence score. */
+  evidenceQualifier?: "directional";
   modelled?: string;
 }
 

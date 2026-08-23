@@ -275,7 +275,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     ];
     if (d && d.contracts >= 3) {
       basis.push({
-        text: `Context from the curated spine: ${count(d.awardsT12)} observed commercial awards (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) prior.`,
+        text: `Context from the curated spine: ${count(d.awardsT12)} observed commercial signings (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) prior.`,
         source: "Curated contract tracker (market record)", ownership: "market",
       });
     }
@@ -297,7 +297,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     dealMarketHeat = insufficientMetric(
       "dealMarketHeat",
       "Deal Market Heat",
-      "Too few observed contracts or awards to read deal flow for this vendor.",
+      "Too few observed contracts or signings to read commercial deal flow for this vendor.",
     );
   } else {
     const move = ratioMove(d.awardsT12, d.awardsPrior12);
@@ -320,7 +320,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
           : "Observed signing pace broadly steady across the two windows.",
       [
         {
-          text: `${count(d.awardsT12)} observed awards (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) in the prior 12; ${spineNote}.`,
+          text: `${count(d.awardsT12)} observed signings (${money(d.awardsT12Tcv)}) in the 12 months to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}, vs ${count(d.awardsPrior12)} (${money(d.awardsPrior12Tcv)}) in the prior 12; ${spineNote}.`,
           source: "Curated contract tracker (market record)", ownership: "market",
         },
       ],
@@ -355,7 +355,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     });
     const basis: Basis[] = [
       {
-        text: `Award flow ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two 12-month windows; ${count(alternatives)} scoped alternative${alternatives === 1 ? "" : "s"} in ${d.topLines[0]?.line ?? "their top line"}.`,
+        text: `Commercial signing flow ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two 12-month windows; ${count(alternatives)} scoped alternative${alternatives === 1 ? "" : "s"} in ${d.topLines[0]?.line ?? "their top line"}.`,
         source: "Curated contract tracker (market record)", ownership: "market", asOf: v.spineDataAsOf,
       },
     ];
@@ -514,7 +514,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         source: "Public procurement record", ownership: "market", asOf: v.proc.lastAwardDate,
       });
     if (d && d.contracts >= 3)
-      basis.push({ text: `Observed commercial awards ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two spine windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
+      basis.push({ text: `Observed commercial signings ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two commercial-evidence windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
     if (eventCountBasis) basis.push(eventCountBasis);
     const rpoPrim = v.prims?.get("rpo_backlog_usd");
     if (rpoPrim) {
@@ -1082,7 +1082,35 @@ function opportunitiesFor(metrics: VendorMetrics, spineStale: boolean): Record<O
   };
 }
 
-function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: VendorMetrics): Opportunity {
+/**
+ * Evidence sufficiency for RANKING purposes (calibration pass, 23 Aug 2026).
+ *
+ * This governs how confidently a comparative position may be asserted — it is
+ * NOT a second score and never changes a metric's own state. Depth here means
+ * corroboration across independent readings, deliberately NOT contract volume:
+ * rewarding volume would just hand the ranking to the largest vendor, and a
+ * well-supported negative conclusion should still be able to outrank a
+ * deep-evidence neutral one.
+ */
+export function evidenceSufficiency(
+  opps: Record<OpportunityType, Opportunity>,
+  currentPeriodSignings: number,
+): "supported" | "directional" {
+  // families making a real claim on evidence that is not itself thin
+  const corroborating = Object.values(opps).filter(
+    (o) => (o.level === "very-high" || o.level === "high") && o.confidence !== "low" && o.confidence !== "insufficient",
+  ).length;
+  // No observed activity in the current window is not, on its own, a buyer
+  // opportunity — absence must be corroborated before it ranks as strength.
+  if (currentPeriodSignings === 0 && corroborating < 2) return "directional";
+  return "supported";
+}
+
+function overallFrom(
+  opps: Record<OpportunityType, Opportunity>,
+  metrics: VendorMetrics,
+  currentPeriodSignings: number,
+): Opportunity {
   const defined = Object.values(opps).filter((o) => o.level !== "insufficient");
   let level: OpportunityLevel = "insufficient";
   if (defined.length > 0) {
@@ -1091,6 +1119,12 @@ function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: Vendor
     const blended = Math.round(avg * 0.5 + max * 0.5);
     level = (["insufficient", "low", "medium", "high", "very-high"] as const)[Math.min(4, Math.max(1, blended))];
   }
+  /* Zero-activity sanity rule: a vendor with no observed signings in the
+     current window, and without corroboration from other families, may not
+     present as the top band. The families keep their own states; only the
+     headline claim is pulled back to what the evidence carries. */
+  const sufficiency = evidenceSufficiency(opps, currentPeriodSignings);
+  if (sufficiency === "directional" && level === "very-high") level = "high";
   // §9/§10: name the strongest family so the rank explains itself — vendors
   // get different commercial stories, not one universal narrative.
   const top = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level))[0];
@@ -1101,6 +1135,7 @@ function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: Vendor
   return {
     type: "commercial-leverage",
     level,
+    evidenceQualifier: sufficiency === "directional" ? "directional" : undefined,
     movement: metrics.buyerLeverage.movement,
     confidence: defined.length >= 3 ? "medium" : defined.length >= 1 ? "low" : "insufficient",
     why: defined.slice(0, 2).flatMap((o) => o.why.slice(0, 1)),
@@ -1150,6 +1185,52 @@ function vendorDiscriminator(m: VendorMetrics, lever: OpportunityType): string |
   if (!lead && !tail) return null;
   if (!lead) return `${tail!.charAt(0).toUpperCase()}${tail!.slice(1)}.`;
   return tail ? `${lead}, and ${tail}.` : `${lead}.`;
+}
+
+/** Every secondary clause this vendor genuinely supports, in priority order —
+ *  the fall-through pool a peer-aware pass draws from (§4). */
+function discriminatorCandidates(m: VendorMetrics, lever: OpportunityType): string[] {
+  const strong = (x: Metric): boolean => x.movement === "materially-improving" || x.movement === "materially-deteriorating";
+  return ([
+    [m.aiProductivityOpportunity.state === "favourable" && strong(m.aiProductivityOpportunity), "their AI delivery capability has moved materially, so productivity assumptions set earlier deserve challenge"],
+    [m.automationOpportunity.state === "favourable" && strong(m.automationOpportunity) && lever !== "automation", "their automation capability is advancing faster than their delivery model has repriced"],
+    [m.talentPressure.state === "unfavourable", "their delivery workforce is contracting, which is a capacity question on multi-year commitments"],
+    [m.dealMarketHeat.movement === "materially-deteriorating", "their observed win pace has cooled, shifting demand pressure toward the buyer"],
+    [m.providerMomentum.movement === "materially-deteriorating", "their commercial momentum is deteriorating on the latest readings"],
+    [m.financialHeadroom.state === "favourable", "their margin position leaves observed room for commercial flexibility"],
+    [m.operationalRisk.state === "unfavourable", "their operational risk reading is unfavourable, which belongs in any continuity discussion"],
+    [m.financialResilience.state === "favourable", "their financial position is expanding on the latest reading"],
+    [m.reputationMovement.movement === "materially-deteriorating", "their reputation reading is deteriorating materially"],
+  ] as Array<[boolean, string]>).filter(([hit]) => hit).map(([, text]) => text);
+}
+
+/**
+ * §4: when several vendors would receive the SAME distinguishing clause, fall
+ * through to the next reading each genuinely supports. Where nothing separates
+ * them, say so rather than manufacturing uniqueness.
+ */
+function differentiateReasons(vendors: VendorIntel[]): void {
+  if (vendors.length < 2) return;
+  const FAMILY_WORD: Record<OpportunityType, string> = {
+    pricing: "pricing", automation: "automation", "gain-sharing": "gain-sharing",
+    "commercial-leverage": "commercial leverage", "market-test": "market-test",
+  };
+  const taken = new Set<string>();
+  for (const v of vendors) {
+    const defined = Object.values(v.opportunities).filter((o) => o.level !== "insufficient");
+    const top = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level))[0];
+    if (!top) continue;
+    const pool = discriminatorCandidates(v.metrics, top.type);
+    const unique = pool.find((c) => !taken.has(c));
+    const head = `Strongest lever: ${FAMILY_WORD[top.type]}.`;
+    if (unique) {
+      taken.add(unique);
+      v.overall.reason = `${head} ${unique.charAt(0).toUpperCase()}${unique.slice(1)}.`;
+    } else if (pool.length > 0) {
+      // everything this vendor supports is already claimed by a peer
+      v.overall.reason = `${head} Its readings are similar to others in this market on the available evidence.`;
+    }
+  }
 }
 
 /* ───────────────────── market rollups ───────────────────── */
@@ -1378,7 +1459,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       },
       metrics,
       opportunities,
-      overall: overallFrom(opportunities, metrics),
+      overall: overallFrom(opportunities, metrics, d?.awardsT12 ?? 0),
       claimsVsDelivery: nrg
         ? { direction: nrg.direction, headline: nrg.headline, asOf: nrg.generatedAt ?? nrg.sourcedAt }
         : null,
@@ -1386,7 +1467,16 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     };
   });
 
-  vendors.sort((a, b) => levelScore(b.overall.level) - levelScore(a.overall.level));
+  /* Rank by level, then let evidence sufficiency break ties. Sufficiency only
+     separates vendors already on the same band — it never promotes a weaker
+     conclusion above a stronger one, which would be volume bias. */
+  vendors.sort((a, b) => {
+    const byLevel = levelScore(b.overall.level) - levelScore(a.overall.level);
+    if (byLevel !== 0) return byLevel;
+    const rank = (v: VendorIntel): number => (v.overall.evidenceQualifier === "directional" ? 1 : 0);
+    return rank(a) - rank(b);
+  });
+  differentiateReasons(vendors);
 
   /* §11/§12 — comparative differentiation: why manage THIS vendor differently.
      Superlatives use the selected market only (or the supported universe when
@@ -1520,7 +1610,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
         move, "low", null,
         [{
-          text: `${count(agg.awardsT12)} observed awards across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.dataAsOf ?? anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
+          text: `${count(agg.awardsT12)} observed commercial signings across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.dataAsOf ?? anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
           source: "Curated contract tracker (market record)", ownership: "market",
         }],
         anchor.dataAsOf ?? anchor.lastIngest,

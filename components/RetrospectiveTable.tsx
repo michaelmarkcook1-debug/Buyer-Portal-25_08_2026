@@ -52,7 +52,7 @@ export function RetrospectiveTable({
               <th className="eyebrow px-4 py-3 text-left font-semibold">AI readiness Δ</th>
               <th className="eyebrow px-4 py-3 text-left font-semibold">Net talent flow Δ</th>
               <th className="eyebrow px-4 py-3 text-left font-semibold">Claims-vs-delivery Δ</th>
-              <th className="eyebrow px-4 py-3 text-left font-semibold">Awards (window vs prior)</th>
+              <th className="eyebrow px-4 py-3 text-left font-semibold">Commercial signings (window vs prior)</th>
             </tr>
           </thead>
           <tbody>
