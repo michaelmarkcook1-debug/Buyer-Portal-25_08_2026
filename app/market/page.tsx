@@ -1,4 +1,5 @@
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
+import { InfoTip, fromSemantics } from "@/components/InfoTip";
 import { MarketStateBand, MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { TwelveMonthChange } from "@/components/TwelveMonthChange";
@@ -13,6 +14,7 @@ import {
 import { getDevelopments, getScopeLines } from "@/lib/data/facts";
 import { count, money, shortDate } from "@/lib/format";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
+import { METRIC_DICTIONARY } from "@/lib/metrics/dictionary";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
@@ -61,7 +63,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         <SectionHeader eyebrow="Key market state" title="Buyer economics" />
         <Panel hero className="mt-5 px-6 py-6 sm:px-8">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-            <StateText state={intel.buyerEconomics.state} className="display text-[1.7rem]" />
+            <StateText state={intel.buyerEconomics.state} metricId="m.buyerEconomics" className="display text-[1.7rem]" />
             <MovementText movement={intel.buyerEconomics.movement} className="text-[0.95rem]" />
           </div>
           {/* Design review §6: the strip above already carries pricing, demand,
@@ -126,7 +128,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                   <span className="w-44 truncate font-medium" style={{ color: "var(--fg)" }}>
                     {v.name}
                   </span>
-                  <StateText state={v.metrics.aiProductivityOpportunity.state} className="text-[0.84rem]" />
+                  <StateText state={v.metrics.aiProductivityOpportunity.state} metricId="aiProductivityOpportunity" className="text-[0.84rem]" />
                   {v.metrics.aiProductivityOpportunity.headline ? (
                     <span className="min-w-0 flex-1 text-[0.8rem]" style={{ color: "var(--fg-muted)" }}>
                       {v.metrics.aiProductivityOpportunity.headline}
@@ -152,7 +154,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                       <span className="w-44 truncate font-medium" style={{ color: "var(--fg)" }}>
                         {v.name}
                       </span>
-                      <StateText state={t.state} className="text-[0.84rem]" />
+                      <StateText state={t.state} metricId="talentPressure" className="text-[0.84rem]" />
                     </div>
                     {t.basis.length > 0 ? <BasisList basis={t.basis.slice(0, 1)} className="mt-1" /> : null}
                   </li>
@@ -204,10 +206,22 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
       </section>
 
       <section className="mt-12">
-        <SectionHeader eyebrow="Supplier economics" title="Vendor financial position" />
+        {/* Every card here reads the SAME variable for a different vendor, so
+            the explanation sits once on the heading — not 66 times in a wide
+            market. */}
+        <SectionHeader
+          eyebrow="Supplier economics"
+          title="Vendor financial position"
+          aside={
+            <span className="inline-flex items-center gap-1.5">
+              What this measures
+              <InfoTip content={fromSemantics(METRIC_DICTIONARY.financialResilience!)} />
+            </span>
+          }
+        />
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {intel.vendors.map((v) => (
-            <MetricCard key={v.ticker} m={{ ...v.metrics.financialResilience, label: v.name }} />
+            <MetricCard key={v.ticker} hideInfo m={{ ...v.metrics.financialResilience, label: v.name }} />
           ))}
         </div>
       </section>

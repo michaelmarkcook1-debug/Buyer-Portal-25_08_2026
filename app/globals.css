@@ -333,6 +333,28 @@ a {
   }
 }
 
+/* Small inline controls (the "i" affordances) must stay visually restrained
+   while still being reachable. The hit area is an overlay, so the dot keeps
+   its 15px footprint and the surrounding layout does not shift. */
+.hit-target {
+  position: relative;
+}
+.hit-target::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%);
+}
+@media (pointer: coarse) {
+  .hit-target::after {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 /* ── Type primitives — brand pack ──────────────────────────────────── */
 
 .eyebrow {

@@ -1,3 +1,5 @@
+import { InfoTip, fromSemantics } from "@/components/InfoTip";
+import { METRIC_DICTIONARY, canonicalMetricId } from "@/lib/metrics/dictionary";
 import type { Metric } from "@/lib/metrics/types";
 import { CONFIDENCE_LABEL, ModelledTag, MovementText, Panel, StateText } from "./ui";
 
@@ -5,15 +7,22 @@ import { CONFIDENCE_LABEL, ModelledTag, MovementText, Panel, StateText } from ".
  * One canonical metric as a card: state first, direction second, the buyer
  * reading third, confidence last. Never a bare KPI tile — the conclusion
  * leads and the number stays in the basis.
+ *
+ * `hideInfo` is for grids where every card shows the SAME variable across
+ * different subjects — there the explanation belongs once on the section
+ * heading, not repeated on every card.
  */
-export function MetricCard({ m }: { m: Metric }) {
+export function MetricCard({ m, hideInfo = false }: { m: Metric; hideInfo?: boolean }) {
   return (
     <Panel className="flex min-w-0 flex-col gap-1.5 px-4 py-4">
       <div className="eyebrow flex items-center gap-2">
         {m.label}
+        {!hideInfo && METRIC_DICTIONARY[canonicalMetricId(m.id)] ? (
+          <InfoTip content={fromSemantics(METRIC_DICTIONARY[canonicalMetricId(m.id)]!)} />
+        ) : null}
         {m.modelled ? <ModelledTag note={m.modelled} /> : null}
       </div>
-      <StateText state={m.state} className="text-[1.02rem]" />
+      <StateText state={m.state} metricId={m.id} className="text-[1.02rem]" />
       <MovementText movement={m.movement} className="text-[0.78rem]" />
       {m.headline ? (
         <p className="m-0 text-[0.8rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
@@ -58,9 +67,12 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
           >
             <div className="eyebrow flex items-center gap-2">
               {m.label}
+              {METRIC_DICTIONARY[canonicalMetricId(m.id)] ? (
+                <InfoTip content={fromSemantics(METRIC_DICTIONARY[canonicalMetricId(m.id)]!)} />
+              ) : null}
               {m.modelled ? <ModelledTag note={m.modelled} /> : null}
             </div>
-            <StateText state={m.state} className="text-[1.05rem]" />
+            <StateText state={m.state} metricId={m.id} className="text-[1.05rem]" />
             <MovementText movement={m.movement} className="text-[0.76rem]" />
           </div>
         ))}

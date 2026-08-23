@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { showsConfidenceCaveat } from "@/lib/metrics/rules";
+import { displayState, levelEffect, type BuyerEffect } from "@/lib/metrics/dictionary";
 import type { Confidence, MetricState, Movement, OpportunityLevel, WatchClass } from "@/lib/metrics/types";
 
 /* ── surfaces ─────────────────────────────────────────────────────── */
@@ -118,10 +119,29 @@ const LEVEL_INK: Record<OpportunityLevel, string> = {
 
 /* ── semantic atoms — colour is never the sole carrier ────────────── */
 
-export function StateText({ state, className = "" }: { state: MetricState; className?: string }) {
+/** Colour is keyed to BUYER EFFECT, never to how positive the word sounds. */
+export const EFFECT_INK: Record<BuyerEffect, string> = {
+  favourable: "var(--data-positive-ink)",
+  caution: "var(--data-watch-ink)",
+  unfavourable: "var(--data-risk-ink)",
+  neutral: "var(--fg-muted)",
+  unknown: "var(--fg-dim)",
+};
+
+/**
+ * Renders a canonical state in the wording and tone correct for its variable.
+ * Pass `metricId` so "favourable" on operational risk reads "Low" while the
+ * same state on provider momentum reads "Strengthening" and is toned as a
+ * caution — the word and the colour both follow the variable, not a shared
+ * favourable/unfavourable scale.
+ */
+export function StateText({ state, metricId, className = "" }: { state: MetricState; metricId?: string; className?: string }) {
+  const d = metricId ? displayState(metricId, state) : null;
+  const label = d ? d.label : STATE_LABEL[state];
+  const ink = d ? EFFECT_INK[d.effect] : STATE_INK[state];
   return (
-    <span className={`mark-dir font-medium ${className}`} style={{ color: STATE_INK[state] }}>
-      {STATE_LABEL[state]}
+    <span className={`mark-dir font-medium ${className}`} style={{ color: ink }}>
+      {label}
     </span>
   );
 }
@@ -166,7 +186,7 @@ export function LevelText({ level, className = "", emphasis = false }: { level: 
   return (
     <span
       className={`mark-dir ${emphasis ? "font-semibold" : "font-medium"} ${className}`}
-      style={{ color: emphasis ? "var(--accent-ink)" : LEVEL_INK[level] }}
+      style={{ color: emphasis ? "var(--accent-ink)" : EFFECT_INK[levelEffect(level)] }}
     >
       {LEVEL_LABEL[level]}
     </span>

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { VendorIntel } from "@/lib/metrics/types";
+import { InfoTip, fromSemantics } from "@/components/InfoTip";
+import { METRIC_DICTIONARY } from "@/lib/metrics/dictionary";
 import { LevelText, ModelledTag, Panel, StateText } from "./ui";
 
 /**
@@ -10,21 +12,26 @@ import { LevelText, ModelledTag, Panel, StateText } from "./ui";
 
 type Variant = "opportunity" | "position";
 
-const COLUMNS: Record<Variant, Array<{ key: string; label: string }>> = {
+/* Each column names the metric it displays so the header can carry ONE info
+   affordance and the cells inherit that variable's vocabulary. The opportunity
+   columns use magnitude (Very High…Low); leverage, momentum and risk use their
+   own scales, which is deliberate rather than inconsistent — the header
+   explains why. */
+const COLUMNS: Record<Variant, Array<{ key: string; label: string; metricId?: string }>> = {
   opportunity: [
-    { key: "overall", label: "Overall opportunity" },
-    { key: "pricing", label: "Pricing" },
-    { key: "automation", label: "Automation" },
-    { key: "gain-sharing", label: "Gain sharing" },
-    { key: "leverage", label: "Leverage" },
+    { key: "overall", label: "Overall opportunity", metricId: "commercialOpportunity" },
+    { key: "pricing", label: "Pricing opportunity", metricId: "pricingOpportunity" },
+    { key: "automation", label: "Automation opportunity", metricId: "automationOpportunity" },
+    { key: "gain-sharing", label: "Gain-sharing opportunity", metricId: "gainShareOpportunity" },
+    { key: "leverage", label: "Buyer leverage", metricId: "buyerLeverage" },
   ],
   position: [
-    { key: "overall", label: "Commercial opportunity" },
-    { key: "leverage", label: "Buyer leverage" },
-    { key: "pricingState", label: "Pricing" },
-    { key: "ai", label: "AI opportunity" },
-    { key: "momentum", label: "Momentum" },
-    { key: "risk", label: "Risk" },
+    { key: "overall", label: "Commercial opportunity", metricId: "commercialOpportunity" },
+    { key: "leverage", label: "Buyer leverage", metricId: "buyerLeverage" },
+    { key: "pricingState", label: "Pricing conditions", metricId: "pricingPressure" },
+    { key: "ai", label: "AI productivity", metricId: "aiProductivityOpportunity" },
+    { key: "momentum", label: "Provider momentum", metricId: "providerMomentum" },
+    { key: "risk", label: "Operational risk", metricId: "operationalRisk" },
   ],
 };
 
@@ -58,15 +65,15 @@ function Cell({ v, col }: { v: VendorIntel; col: string }) {
     case "gain-sharing":
       return <LevelText level={v.opportunities["gain-sharing"].level} />;
     case "leverage":
-      return <StateText state={v.metrics.buyerLeverage.state} />;
+      return <StateText state={v.metrics.buyerLeverage.state} metricId="buyerLeverage" />;
     case "pricingState":
-      return <StateText state={v.metrics.pricingPressure.state} />;
+      return <StateText state={v.metrics.pricingPressure.state} metricId="pricingPressure" />;
     case "ai":
-      return <StateText state={v.metrics.aiProductivityOpportunity.state} />;
+      return <StateText state={v.metrics.aiProductivityOpportunity.state} metricId="aiProductivityOpportunity" />;
     case "momentum":
-      return <StateText state={v.metrics.providerMomentum.state} />;
+      return <StateText state={v.metrics.providerMomentum.state} metricId="providerMomentum" />;
     case "risk":
-      return <StateText state={v.metrics.operationalRisk.state} />;
+      return <StateText state={v.metrics.operationalRisk.state} metricId="operationalRisk" />;
     default:
       return null;
   }
@@ -84,7 +91,12 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
               <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
               {cols.map((c) => (
                 <th key={c.key} className="eyebrow px-4 py-3 text-left font-semibold">
-                  {c.label}
+                  <span className="inline-flex items-center gap-1.5">
+                    {c.label}
+                    {c.metricId && METRIC_DICTIONARY[c.metricId] ? (
+                      <InfoTip content={fromSemantics(METRIC_DICTIONARY[c.metricId]!)} />
+                    ) : null}
+                  </span>
                 </th>
               ))}
             </tr>

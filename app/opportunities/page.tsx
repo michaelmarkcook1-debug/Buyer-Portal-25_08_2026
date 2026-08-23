@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
+import { InfoTip, fromSemantics } from "@/components/InfoTip";
+import { METRIC_DICTIONARY } from "@/lib/metrics/dictionary";
 import { EmptyEvidence, LevelText, MovementText, Panel, SectionHeader } from "@/components/ui";
 import { shortDate } from "@/lib/format";
 import type { RawSearchParams } from "@/lib/market-scope";
@@ -13,6 +15,17 @@ import {
 } from "@/lib/metrics/types";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
+
+
+/** Opportunity family -> metric-dictionary key, so each column header can
+ *  carry one info affordance explaining that family's scale. */
+const FAMILY_DICT: Record<string, string> = {
+  pricing: "pricingOpportunity",
+  automation: "automationOpportunity",
+  "gain-sharing": "gainShareOpportunity",
+  "commercial-leverage": "buyerLeverage",
+  "market-test": "marketTestOpportunity",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -100,10 +113,20 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                   <thead>
                     <tr>
                       <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
-                      <th className="eyebrow px-4 py-3 text-left font-semibold">Overall</th>
+                      <th className="eyebrow px-4 py-3 text-left font-semibold">
+                        <span className="inline-flex items-center gap-1.5">
+                          Overall
+                          <InfoTip content={fromSemantics(METRIC_DICTIONARY["commercialOpportunity"]!)} />
+                        </span>
+                      </th>
                       {OPPORTUNITY_TYPES.map((t) => (
                         <th key={t} className="eyebrow px-4 py-3 text-left font-semibold">
-                          {OPPORTUNITY_LABELS[t]}
+                          <span className="inline-flex items-center gap-1.5">
+                            {OPPORTUNITY_LABELS[t]}
+                            {FAMILY_DICT[t] && METRIC_DICTIONARY[FAMILY_DICT[t]!] ? (
+                              <InfoTip content={fromSemantics(METRIC_DICTIONARY[FAMILY_DICT[t]!]!)} />
+                            ) : null}
+                          </span>
                         </th>
                       ))}
                     </tr>

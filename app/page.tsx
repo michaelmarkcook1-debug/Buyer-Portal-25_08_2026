@@ -7,6 +7,8 @@ import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import { VendorComparison } from "@/components/VendorComparison";
 import { ClassChip, EmptyEvidence, MovementText, Panel, SectionHeader } from "@/components/ui";
 import { getDevelopments } from "@/lib/data/facts";
+import { InfoTip, COLOUR_KEY } from "@/components/InfoTip";
+import { SIGNAL_CLASS_HELP } from "@/lib/metrics/dictionary";
 import { count, money, shortDate } from "@/lib/format";
 import { SEC_MEANING } from "@/lib/metrics/watch";
 import type { RawSearchParams } from "@/lib/market-scope";
@@ -97,7 +99,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
       <section className="mt-12">
         <SectionHeader
           eyebrow="Signals"
-          title="What matters today"
+          title={(
+            <span className="inline-flex items-center gap-2">
+              What matters today
+              <InfoTip content={{ ...SIGNAL_CLASS_HELP, colour: COLOUR_KEY }} />
+            </span>
+          ) as unknown as string}
           aside={renderedSignalCount > 0 ? `${renderedSignalCount} development${renderedSignalCount === 1 ? "" : "s"} worth attention` : undefined}
         />
         <div className="mt-5 space-y-3">

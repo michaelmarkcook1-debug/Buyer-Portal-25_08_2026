@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
+import { InfoTip, COLOUR_KEY } from "@/components/InfoTip";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { LevelText, ModelledTag, Panel, SectionHeader } from "@/components/ui";
 import type { RawSearchParams } from "@/lib/market-scope";
@@ -122,9 +123,42 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                     <thead>
                       <tr>
                         <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">Baseline → scenario</th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">Rank move</th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">Most-shifted opportunity</th>
+                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                          <span className="inline-flex items-center gap-1.5">
+                            Baseline → scenario
+                            <InfoTip content={{
+                              name: "Modelled scenario outputs",
+                              definition: "What the selected assumption would do to each vendor's overall commercial opportunity band, relative to today's baseline.",
+                              interpretation: "These are MODELLED values recalculated from the current evidence — not new evidence and not a forecast. Read the most-shifted opportunity column for what actually moves.",
+                              caveat: "A band that does not move can still sit over real movement inside the opportunity families.",
+                              colour: COLOUR_KEY,
+                            }} />
+                          </span>
+                        </th>
+                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                          <span className="inline-flex items-center gap-1.5">
+                            Rank move
+                            <InfoTip content={{
+                              name: "Rank move",
+                              definition: "How far this vendor moves up or down the where-to-look-first order under the scenario.",
+                              interpretation: "Movement shows which vendors your priorities are most sensitive to. No move means the scenario does not change where you would start.",
+                              caveat: "Rank orders where to look, not how much value is available.",
+                              colour: "Teal marks a vendor rising toward the top of your list, red a vendor falling down it; no movement is stated in words.",
+                            }} />
+                          </span>
+                        </th>
+                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                          <span className="inline-flex items-center gap-1.5">
+                            Most-shifted opportunity
+                            <InfoTip content={{
+                              name: "Most-shifted opportunity",
+                              definition: "The opportunity family that moves furthest for this vendor under the scenario.",
+                              interpretation: "This is where the assumption bites hardest — the lever to test first if you think the scenario is plausible.",
+                              caveat: "The family that moves most is not necessarily the largest one.",
+                              colour: COLOUR_KEY,
+                            }} />
+                          </span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>

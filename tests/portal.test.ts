@@ -25,6 +25,7 @@ import { shiftLevel } from "@/lib/metrics/types";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
+import { METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
 import { MARKET_FIRST_HIERARCHY, TOP_LEVEL_TABS } from "@/lib/insight/objectives";
 import { buildCalls } from "@/components/WholeMarketLenses";
 
@@ -994,5 +995,135 @@ describe("Analyst Insight market-first hierarchy (2026-08-23)", () => {
     // and the opportunities objective no longer forbids market context
     expect(OBJECTIVES.opportunities).not.toMatch(/do not re-narrate the market backdrop/i);
     expect(MARKET_FIRST_HIERARCHY).toMatch(/MARKET JUDGEMENT/);
+  });
+});
+
+describe("semantic labels and colour meaning (2026-08-23)", () => {
+  it("adjectives match the variable being measured", () => {
+    expect(displayState("operationalRisk", "unfavourable").label).toBe("High");
+    expect(displayState("operationalRisk", "favourable").label).toBe("Low");
+    expect(displayState("buyerLeverage", "favourable").label).toBe("Strong");
+    expect(displayState("buyerLeverage", "unfavourable").label).toBe("Weak");
+    expect(displayState("providerMomentum", "favourable").label).toBe("Strengthening");
+    expect(displayState("dealMarketHeat", "favourable").label).toBe("Cool");
+    expect(displayState("talentPressure", "unfavourable").label).toBe("High");
+    expect(displayState("deliveryCostPressure", "unfavourable").label).toBe("Rising");
+    // the generic favourable/unfavourable scale is gone from these variables
+    for (const id of ["operationalRisk", "buyerLeverage", "providerMomentum", "dealMarketHeat", "talentPressure"]) {
+      for (const st of ["favourable", "unfavourable"] as const) {
+        expect(displayState(id, st).label).not.toMatch(/^(Favourable|Unfavourable)$/);
+      }
+    }
+  });
+
+  it("high risk is never styled as buyer-positive", () => {
+    expect(displayState("operationalRisk", "unfavourable").effect).toBe("unfavourable");
+    expect(displayState("operationalRisk", "unfavourable").effect).not.toBe("favourable");
+    expect(displayState("operationalRisk", "mixed").effect).not.toBe("favourable");
+  });
+
+  it("high opportunity magnitude IS buyer-positive", () => {
+    expect(levelEffect("very-high")).toBe("favourable");
+    expect(levelEffect("high")).toBe("favourable");
+    expect(levelEffect("insufficient")).toBe("unknown");
+    expect(displayState("gainShareOpportunity", "favourable").effect).toBe("favourable");
+  });
+
+  it("strong buyer leverage is buyer-positive", () => {
+    expect(displayState("buyerLeverage", "favourable").effect).toBe("favourable");
+  });
+
+  it("a strengthening supplier is NOT automatically buyer-positive", () => {
+    // the word sounds positive; the buyer effect is what drives colour
+    const strengthening = displayState("providerMomentum", "favourable");
+    expect(strengthening.label).toBe("Strengthening");
+    expect(strengthening.effect).not.toBe("favourable");
+    // and a weakening supplier moves pressure toward the buyer
+    expect(displayState("providerMomentum", "unfavourable").effect).toBe("favourable");
+  });
+
+  it("vendor financial strength is context, not buyer advantage", () => {
+    const strong = displayState("financialResilience", "favourable");
+    expect(strong.label).toBe("Very strong");
+    expect(strong.effect).toBe("neutral");
+  });
+
+  it("every dictionary entry can explain itself without exposing methodology", () => {
+    for (const [id, s] of Object.entries(METRIC_DICTIONARY)) {
+      expect(s.name.length, id).toBeGreaterThan(2);
+      expect(s.definition.length, id).toBeGreaterThan(20);
+      expect(s.interpretation.length, id).toBeGreaterThan(20);
+      const copy = `${s.definition} ${s.interpretation} ${s.caveat ?? ""}`;
+      expect(copy, id).not.toMatch(/weight|threshold|formula|coefficient|algorithm|model score/i);
+    }
+  });
+
+  it("Act/Watch/Know is explained once, centrally", () => {
+    expect(SIGNAL_CLASS_HELP.interpretation).toMatch(/ACT/);
+    expect(SIGNAL_CLASS_HELP.interpretation).toMatch(/WATCH/);
+    expect(SIGNAL_CLASS_HELP.interpretation).toMatch(/KNOW/);
+  });
+
+  it("colour is never the sole carrier of meaning", () => {
+    // every state resolves to a word, not just a tone
+    for (const id of Object.keys(METRIC_DICTIONARY)) {
+      for (const st of ["favourable", "stable", "unfavourable", "mixed", "insufficient"] as const) {
+        expect(displayState(id, st).label.trim().length, `${id}/${st}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("every metric the resolver emits has its own vocabulary", () => {
+    // Market rollups previously fell through to the generic Favourable /
+    // Unfavourable scale because their ids are "m."-prefixed. Pin every id the
+    // resolver constructs so a new dimension cannot reintroduce that.
+    const src = readFileSync(resolve(__dirname, "../lib/metrics/resolve.ts"), "utf8");
+    const ids = new Set<string>();
+    for (const m of src.matchAll(/\b(?:metric|rollup|insufficientMetric)\(\s*\n?\s*"([\w.]+)"/g)) {
+      ids.add(m[1]);
+    }
+    expect(ids.size).toBeGreaterThan(10);
+    for (const id of ids) {
+      for (const st of ["favourable", "unfavourable"] as const) {
+        expect(displayState(id, st).label, `${id}/${st}`).not.toMatch(/^(Favourable|Unfavourable)$/);
+      }
+    }
+  });
+
+  it("market dimensions read as the thing they measure", () => {
+    expect(displayState("m.labour", "unfavourable").label).toBe("Under strain");
+    expect(displayState("m.intensity", "favourable").label).toBe("Broadening");
+    expect(displayState("m.supplier", "unfavourable").label).toBe("Strained");
+    expect(displayState("m.demand", "favourable").label).toBe("Expanding");
+    expect(displayState("m.buyerEconomics", "favourable").label).toBe("Buyer favourable");
+    // rollups of a vendor metric inherit that metric's vocabulary
+    expect(displayState("m.oprisk", "unfavourable").label).toBe("High");
+    expect(displayState("m.heat", "favourable").label).toBe("Cool");
+  });
+
+  it("one metric never shows the same word in two colours", () => {
+    // Across metrics a shared word may differ in tone ("High" AI productivity
+    // vs "High" talent pressure). WITHIN one metric it must not, or the same
+    // reading would change colour between refreshes.
+    for (const [id, s] of Object.entries(METRIC_DICTIONARY)) {
+      const byLabel = new Map<string, string>();
+      for (const st of ["favourable", "stable", "unfavourable", "mixed", "insufficient"] as const) {
+        const { label, effect } = displayState(id, st);
+        const prior = byLabel.get(label);
+        if (prior) expect(effect, `${id} "${label}"`).toBe(prior);
+        else byLabel.set(label, effect);
+      }
+      void s;
+    }
+  });
+
+  it("market context dimensions are not miscoloured as buyer wins", () => {
+    // demand and supplier health are context, not advantage — same rule the
+    // vendor-level financial resilience entry follows
+    expect(displayState("m.demand", "favourable").effect).toBe("neutral");
+    expect(displayState("m.supplier", "favourable").effect).toBe("neutral");
+    expect(displayState("m.supplier", "unfavourable").effect).toBe("caution");
+    // broader competition genuinely is a buyer win
+    expect(displayState("m.intensity", "favourable").effect).toBe("favourable");
   });
 });
