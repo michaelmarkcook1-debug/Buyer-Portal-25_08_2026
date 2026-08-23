@@ -70,3 +70,27 @@ export function formatValueMix(v: ValueMix): string {
 export function inferredDominates(v: ValueMix): boolean {
   return (v.inferredMidUsd ?? 0) > (v.disclosedUsd ?? 0);
 }
+
+export interface TcvDisplayInput {
+  tcvUsd?: number | null;
+  valueProvenance?: string | null;
+  tcvLowUsd?: number | null;
+  tcvMidUsd?: number | null;
+  tcvHighUsd?: number | null;
+}
+
+/**
+ * The only three TCV states a buyer ever sees: a known value, an estimated
+ * range, or an explicit withholding. Never a confidence score, comparable
+ * count, model version, or anything about how the estimate was derived.
+ */
+export function formatTcvDisplay(v: TcvDisplayInput): string {
+  if (v.tcvUsd != null && v.tcvUsd > 0) return money(v.tcvUsd);
+  if (v.valueProvenance === "inferred") {
+    if (v.tcvLowUsd != null && v.tcvHighUsd != null && v.tcvHighUsd > 0) {
+      return `${money(v.tcvLowUsd)}–${money(v.tcvHighUsd)} est.`;
+    }
+    if (v.tcvMidUsd != null && v.tcvMidUsd > 0) return `≈${money(v.tcvMidUsd)} est.`;
+  }
+  return "Not reliably estimable";
+}

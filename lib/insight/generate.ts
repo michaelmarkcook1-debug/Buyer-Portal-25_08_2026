@@ -119,6 +119,12 @@ Therefore:
   activity suggests approximately $X\u2013$Y". Disclosed and inferred value
   must never be silently blended into one figure. Never explain how an
   estimate was derived.
+- WITHHELD VALUE: where a contract shows "Not reliably estimable", AG has
+  deliberately withheld an estimate. Never reconstruct, guess, or imply a
+  value for it — not from comparable deals, vendor size, contract length, or
+  anything else in the context. Say the value is not disclosed, or leave it
+  out. Never mention confidence, comparable counts, model versions, or any
+  other inference machinery.
 - DATASET ABSENCE: an absence in the observed dataset is never an absence
   in the market. Allowed: "no consumption-based pricing was identified in
   the observed agreement dataset". Not allowed: "the market has no
@@ -348,7 +354,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v12", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v13", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

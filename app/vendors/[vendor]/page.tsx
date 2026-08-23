@@ -11,7 +11,7 @@ import {
 } from "@/components/ui";
 import { fetchAgRenewals } from "@/lib/adapters/decision-api";
 import { getDevelopments, getVendorExposure } from "@/lib/data/facts";
-import { count, money, monthsRemaining, shortDate } from "@/lib/format";
+import { count, formatTcvDisplay, money, monthsRemaining, shortDate } from "@/lib/format";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { levelScore, type Metric, type VendorIntel } from "@/lib/metrics/types";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
@@ -265,11 +265,7 @@ export default async function VendorDetail({
                         <td className="px-5 py-2.5 font-medium" style={{ color: "var(--fg)" }}>{e.client}</td>
                         <td className="px-4 py-2.5" style={{ color: "var(--fg-muted)" }}>{e.line ?? "Unclassified"}</td>
                         <td className="tabular px-4 py-2.5 text-right" style={{ color: "var(--fg)" }}>
-                          {e.valueProvenance === "inferred"
-                            ? (e.tcvLowUsd != null && e.tcvHighUsd != null
-                                ? `${money(e.tcvLowUsd)}\u2013${money(e.tcvHighUsd)} inf.`
-                                : `\u2248${money(e.tcvMidUsd)} inf.`)
-                            : money(e.tcvUsd)}
+                          {formatTcvDisplay(e)}
                         </td>
                         <td className="px-4 py-2.5">
                           <span

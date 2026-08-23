@@ -569,7 +569,7 @@ describe("opportunity reasons (sprint 4 §10/§20)", () => {
 
 /* ── Value provenance (directive 2026-08-23) ── */
 
-import { formatValueMix, inferredDominates } from "@/lib/format";
+import { formatTcvDisplay, formatValueMix, inferredDominates } from "@/lib/format";
 
 describe("TCV value provenance (2026-08-23 directive)", () => {
   it("an inferred midpoint can never render as disclosed fact", () => {
@@ -608,5 +608,43 @@ describe("TCV value provenance (2026-08-23 directive)", () => {
     expect(ok.blocked).toEqual([]);
     const bad = validateInsight("Your contracts include $110M of inferred exposure.", ctx);
     expect(bad.ok).toBe(false);
+  });
+});
+
+describe("TCV v2.1 buyer-facing states (2026-08-23 deployment directive §3/§26)", () => {
+  it("known value renders as a plain figure", () => {
+    expect(formatTcvDisplay({ tcvUsd: 120_000_000, valueProvenance: "disclosed" })).toBe("$120.0M");
+  });
+
+  it("approved inference renders as a range, never a bare midpoint", () => {
+    const out = formatTcvDisplay({ tcvUsd: null, valueProvenance: "inferred", tcvLowUsd: 18_000_000, tcvMidUsd: 22_000_000, tcvHighUsd: 27_000_000 });
+    expect(out).toContain("–");
+    expect(out).toContain("$18.0M");
+    expect(out).toContain("$27.0M");
+    expect(out).not.toContain("22");
+  });
+
+  it("withheld inference says so explicitly — never an em-dash, never a guess", () => {
+    expect(formatTcvDisplay({ tcvUsd: null, valueProvenance: "insufficient_evidence" })).toBe("Not reliably estimable");
+    expect(formatTcvDisplay({ tcvUsd: null, valueProvenance: null })).toBe("Not reliably estimable");
+    // a v1 leftover with no range must not resurface as an estimate
+    expect(formatTcvDisplay({ tcvUsd: null, valueProvenance: "insufficient_evidence", tcvMidUsd: 19_200_000 })).toBe("Not reliably estimable");
+  });
+
+  it("no confidence, comparable count, model version or methodology is ever displayed", () => {
+    const states = [
+      formatTcvDisplay({ tcvUsd: 120_000_000, valueProvenance: "disclosed" }),
+      formatTcvDisplay({ tcvUsd: null, valueProvenance: "inferred", tcvLowUsd: 18_000_000, tcvHighUsd: 27_000_000 }),
+      formatTcvDisplay({ tcvUsd: null, valueProvenance: "insufficient_evidence" }),
+    ];
+    for (const s of states) {
+      expect(s).not.toMatch(/confiden|comparable|v2\.1|score|model|method|evidence completeness/i);
+    }
+  });
+
+  it("insight must not reconstruct a withheld value", () => {
+    const ctx = JSON.stringify({ f: "Atos/Viasat digital workplace agreement — TCV: Not reliably estimable" });
+    const invented = validateInsight("The Atos–Viasat agreement is worth approximately $19.2M.", ctx);
+    expect(invented.ok).toBe(false);
   });
 });
