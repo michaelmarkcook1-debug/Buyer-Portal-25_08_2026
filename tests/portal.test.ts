@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allowedNumbers, validateInsight } from "@/lib/insight/validate";
 import { baselineFrom, parseCookieValue, scopedTickers, tickersFromParam } from "@/lib/scope-core";
@@ -14,6 +16,7 @@ import {
   gainShareLevel,
   mixCoverage,
   newestOf,
+  showsConfidenceCaveat,
   pricingRead,
   procurementHeatState,
 } from "@/lib/metrics/rules";
@@ -264,8 +267,11 @@ describe("data-engine truth gates (Sprint 1 §18)", () => {
     expect(() => assertHistoryMode("observed_snapshot", false)).toThrow(/History integrity/);
     expect(assertHistoryMode("observed_snapshot", true)).toBe("observed_snapshot");
     expect(assertHistoryMode("reconstructed", false)).toBe("reconstructed");
-    expect(historyModeLabel("reconstructed")).toContain("reconstructed");
-    expect(historyModeLabel("observed_snapshot")).toContain("observed");
+    // The buyer-facing wording is plain language (§16), but a rebuilt series
+    // must still never present itself as a contemporaneous snapshot.
+    expect(historyModeLabel("reconstructed")).not.toMatch(/snapshot|observed reading/i);
+    expect(historyModeLabel("reconstructed")).not.toBe(historyModeLabel("observed_snapshot"));
+    expect(historyModeLabel("reconstructed")).toMatch(/historical|dated evidence/i);
   });
 
   it("financial headroom never fabricates for unlisted vendors", () => {
@@ -550,8 +556,9 @@ describe("opportunity reasons (sprint 4 §10/§20)", () => {
   it("levels are explained by drivers, never black-box", () => {
     const r = opportunityReason("high", "medium", [basis("AI capability events (materiality-gated)"), basis("AnalystGenius talent signals")], true);
     expect(r).toContain("High — primarily driven by");
-    expect(r).toContain("AI capability events");
+    expect(r).toContain("material AI capability change");
     expect(r).toContain("workforce movement");
+    expect(r).not.toMatch(/materiality-gated/i); // buyer-facing copy stays plain (§16)
   });
 
   it("high opportunity + low confidence produces cautious investigate-first language", () => {
@@ -646,5 +653,45 @@ describe("TCV v2.1 buyer-facing states (2026-08-23 deployment directive §3/§26
     const ctx = JSON.stringify({ f: "Atos/Viasat digital workplace agreement — TCV: Not reliably estimable" });
     const invented = validateInsight("The Atos–Viasat agreement is worth approximately $19.2M.", ctx);
     expect(invented.ok).toBe(false);
+  });
+});
+
+describe("pilot-readiness sprint (2026-08-23)", () => {
+  it("buyer-facing history wording stays plain but never claims snapshot status", () => {
+    const reconstructed = historyModeLabel("reconstructed");
+    expect(reconstructed).not.toMatch(/reconstructed from dated observations/i);
+    expect(reconstructed).not.toMatch(/snapshot/i);
+    expect(historyModeLabel("observed_snapshot")).not.toBe(reconstructed);
+  });
+
+  it("opportunity reasons carry no engineering jargon", () => {
+    const b = (source: string) => ({ text: "x 1", source, ownership: "market" as const });
+    const r = opportunityReason("very-high", "medium", [b("AI capability events"), b("FRED")], false);
+    expect(r).not.toMatch(/materiality-gated|canonical spine|reconstructed from dated/i);
+  });
+
+  it("confidence is stated only when it changes how a reading should be used", () => {
+    // High/medium readings carry no confidence chrome; thin ones still say so.
+    expect(showsConfidenceCaveat("high")).toBe(false);
+    expect(showsConfidenceCaveat("medium")).toBe(false);
+    expect(showsConfidenceCaveat("low")).toBe(true);
+    expect(showsConfidenceCaveat("insufficient")).toBe(true);
+  });
+
+  it("a withheld briefing never names the validation machinery to the buyer", () => {
+    // The calm state is copy, not analysis — the reasons stay in server logs.
+    const calm = "Analyst Insight temporarily unavailable.";
+    expect(calm).not.toMatch(/grounding|validator|firewall|ownership|numeric/i);
+  });
+
+  it("refresh remains manual — no scheduler is armed in source", () => {
+    const wf = readFileSync(
+      resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026", ".github/workflows/data-refresh.yml"),
+      "utf8",
+    );
+    // A schedule: trigger anywhere in the workflow would arm automatic refresh.
+    expect(wf).not.toMatch(/^\s{2}schedule:/m);
+    expect(wf).toMatch(/workflow_dispatch/);
+    expect(wf).toMatch(/CURRENTLY DISABLED/i);
   });
 });

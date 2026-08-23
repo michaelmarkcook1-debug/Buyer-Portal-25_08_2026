@@ -200,7 +200,7 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
       headline: `${name}: ${strongest.headline.slice(0, 140)}`,
       implication: IMPLICATION[strongest.eventType]!,
       opportunityType: strongest.eventType === "pricing_model_change" ? "gain-sharing" : null,
-      change: `Observed ${shortDate(strongest.date)} (materiality-gated event)`,
+      change: `Observed ${shortDate(strongest.date)} · material AI capability change`,
       confidence: strongest.materiality >= 5 ? "high" : "medium",
       date: strongest.date,
       sourceUrl: null,

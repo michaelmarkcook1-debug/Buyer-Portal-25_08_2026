@@ -21,7 +21,7 @@ export type { InsightTab };
 export type InsightResult =
   | { status: "ok"; text: string; warnings: string[] }
   | { status: "not-configured"; reason: string }
-  | { status: "blocked"; reasons: string[] }
+  | { status: "blocked"; reasons: string[]; /** rejected draft — diagnostics only, never rendered */ blockedText?: string }
   | { status: "no-scope" };
 
 
@@ -148,6 +148,12 @@ Do not use phrases such as:
 - navigate uncertainty
 - leverage emerging opportunities
 unless the sentence contains a specific substantive recommendation.
+
+LENGTH: aim for 130-155 words. Spend them on judgement, causality,
+implication and what the buyer should do — not on reciting metrics the reader
+can already see, repeating the same evidence twice, or qualifying a point that
+is already caveated elsewhere on the page. Never truncate an argument
+mid-thought to hit the count; cut a redundant clause instead.
 
 Write like an experienced industry analyst speaking privately with a CIO,
 CPO, CFO, transformation executive or strategic sourcing leader.
@@ -290,7 +296,7 @@ async function generateUncached(context: string): Promise<InsightResult> {
           insight: {
             type: "string",
             description:
-              "The private executive briefing: 120–200 words of flowing prose. Every figure must appear in the supplied context.",
+              "The private executive briefing: 130–155 words of flowing prose. Every figure must appear in the supplied context.",
           },
         },
         required: ["insight"],
@@ -317,14 +323,14 @@ async function generateUncached(context: string): Promise<InsightResult> {
         description: "Submit the corrected analyst insight for this briefing.",
         input_schema: {
           type: "object",
-          properties: { insight: { type: "string", description: "The corrected private executive briefing: 120-180 words of flowing prose. Every figure must appear in the supplied context." } },
+          properties: { insight: { type: "string", description: "The corrected private executive briefing: 130-155 words of flowing prose. Every figure must appear in the supplied context." } },
           required: ["insight"],
         },
       },
     });
-    if (!retry.ok) return { status: "blocked", reasons: validation.blocked };
+    if (!retry.ok) return { status: "blocked", reasons: validation.blocked, blockedText: result.value.insight ?? "" };
     validation = validateInsight(retry.value.insight ?? "", context);
-    if (!validation.ok) return { status: "blocked", reasons: validation.blocked };
+    if (!validation.ok) return { status: "blocked", reasons: validation.blocked, blockedText: retry.value.insight ?? "" };
   }
   return { status: "ok", text: validation.text, warnings: validation.warnings };
 }
@@ -354,7 +360,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v13", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v14", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
@@ -375,10 +381,69 @@ export async function getInsight(
     // validator compiled into THIS runtime. A cache entry written by a stale
     // runtime (the Sprint 2 incident) is caught here and never rendered.
     const recheck = validateInsight(result.text, context);
-    if (!recheck.ok) return { status: "blocked", reasons: recheck.blocked };
+    if (!recheck.ok) {
+      logInsightBlock({ stage: "stale-cache-recheck", reasons: recheck.blocked, text: result.text, tab, opts, scopeSig, key });
+      return { status: "blocked", reasons: recheck.blocked };
+    }
     return result;
   } catch (e) {
-    if (e instanceof InsightFailure) return e.result;
-    return { status: "blocked", reasons: [`Insight generation failed: ${(e as Error).message}`] };
+    if (e instanceof InsightFailure) {
+      if (e.result.status === "blocked") {
+        logInsightBlock({ stage: "generation", reasons: e.result.reasons, text: e.result.blockedText, tab, opts, scopeSig, key });
+      }
+      return e.result;
+    }
+    const message = `Insight generation failed: ${(e as Error).message}`;
+    logInsightBlock({ stage: "exception", reasons: [message], tab, opts, scopeSig, key });
+    return { status: "blocked", reasons: [message] };
   }
+}
+
+/**
+ * Diagnostic record of a withheld briefing — server logs only, never rendered.
+ * Buyers see a calm unavailable state; engineers need the exact rule, the
+ * offending sentence and the scope to reproduce it. No inference internals or
+ * proprietary methodology are written here.
+ */
+function logInsightBlock(input: {
+  stage: "generation" | "stale-cache-recheck" | "exception";
+  reasons: string[];
+  text?: string;
+  tab: InsightTab;
+  opts: { focalTicker?: string; scenario?: Scenario | null };
+  scopeSig: string;
+  key: string[];
+}): void {
+  const offending = input.text ? firstOffendingSentence(input.text, input.reasons) : null;
+  console.warn(
+    "[analyst-insight:blocked] " +
+      JSON.stringify({
+        stage: input.stage,
+        tab: input.tab,
+        focalTicker: input.opts.focalTicker ?? null,
+        scenario: input.opts.scenario?.id ?? null,
+        scope: input.scopeSig,
+        validatorVersion: VALIDATOR_VERSION,
+        cacheKey: input.key.join("|"),
+        rules: input.reasons,
+        offendingSentence: offending,
+        at: new Date().toISOString(),
+      }),
+  );
+}
+
+/** Best-effort: the sentence a numeric/ownership rule most likely fired on. */
+function firstOffendingSentence(text: string, reasons: string[]): string | null {
+  const quoted = reasons.map((r) => /["“']([^"”']{6,})["”']/.exec(r)?.[1]).find(Boolean);
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  if (quoted) {
+    const hit = sentences.find((s) => s.includes(quoted));
+    if (hit) return hit.trim().slice(0, 300);
+  }
+  const token = reasons.map((r) => /\b(\d[\d,.]*)\b/.exec(r)?.[1]).find(Boolean);
+  if (token) {
+    const hit = sentences.find((s) => s.includes(token));
+    if (hit) return hit.trim().slice(0, 300);
+  }
+  return sentences[0]?.trim().slice(0, 300) ?? null;
 }

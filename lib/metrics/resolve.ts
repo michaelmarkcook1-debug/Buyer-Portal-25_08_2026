@@ -172,8 +172,8 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
   const eventCountBasis: Basis | null =
     ev && materialT12 > 0
       ? {
-          text: `${count(materialT12)} materiality-gated AI capability event${materialT12 === 1 ? "" : "s"} on this vendor in the trailing 12 months${highT12 > 0 ? ` (${count(highT12)} high-materiality)` : ""}; latest ${shortDate(ev.latestDate)}. Generic announcements are excluded by the gate.`,
-          source: "AI capability events (materiality-gated)", ownership: "market", asOf: ev.latestDate,
+          text: `${count(materialT12)} material AI capability change${materialT12 === 1 ? "" : "s"} at this vendor in the trailing 12 months${highT12 > 0 ? ` (${count(highT12)} major)` : ""}; latest ${shortDate(ev.latestDate)}. Routine announcements are excluded.`,
+          source: "Material AI capability changes", ownership: "market", asOf: ev.latestDate,
         }
       : null;
   const eventBasis: Basis[] = (ev?.events ?? [])
@@ -181,7 +181,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     .slice(0, 2)
     .map((e) => ({
       text: `${shortDate(e.date)}: ${e.headline}.`,
-      source: "AI capability events (materiality-gated)", ownership: "market" as const, asOf: e.date,
+      source: "Material AI capability changes", ownership: "market" as const, asOf: e.date,
     }));
   const COMMERCIAL_MODEL_EVENTS = new Set(["pricing_model_change", "productivity_disclosure", "ai_revenue_or_bookings"]);
   const commercialModelEvent = (ev?.events ?? []).find((e) => e.materiality >= 3 && COMMERCIAL_MODEL_EVENTS.has(e.eventType)) ?? null;
@@ -741,7 +741,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     aiProductivityOpportunity = insufficientMetric(
       "aiProductivityOpportunity",
       "AI Productivity Opportunity",
-      "No AI-capability reading and no materiality-gated capability events are held for this vendor.",
+      "No AI-capability reading and no material capability changes are held for this vendor.",
     );
   } else {
     const state: MetricState =
@@ -781,7 +781,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       automationOpportunity = insufficientMetric(
         "automationOpportunity",
         "Automation Opportunity",
-        "No automation-capability reading and no materiality-gated capability events are held for this vendor.",
+        "No automation-capability reading and no material capability changes are held for this vendor.",
       );
     } else {
       const basis: Basis[] = [];
@@ -835,7 +835,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     if (commercialModelEvent)
       basis.push({
         text: `${shortDate(commercialModelEvent.date)}: ${commercialModelEvent.headline} — observed commercial-model evidence.`,
-        source: "AI capability events (materiality-gated)", ownership: "market", asOf: commercialModelEvent.date,
+        source: "Material AI capability changes", ownership: "market", asOf: commercialModelEvent.date,
       });
     if (marginPrim)
       basis.push({
@@ -1105,10 +1105,51 @@ function overallFrom(opps: Record<OpportunityType, Opportunity>, metrics: Vendor
     confidence: defined.length >= 3 ? "medium" : defined.length >= 1 ? "low" : "insufficient",
     why: defined.slice(0, 2).flatMap((o) => o.why.slice(0, 1)),
     investigate: [],
+    // §22: name the strongest family AND what actually distinguishes THIS
+    // vendor. Listing evidence sources alone gave every vendor drawing on the
+    // same families an identical sentence, which read as boilerplate.
     reason: top
-      ? `Strongest lever: ${FAMILY_WORD[top.type]}. ${top.reason ?? ""}`.trim()
+      ? `Strongest lever: ${FAMILY_WORD[top.type]}. ${vendorDiscriminator(metrics, top.type) ?? top.reason ?? ""}`.trim()
       : "Insufficient evidence for a reliable opportunity read.",
   };
+}
+
+/**
+ * Why THIS vendor's strongest lever is strong, in its own terms (§22).
+ *
+ * Two clauses: what the lever rests on, then the condition that most
+ * distinguishes this vendor from peers pulling the same lever. Naming
+ * evidence sources alone gave every vendor an identical sentence, which read
+ * as boilerplate and defeated the comparison. Returns null when nothing
+ * distinguishing is held, so the caller falls back rather than inventing a
+ * difference.
+ */
+function vendorDiscriminator(m: VendorMetrics, lever: OpportunityType): string | null {
+  const strong = (x: Metric): boolean => x.movement === "materially-improving" || x.movement === "materially-deteriorating";
+
+  const leverClause: Record<OpportunityType, string | null> = {
+    pricing: m.pricingPressure.state === "favourable" ? "Their own pricing record leans toward the buyer" : null,
+    automation: m.automationOpportunity.state === "favourable" ? "Advanced automation capability sits over a labour-heavy delivery base" : null,
+    "gain-sharing": "Delivery productivity is moving faster than commercial terms have followed",
+    "commercial-leverage": m.buyerLeverage.state === "favourable" ? "Observed end-of-term activity is concentrating in the buyer's favour" : null,
+    "market-test": "Credible alternatives are active in the same lines of work",
+  };
+
+  const secondary: Array<[boolean, string]> = [
+    [m.aiProductivityOpportunity.state === "favourable" && strong(m.aiProductivityOpportunity), "their AI delivery capability has moved materially, so productivity assumptions set earlier deserve challenge"],
+    [m.automationOpportunity.state === "favourable" && strong(m.automationOpportunity) && lever !== "automation", "their automation capability is advancing faster than their delivery model has repriced"],
+    [m.talentPressure.state === "unfavourable", "their delivery workforce is contracting, which is a capacity question on multi-year commitments"],
+    [m.dealMarketHeat.movement === "materially-deteriorating", "their observed win pace has cooled, shifting demand pressure toward the buyer"],
+    [m.providerMomentum.movement === "materially-deteriorating", "their commercial momentum is deteriorating on the latest readings"],
+    [m.financialHeadroom.state === "favourable", "their margin position leaves observed room for commercial flexibility"],
+    [m.operationalRisk.state === "unfavourable", "their operational risk reading is unfavourable, which belongs in any continuity discussion"],
+  ];
+
+  const lead = leverClause[lever];
+  const tail = secondary.find(([hit]) => hit)?.[1] ?? null;
+  if (!lead && !tail) return null;
+  if (!lead) return `${tail!.charAt(0).toUpperCase()}${tail!.slice(1)}.`;
+  return tail ? `${lead}, and ${tail}.` : `${lead}.`;
 }
 
 /* ───────────────────── market rollups ───────────────────── */
@@ -1654,8 +1695,8 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     }
     const eventLine =
       evTotal > 0
-        ? `${count(evTotal)} materiality-gated AI capability events across ${count(evVendors)} selected vendors in the trailing 12 months (latest ${shortDate(evLatest)}; generic announcements excluded by the gate; event collection currently ends at that date).`
-        : `No materiality-gated AI capability events in the observed 12-month dataset${evLatest ? ` (collection currently ends ${shortDate(evLatest)})` : ""} — a dataset statement, not a market one.`;
+        ? `${count(evTotal)} material AI capability changes across ${count(evVendors)} selected vendors in the trailing 12 months (latest ${shortDate(evLatest)}; routine announcements excluded; evidence collected to that date).`
+        : `No material AI capability changes in the observed 12-month dataset${evLatest ? ` (collection currently ends ${shortDate(evLatest)})` : ""} — a dataset statement, not a market one.`;
     const snapshotLine =
       a.assessed === 0
         ? ` AI-readiness snapshots begin ${shortDate(trackedSince)}; a full 12-month readiness series is still accruing.`
@@ -1670,7 +1711,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         : a.net > 0 ? "improving" : a.net < 0 ? "deteriorating" : "stable",
       detail: eventLine + snapshotLine,
       confidence: evTotal > 0 ? "medium" : "low",
-      source: "AI capability events (materiality-gated) · Canonical vendor snapshots",
+      source: "Material AI capability changes · Vendor readings",
     });
   }
 

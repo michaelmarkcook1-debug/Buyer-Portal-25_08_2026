@@ -20,9 +20,11 @@ export function MetricCard({ m }: { m: Metric }) {
           {m.headline}
         </p>
       ) : null}
-      <div className="code mt-auto pt-1 text-[0.7rem]" style={{ color: "var(--fg-muted)" }}>
-        Confidence: {CONFIDENCE_LABEL[m.confidence]}
-      </div>
+      {m.confidence === "low" || m.confidence === "insufficient" ? (
+        <div className="code mt-auto pt-1 text-[0.7rem]" style={{ color: "var(--fg-muted)" }}>
+          {m.confidence === "insufficient" ? "Insufficient evidence" : "Directional — evidence is thin"}
+        </div>
+      ) : null}
     </Panel>
   );
 }
@@ -63,12 +65,25 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
           </div>
         ))}
       </div>
-      <div
-        className="code px-5 py-2 text-[0.68rem]"
-        style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)" }}
-      >
-        Confidence {metrics.map((m) => CONFIDENCE_LABEL[m.confidence]).join(" · ")} — in reading order. States lead; supporting evidence sits below.
-      </div>
+      {/* §18: confidence governs what may be said and how strongly — it is not
+          a dashboard. A run of five values "in reading order" made the reader
+          map labels back onto tiles for no decision benefit. Name only the
+          readings that are thin, because those change how the row should be
+          read; say nothing when they all hold up. */}
+      {(() => {
+        const thin = metrics.filter((m) => m.confidence === "low" || m.confidence === "insufficient");
+        if (thin.length === 0) return null;
+        return (
+          <div
+            className="code px-5 py-2 text-[0.68rem]"
+            style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)" }}
+          >
+            {thin.length === metrics.length
+              ? "Directional across all readings — evidence is thin; treat as a reason to investigate."
+              : `Thinner evidence behind ${thin.map((m) => m.label.toLowerCase()).join(" and ")} — directional, not conclusive.`}
+          </div>
+        );
+      })()}
     </Panel>
   );
 }

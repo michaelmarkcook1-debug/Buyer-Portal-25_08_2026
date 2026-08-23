@@ -64,7 +64,7 @@ export const getSpineQuarterlyFlow = cache(async (tickersKey: string): Promise<H
     label: "Commercial award flow (observed signings per quarter)",
     unit: "contracts",
     points: rows.map((r) => ({ period: r.quarter, value: Number(r.n), n: Number(r.n) })),
-    source: "Curated contract spine (market record)",
+    source: "Contract market record",
     note: "Signing dates are the observations; the newest quarters reflect the spine's own data-as-of, not the calendar.",
   });
 });
@@ -153,7 +153,7 @@ export const getPricingModelMixByYear = cache(async (tickersKey: string): Promis
         n: total,
       };
     }),
-    source: "Curated contract spine — pricing method field (market record)",
+    source: "Contract market record — commercial model",
     note: "Years below n=10 state their n and assert no share.",
   });
 });

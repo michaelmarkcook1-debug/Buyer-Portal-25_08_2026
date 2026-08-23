@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { showsConfidenceCaveat } from "@/lib/metrics/rules";
 import type { Confidence, MetricState, Movement, OpportunityLevel, WatchClass } from "@/lib/metrics/types";
 
 /* ── surfaces ─────────────────────────────────────────────────────── */
@@ -140,10 +141,16 @@ export function MovementText({ movement, className = "" }: { movement: Movement;
   );
 }
 
+/**
+ * §18: state the caveat only when it changes how the reading should be used.
+ * "Confidence: High" on every tile turned the product into a confidence
+ * dashboard; a thin reading still says so, because that is decision-relevant.
+ */
 export function ConfidenceText({ confidence }: { confidence: Confidence }) {
+  if (!showsConfidenceCaveat(confidence)) return null;
   return (
     <span className="eyebrow" style={{ letterSpacing: "0.14em" }}>
-      Confidence: {CONFIDENCE_LABEL[confidence]}
+      {confidence === "insufficient" ? "Insufficient evidence" : "Directional — evidence is thin"}
     </span>
   );
 }

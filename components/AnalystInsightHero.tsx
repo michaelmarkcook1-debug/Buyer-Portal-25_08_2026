@@ -13,7 +13,9 @@ import { Panel } from "./ui";
  */
 
 const TAB_LABEL: Record<InsightTab, string> = {
-  home: "Today",
+  // "Today" would overclaim during manual-refresh testing: the briefing
+  // reflects the last refresh, which may not be today.
+  home: "Since last refresh",
   market: "Market",
   vendors: "Vendors",
   "vendor-detail": "Vendor",
@@ -74,11 +76,10 @@ function InsightResultView({
         style={{ borderColor: "var(--surface-line)" }}
       >
         <div className="font-medium" style={{ color: "var(--fg)" }}>
-          Briefing withheld by the grounding check.
+          Analyst Insight temporarily unavailable.
         </div>
         <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-          The generated analysis did not pass validation against the underlying evidence and is not
-          shown. The canonical intelligence below is unaffected.
+          The intelligence below is complete and unaffected.
         </p>
       </div>
     );

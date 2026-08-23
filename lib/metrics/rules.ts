@@ -394,10 +394,17 @@ export function newestOf(...dates: Array<string | null | undefined>): string | n
 /* ── historical modes: reconstructed history may never claim snapshot status (§18) ── */
 export type HistoricalMode = "reconstructed" | "observed_snapshot";
 
+/**
+ * Buyer-facing wording for a history mode. The distinction still matters —
+ * a rebuilt series may never claim snapshot status — but executives read
+ * "reconstructed from dated observations" as engineering noise, so the same
+ * truth is carried in plain language. The precise mode remains available
+ * internally via `mode` and in the integrity assertion below.
+ */
 export function historyModeLabel(mode: HistoricalMode): string {
   return mode === "observed_snapshot"
-    ? "observed snapshots"
-    : "reconstructed from dated observations";
+    ? "tracked from the date each reading was taken"
+    : "12-month historical view, built from dated evidence";
 }
 
 /** A series builder must declare its mode; observed requires system-calculated points. */
@@ -413,7 +420,7 @@ export function assertHistoryMode(mode: HistoricalMode, systemCalculatedAt: bool
 /* §10/§15: plain-language driver derivation from the basis SOURCES actually
    present — interpretation without exposing weights. */
 const DRIVER_LABELS: Array<[RegExp, string]> = [
-  [/AI capability events/i, "materiality-gated AI capability events"],
+  [/AI capability events/i, "material AI capability change"],
   [/vendor catalog/i, "AI capability readings"],
   [/talent signals/i, "workforce movement"],
   [/EDGAR/i, "filed financial position"],
@@ -450,4 +457,14 @@ export function opportunityReason(level: OpportunityLevel, confidence: Confidenc
     r += " Confidence is low — directional, not conclusive.";
   }
   return r;
+}
+
+/**
+ * §18: whether a reading's confidence is worth telling the buyer about.
+ * High and medium readings carry no caveat — stating it on every tile turned
+ * the product into a confidence dashboard. Thin readings still say so,
+ * because that genuinely changes how the reading should be used.
+ */
+export function showsConfidenceCaveat(confidence: Confidence): boolean {
+  return confidence === "low" || confidence === "insufficient";
 }

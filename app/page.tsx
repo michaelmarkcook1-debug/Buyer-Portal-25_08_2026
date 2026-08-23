@@ -1,4 +1,5 @@
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
+import type { WatchSignal } from "@/lib/metrics/types";
 import { MarketStateBand } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { SignalCard } from "@/components/SignalCard";
@@ -11,6 +12,34 @@ import { SEC_MEANING } from "@/lib/metrics/watch";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
+
+/**
+ * §10: collapse ACT signals that share one underlying development. Several
+ * vendors showing the same implication lead to a single buyer action, so they
+ * belong on one comparative card rather than as near-identical repeats.
+ * Order is preserved; a lone signal stays a normal card.
+ */
+function groupByImplication(signals: WatchSignal[]): WatchSignal[][] {
+  const groups = new Map<string, WatchSignal[]>();
+  for (const s of signals) {
+    const key = s.implication.trim().toLowerCase();
+    const g = groups.get(key);
+    if (g) g.push(s);
+    else groups.set(key, [s]);
+  }
+  return [...groups.values()];
+}
+
+/** Cards actually rendered after renewal and implication grouping. */
+function renderedSignalTotal(watch: WatchSignal[]): number {
+  const isRenewal = (h: string) => h.includes("observed renewal activity concentrating");
+  const renewal = watch.filter((s) => isRenewal(s.headline));
+  const rest = watch.filter((s) => !isRenewal(s.headline));
+  const acts = groupByImplication(rest.filter((s) => s.classification === "ACT")).length;
+  const others = rest.filter((s) => s.classification !== "ACT").length;
+  const renewalCards = renewal.length >= 2 ? 1 : renewal.length;
+  return acts + others + renewalCards;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
   }
 
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
+  const renderedSignalCount = renderedSignalTotal(intel.watch);
   const tickersKey = [...intel.scope.tickers].sort().join(",");
   const developments = (await getDevelopments(tickersKey, 12)).slice(0, 5);
 
@@ -67,7 +97,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
         <SectionHeader
           eyebrow="Signals"
           title="What matters today"
-          aside={intel.watch.length > 0 ? `${intel.watch.length} of a maximum 5` : undefined}
+          aside={renderedSignalCount > 0 ? `${renderedSignalCount} development${renderedSignalCount === 1 ? "" : "s"} worth attention` : undefined}
         />
         <div className="mt-5 space-y-3">
           {intel.watch.length > 0 ? (
@@ -80,11 +110,37 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
               const rest = intel.watch.filter((s) => !isRenewal(s.headline));
               const restActs = rest.filter((s) => s.classification === "ACT");
               const restOther = rest.filter((s) => s.classification !== "ACT");
+              /* §10: several vendors showing the SAME underlying development
+                 lead to one buyer action, so they render as one comparative
+                 card. Repeating an identical implication per vendor inflated
+                 ACT and made the list look busier than the evidence is. */
+              const actGroups = groupByImplication(restActs);
               return (
                 <>
-                  {restActs.map((s, i) => (
-                    <SignalCard key={`a${i}`} s={s} />
-                  ))}
+                  {actGroups.map((g, i) =>
+                    g.length === 1 ? (
+                      <SignalCard key={`a${i}`} s={g[0]!} />
+                    ) : (
+                      <Panel key={`a${i}`} className="px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <ClassChip cls={g[0]!.classification} />
+                          <span className="font-medium" style={{ color: "var(--fg)" }}>
+                            {g[0]!.implication.split(". ")[0]} — across {g.length} vendors
+                          </span>
+                        </div>
+                        <ul className="m-0 mt-3 list-none space-y-2 p-0">
+                          {g.map((s) => (
+                            <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.84rem]">
+                              <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
+                              <span className="min-w-0 flex-1" style={{ color: "var(--fg-muted)" }}>
+                                {s.headline}{s.change ? ` · ${s.change}` : ""}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </Panel>
+                    ),
+                  )}
                   {renewal.length >= 2 ? (
                     <Panel className="px-5 py-4">
                       <div className="flex flex-wrap items-center gap-3">

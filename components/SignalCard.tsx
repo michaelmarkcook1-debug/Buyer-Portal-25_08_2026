@@ -29,7 +29,7 @@ export function SignalCard({ s }: { s: WatchSignal }) {
       </p>
       <div className="code mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.66rem]" style={{ color: "var(--fg-dim)" }}>
         {s.opportunityType ? <span>Opportunity: {OPPORTUNITY_LABELS[s.opportunityType]}</span> : null}
-        <span>Confidence: {CONFIDENCE_LABEL[s.confidence]}</span>
+        {s.confidence === "low" || s.confidence === "insufficient" ? <span>Directional — evidence is thin</span> : null}
         {s.sourceUrl ? (
           <a href={s.sourceUrl} target="_blank" rel="noreferrer" style={{ color: "var(--rail-ink)" }}>
             Source ↗

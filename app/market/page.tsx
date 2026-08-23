@@ -76,11 +76,14 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         </Panel>
       </section>
 
+      {/* §20: when every row would read "Direction not asserted", the section
+          asserts nothing. Collapse it to the volume it genuinely supports
+          rather than filling a layout slot with a repeated non-statement. */}
       <section className="mt-12">
         <SectionHeader
           eyebrow="Service families"
-          title="Services pricing direction"
-          aside="Service is an attribute of the intelligence — not a configuration"
+          title="Contract volume by service family"
+          aside="Direction is not asserted while contract evidence is this old"
         />
         <div className="mt-5">
           {lines.length > 0 ? (
@@ -93,9 +96,6 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                     </span>
                     <span className="tabular text-[0.84rem]" style={{ color: "var(--fg-muted)" }}>
                       {count(l.contracts)} contracts in scope · {count(l.inPlay24)} in play
-                    </span>
-                    <span className="ml-auto text-[0.8rem] italic" style={{ color: "var(--fg-dim)" }}>
-                      Direction not asserted — spine last refreshed {shortDate(intel.spine.lastIngest)}
                     </span>
                   </li>
                 ))}
