@@ -70,9 +70,13 @@ export function ScopeBar({
             }}
           >
             <div className="eyebrow">Define your market</div>
-            <p className="mt-1.5 mb-3 text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            <p className="mt-1.5 mb-2 text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               Select the vendors you contract with or want to track. Your selection defines every
               metric, comparison and insight in the portal.
+            </p>
+            <p className="mt-0 mb-3 text-[0.78rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+              Contract observations are market evidence — agreements between these vendors and other
+              organisations. AnalystGenius holds none of your own contracts, spend or renewal dates.
             </p>
             <form method="GET" action="/select">
               <input type="hidden" name="return" value={returnTo} />

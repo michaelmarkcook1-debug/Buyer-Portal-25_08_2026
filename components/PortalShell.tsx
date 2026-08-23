@@ -85,10 +85,15 @@ export function FirstRunSelector({
         Select the Services vendors you care about.
       </h2>
       <p className="mt-3 max-w-[64ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-        AnalystGenius continuously identifies where market change has created new commercial
+        AnalystGenius identifies where market change has created new commercial
         opportunity. Your selected vendors define the market: every metric, benchmark, ranking and
         analyst insight is scoped to them — vendors you contract with, vendors you are tracking, or
         the whole supported market.
+      </p>
+      <p className="mt-2.5 max-w-[64ch] text-[0.85rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+        Contract observations throughout the portal are market evidence — agreements between these
+        vendors and other organisations. AnalystGenius holds none of your own contracts, spend or
+        renewal dates.
       </p>
       <form method="GET" action="/select" className="mt-6">
         <input type="hidden" name="return" value={returnTo} />
@@ -148,8 +153,11 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           </ul>
         ) : null}
         <p className="mt-3 mb-0 max-w-[100ch] text-[0.72rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
-          AnalystGenius intelligence is shown as result, direction, confidence, freshness and analyst
-          interpretation. Inference methodology is proprietary and is not exposed. {blocked.reason}{" "}
+          Evidence families above move at different speeds — filings, AI capability events,
+          procurement and market data refresh faster than the commercial contract record, and a
+          conclusion may rest on the fresher families. Opportunity readings are directional
+          indicators of where commercial value may exist, not guaranteed savings.
+          Inference methodology is proprietary and is not exposed. {blocked.reason}{" "}
           Where evidence is insufficient, the portal says so rather than estimating.
         </p>
         {/* Approved brand mark — indigo variant, deliberately set on a warm-white

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
+import { challengePoints } from "@/lib/metrics/challenge";
 import { MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import {
@@ -110,6 +111,7 @@ export default async function VendorDetail({
 
   const m = focal.metrics;
   const ranks = relativePosition(focal, intel.vendors);
+  const challenges = challengePoints(focal, intel.vendors);
   const comparedWith =
     intel.scope.mode === "whole_market"
       ? `the whole supported market (${intel.scope.names.length} vendors)`
@@ -153,6 +155,38 @@ export default async function VendorDetail({
                 <li>Strongest commercial discussion topic: {focal.differentiation.discuss}</li>
               ) : null}
             </ul>
+          </Panel>
+        </section>
+      ) : null}
+
+      {challenges.length > 0 ? (
+        <section className="mt-10">
+          <SectionHeader
+            eyebrow="Commercial conversation"
+            title="What to challenge"
+            aside="Derived from this vendor's evidence and your selected market"
+          />
+          <Panel className="mt-5 px-6 py-5">
+            <ol className="m-0 flex list-none flex-col gap-4 p-0">
+              {challenges.map((c, i) => (
+                <li key={i} className="flex gap-4">
+                  <span className="code shrink-0 text-[0.78rem]" style={{ color: "var(--accent-ink)" }}>
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="m-0 text-[0.96rem] leading-snug font-medium" style={{ color: "var(--fg)" }}>
+                      {c.point}
+                    </p>
+                    <p className="m-0 mt-1 text-[0.85rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                      Because {c.because}.
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="code mt-4 text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+              Discussion prompts from market evidence — the portal holds none of the reader's own contracts or spend.
+            </div>
           </Panel>
         </section>
       ) : null}
