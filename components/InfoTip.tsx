@@ -10,6 +10,10 @@ import type { MetricSemantics } from "@/lib/metrics/dictionary";
  *
  * Placement is at the LABEL level, never per repeated cell, so a dense table
  * gains one affordance per column rather than one per value.
+ *
+ * The touch target comes from .hit-target's overlay, NOT from .tap: .tap's
+ * 44px min-height would stretch this fixed-width control into a tall pill on
+ * mobile. The overlay keeps the dot round at every width.
  */
 
 let seq = 0;
@@ -35,7 +39,7 @@ export function InfoTip({ content }: { content: InfoContent }) {
         popovertarget={id}
         aria-label={`About ${content.name}`}
         title={`${content.name}: ${content.definition}`}
-        className="tap hit-target inline-flex h-[15px] w-[15px] shrink-0 cursor-pointer items-center justify-center rounded-full align-middle text-[10px] leading-none transition-colors"
+        className="hit-target inline-flex h-[15px] w-[15px] shrink-0 cursor-pointer items-center justify-center rounded-full align-middle text-[10px] leading-none transition-colors"
         style={{
           border: "1px solid var(--surface-line)",
           color: "var(--fg-dim)",

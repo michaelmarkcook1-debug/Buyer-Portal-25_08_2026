@@ -92,21 +92,25 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     "Automation opportunity",
     "Automation capability set against a labour-heavy delivery base.",
     "High means capability is advanced relative to how the work is still delivered — a basis to challenge unit economics.",
+    "Capability is not deployment — it does not mean your own work is being automated today.",
   ),
   aiProductivityOpportunity: opportunity(
     "AI productivity opportunity",
     "Whether AI delivery capability has moved enough to challenge productivity assumptions.",
     "High means capability has advanced materially, so assumptions priced in earlier may be out of date.",
+    "It is a reason to re-test assumptions, not evidence that the vendor's costs have fallen.",
   ),
   gainShareOpportunity: opportunity(
     "Gain-sharing opportunity",
     "Whether delivery productivity is improving faster than commercial terms have followed.",
     "High means productivity gains exist that current commercial structures may not yet reflect.",
+    "It does not size a gain-share, and it says nothing about what your current contract already allows.",
   ),
   marketTestOpportunity: opportunity(
     "Market-test opportunity",
     "The strength of the case for testing alternative suppliers or creating competitive tension.",
     "High means credible alternatives are active in the same lines of work.",
+    "Active in the market is not the same as suitable for you — it is a prompt to look, not a shortlist.",
   ),
 
   /* ── vendor condition: strength here is the VENDOR's, not the buyer's ── */
@@ -164,6 +168,7 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     name: "Deal market heat",
     definition: "How competitive the observed demand environment is for these vendors.",
     interpretation: "Cool means vendors are winning less, which moves demand pressure toward the buyer. Hot means the opposite.",
+    caveat: "It reads the public award record for these vendors — not their full pipeline, and not your own demand.",
     window: "Public procurement award flow, trailing 90 days against the prior 90.",
     labels: { favourable: "Cool", stable: "Balanced", unfavourable: "Hot", mixed: "Mixed", insufficient: "Insufficient evidence" },
     effect: { favourable: "favourable", stable: "neutral", unfavourable: "unfavourable", mixed: "caution", insufficient: "unknown" },
@@ -182,6 +187,7 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     name: "Reputation movement",
     definition: "Movement in the AnalystGenius reputation tracker for this vendor.",
     interpretation: "Deteriorating reputation often precedes commercial or delivery strain worth watching.",
+    caveat: "Reputation is a watch signal, not a finding about delivery quality on your own account.",
     labels: { favourable: "Improving", stable: "Stable", unfavourable: "Deteriorating", mixed: "Mixed", insufficient: "Insufficient evidence" },
     effect: { favourable: "neutral", stable: "neutral", unfavourable: "caution", mixed: "caution", insufficient: "unknown" },
   },

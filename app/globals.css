@@ -355,6 +355,31 @@ a {
   }
 }
 
+/* Help panels. Preflight sets `margin: 0` on every element, which overrides
+   the UA stylesheet's `margin: auto` for [popover] and pins the panel to the
+   top-left corner of the viewport — far from the control that opened it and
+   sitting over the header. Restore centring, then anchor to the invoking
+   control where the browser supports it (a popovertarget invoker is the
+   popover's implicit anchor, so no per-panel anchor names are needed). */
+[popover] {
+  margin: auto;
+  max-height: min(70svh, 32rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Anchoring only where there is room beside the control. On a narrow screen a
+   544px panel cannot sit next to a 15px dot without leaving the viewport, so
+   phones keep the centred placement instead. */
+@media (min-width: 768px) {
+  @supports (position-area: block-end span-inline-end) {
+    [popover]:popover-open {
+      position-area: block-end span-inline-end;
+      position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+      margin: 6px;
+    }
+  }
+}
+
 /* ── Type primitives — brand pack ──────────────────────────────────── */
 
 .eyebrow {
