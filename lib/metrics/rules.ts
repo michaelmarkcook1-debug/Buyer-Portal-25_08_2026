@@ -402,9 +402,12 @@ export type HistoricalMode = "reconstructed" | "observed_snapshot";
  * internally via `mode` and in the integrity assertion below.
  */
 export function historyModeLabel(mode: HistoricalMode): string {
+  // Describes HOW the series was built, never its window — the sentence that
+  // uses it states its own window. An earlier wording ("12-month historical
+  // view") leaked a window into a 90-day statement and read as a contradiction.
   return mode === "observed_snapshot"
     ? "tracked from the date each reading was taken"
-    : "12-month historical view, built from dated evidence";
+    : "built from dated evidence";
 }
 
 /** A series builder must declare its mode; observed requires system-calculated points. */

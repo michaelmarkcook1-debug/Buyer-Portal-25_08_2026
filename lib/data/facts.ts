@@ -204,7 +204,17 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
       nearest_end: string | null; nearest_days: string | null; expired12: string;
       aw_t12: string; aw_t12_tcv: string | null; aw_p12: string; aw_p12_tcv: string | null;
     }>(
-      `WITH anchor AS (SELECT max(ingested_at)::date AS d FROM stg_curated_deal),
+      `WITH anchor AS (
+       /* CANONICAL commercial-contract evidence anchor (metric registry:
+          commercial_contract_data_as_of). The latest evidence date genuinely
+          present in the dataset — never ingestion time, never today. Windows
+          close here so every surface inherits one timeline. */
+       SELECT GREATEST(
+                (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
+                (SELECT max(left(start_date_raw, 10))::date FROM stg_contract_store
+                  WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
+              ) AS d
+     ),
        xr AS (SELECT external_id AS ticker, ag_provider_id FROM xref_identity WHERE system='ticker'
                AND external_id = ANY($2::text[]))
        SELECT xr.ticker,
@@ -1081,7 +1091,17 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
     };
   }
   const [r] = await q<Record<string, string | null>>(
-    `WITH anchor AS (SELECT max(ingested_at)::date AS d FROM stg_curated_deal),
+    `WITH anchor AS (
+       /* CANONICAL commercial-contract evidence anchor (metric registry:
+          commercial_contract_data_as_of). The latest evidence date genuinely
+          present in the dataset — never ingestion time, never today. Windows
+          close here so every surface inherits one timeline. */
+       SELECT GREATEST(
+                (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
+                (SELECT max(left(start_date_raw, 10))::date FROM stg_contract_store
+                  WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
+              ) AS d
+     ),
      xr AS (SELECT external_id AS ticker, ag_provider_id FROM xref_identity
              WHERE system='ticker' AND external_id = ANY($2::text[]))
      SELECT count(DISTINCT xr.ticker) AS vendors_with_contracts,

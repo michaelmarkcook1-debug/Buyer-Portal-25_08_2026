@@ -12,6 +12,7 @@ import {
 } from "@/components/ui";
 import { getDevelopments, getScopeLines } from "@/lib/data/facts";
 import { count, money, shortDate } from "@/lib/format";
+import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
@@ -166,7 +167,8 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         <SectionHeader
           eyebrow="Deal market"
           title="Deal flow in your market"
-          aside={`Windows anchored at ${shortDate(intel.spine.lastIngest)}`}
+          /* canonical commercial anchor — the evidence date, never ingestion time */
+          aside={commercialWindowLabel(intel.spine.dataAsOf, shortDate).replace(/^r/, "R")}
         />
         <div className="mt-5">
           <Panel className="px-5 py-4">

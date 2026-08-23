@@ -360,7 +360,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v14", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v15", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for

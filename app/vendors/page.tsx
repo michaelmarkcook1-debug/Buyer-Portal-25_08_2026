@@ -63,7 +63,7 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
             <SectionHeader
               eyebrow="Relative position"
               title="Where to look first"
-              aside={`Curated from ${count(intel.vendors.length)} covered vendors`}
+              aside={`The exceptional situations across ${count(intel.vendors.length)} covered vendors`}
             />
             <div className="mt-5">
               <WholeMarketLenses vendors={intel.vendors} />

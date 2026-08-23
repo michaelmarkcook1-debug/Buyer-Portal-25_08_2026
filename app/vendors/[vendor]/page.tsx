@@ -273,7 +273,11 @@ export default async function VendorDetail({
         <SectionHeader
           eyebrow="Market record"
           title="Their expiring agreements"
-          aside="Their defensive position is your leverage"
+          aside={
+            exposure.length > 0 && focal.coverage.inPlay12 > exposure.length
+              ? `Showing ${count(exposure.length)} of ${count(focal.coverage.inPlay12)} reaching end-of-term within 12 months`
+              : "Their defensive position is your leverage"
+          }
         />
         <p className="mt-2 mb-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
           Observed agreements between {focal.name} and other organisations, from the public and

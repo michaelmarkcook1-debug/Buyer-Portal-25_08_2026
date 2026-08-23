@@ -1,4 +1,5 @@
 import "server-only";
+import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import { cache } from "react";
 import {
   getAiEvents,
@@ -1600,18 +1601,21 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const changes: TwelveMonthDimension[] = [];
 
   {
-    // Commercial deal flow — quarterly signings, anchored to the spine's own data-as-of.
-    const pts = spineQ.points;
-    if (pts.length >= 8) {
-      const recent = qSum(spineQ, pts.length - 4, pts.length);
-      const prior = qSum(spineQ, pts.length - 8, pts.length - 4);
+    /* CANONICAL commercial deal flow (metric registry: commercialDealFlow).
+       Reads the SAME resolved rolling-12-month result the Vendors tab shows,
+       rather than recomputing from calendar quarters against a different
+       anchor — the defect that produced 66 vs 51 here and 56 vs 59 there
+       from one dataset. Per-vendor figures sum to this total by construction. */
+    const recent = agg.awardsT12;
+    const prior = agg.awardsPrior12;
+    if (recent + prior > 0) {
       changes.push({
         dimension: "Deal flow (commercial)",
         state: recent < prior ? "favourable" : recent > prior ? "unfavourable" : "stable",
         movement: ratioMove(recent, prior),
-        detail: `${count(recent)} observed signings across the four most recent quarters on record vs ${count(prior)} in the four before (to ${shortDate(anchor.dataAsOf)}; ${historyModeLabel(spineQ.mode)}).`,
+        detail: `${count(recent)} observed signings across the selected market in the ${commercialWindowLabel(anchor.dataAsOf, shortDate)}, vs ${count(prior)} in the prior 12 months.`,
         confidence: "medium",
-        source: spineQ.source,
+        source: "Contract market record",
       });
     }
   }
@@ -1769,7 +1773,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       dimension: "Buyer leverage",
       state: agg.inPlay12 > agg.expiredPast12 ? "favourable" : agg.inPlay12 === 0 ? "unfavourable" : "stable",
       movement: ratioMove(agg.inPlay12, agg.expiredPast12),
-      detail: `${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
+      detail: `Across your selected market (${count(tickers.length)} vendor${tickers.length === 1 ? "" : "s"}), ${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
       confidence: "medium",
       source: "Curated contract tracker (market record)",
     });

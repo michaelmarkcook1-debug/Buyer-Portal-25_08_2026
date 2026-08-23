@@ -7,7 +7,7 @@ import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import { VendorComparison } from "@/components/VendorComparison";
 import { ClassChip, EmptyEvidence, MovementText, Panel, SectionHeader } from "@/components/ui";
 import { getDevelopments } from "@/lib/data/facts";
-import { money, shortDate } from "@/lib/format";
+import { count, money, shortDate } from "@/lib/format";
 import { SEC_MEANING } from "@/lib/metrics/watch";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
@@ -66,7 +66,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
   const renderedSignalCount = renderedSignalTotal(intel.watch);
   const tickersKey = [...intel.scope.tickers].sort().join(",");
-  const developments = (await getDevelopments(tickersKey, 12)).slice(0, 5);
+  const developmentsAll = await getDevelopments(tickersKey, 12);
+  const developments = developmentsAll.slice(0, 5);
 
   const movers = intel.vendors
     .map((v) => {
@@ -240,7 +241,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
         <SectionHeader
           eyebrow="Supporting detail"
           title="Relevant developments"
-          aside="Dated and citable — no general news feed"
+          aside={
+            developmentsAll.length > developments.length
+              ? `Showing ${count(developments.length)} of ${count(developmentsAll.length)} dated developments`
+              : "Dated and citable — no general news feed"
+          }
         />
         <div className="mt-5 space-y-3">
           {developments.length > 0 ? (

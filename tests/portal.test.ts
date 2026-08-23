@@ -21,6 +21,8 @@ import {
   procurementHeatState,
 } from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
+import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
+import { buildCalls } from "@/components/WholeMarketLenses";
 
 /**
  * Locked-rules tests, in the estate's spirit: the grounding firewall and the
@@ -693,5 +695,88 @@ describe("pilot-readiness sprint (2026-08-23)", () => {
     expect(wf).not.toMatch(/^\s{2}schedule:/m);
     expect(wf).toMatch(/workflow_dispatch/);
     expect(wf).toMatch(/CURRENTLY DISABLED/i);
+  });
+});
+
+describe("cross-surface consistency correction (2026-08-23)", () => {
+  it("commercial deal flow has exactly one canonical definition", () => {
+    const def = METRIC_REGISTRY["commercialDealFlow"]!;
+    expect(def.anchor).toBe("commercial_contract_data_as_of");
+    expect(def.comparison).toBe("rolling_12m_vs_prior_12m");
+    // procurement answers a DIFFERENT question and must stay distinct
+    const proc = METRIC_REGISTRY["procurementAwardFlow"]!;
+    expect(proc.id).not.toBe(def.id);
+    expect(proc.comparison).not.toBe(def.comparison);
+    expect(proc.evidenceFamilies).not.toEqual(def.evidenceFamilies);
+  });
+
+  it("the commercial anchor is never ingestion time or today", () => {
+    const families = Object.values(METRIC_REGISTRY).filter((m) =>
+      m.evidenceFamilies.some((f) => f.startsWith("contract_tracker")),
+    );
+    for (const m of families) {
+      if (m.id === "endOfTermConcentration") continue; // forward-looking: today is correct
+      expect(m.anchor).toBe("commercial_contract_data_as_of");
+    }
+  });
+
+  it("every surface inherits one commercial window label", () => {
+    const sd = (d: string) => d;
+    expect(commercialWindowLabel("2026-05-19", sd)).toBe("rolling 12 months to 2026-05-19");
+    // the same anchor always yields the same string — no per-page variants
+    expect(commercialWindowLabel("2026-05-19", sd)).toBe(commercialWindowLabel("2026-05-19", sd));
+  });
+
+  it("scope is carried at the point of use, so similar figures cannot be confused", () => {
+    expect(scopeLabel("vendor", { vendorName: "Accenture" })).toBe("Accenture");
+    expect(scopeLabel("market", { vendorCount: 3 })).toBe("Selected market · 3 vendors");
+    expect(scopeLabel("market", { vendorCount: 1 })).toBe("Selected market · 1 vendor");
+  });
+
+  it("Where-to-look-first names each vendor at most once", () => {
+    const mk = (ticker: string, overall: string, talent: string, momentum: string): unknown => ({
+      ticker, name: ticker,
+      overall: { level: overall, reason: "r" },
+      opportunities: {
+        pricing: { level: overall }, automation: { level: overall }, "gain-sharing": { level: overall },
+        "commercial-leverage": { level: overall }, "market-test": { level: overall },
+      },
+      metrics: {
+        talentPressure: { state: talent, movement: "stable" },
+        automationOpportunity: { state: "favourable" },
+        aiProductivityOpportunity: { movement: "materially-improving" },
+        providerMomentum: { movement: momentum },
+      },
+    });
+    const vendors = [
+      mk("A", "very-high", "unfavourable", "materially-deteriorating"),
+      mk("B", "high", "favourable", "stable"),
+      mk("C", "medium", "unfavourable", "stable"),
+    ] as never[];
+    const { calls } = buildCalls(vendors);
+    const names = calls.map((c) => c.ticker);
+    expect(new Set(names).size).toBe(names.length);
+    expect(calls.length).toBeLessThanOrEqual(5);
+  });
+
+  it("no false league table when vendors are genuinely tied", () => {
+    const tiedVendor = (t: string): unknown => ({
+      ticker: t, name: t,
+      overall: { level: "very-high", reason: "r" },
+      opportunities: {
+        pricing: { level: "very-high" }, automation: { level: "very-high" }, "gain-sharing": { level: "very-high" },
+        "commercial-leverage": { level: "very-high" }, "market-test": { level: "very-high" },
+      },
+      metrics: {
+        talentPressure: { state: "favourable", movement: "stable" },
+        automationOpportunity: { state: "stable" },
+        aiProductivityOpportunity: { movement: "stable" },
+        providerMomentum: { movement: "stable" },
+      },
+    });
+    const { calls, tiedNote } = buildCalls([tiedVendor("A"), tiedVendor("B"), tiedVendor("C")] as never[]);
+    // identical evidence must not produce a ranked "strongest" claim
+    expect(calls.length).toBe(0);
+    expect(tiedNote).toMatch(/similar/i);
   });
 });
