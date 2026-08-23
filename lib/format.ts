@@ -40,3 +40,33 @@ export function agoDays(days: number | null | undefined): string {
   if (days === 1) return "yesterday";
   return `${days} days ago`;
 }
+
+
+/* ── value provenance (2026-08-23 directive) ─────────────────────────────────
+   Disclosed and inferred value must never blend silently. This is the ONLY
+   sanctioned formatter for mixed-provenance sums; inferred values render as
+   ranges (or an explicitly-approximate unbanded figure), never as bare fact. */
+
+export interface ValueMix {
+  disclosedUsd: number | null;
+  inferredLowUsd: number | null;
+  inferredMidUsd: number | null;
+  inferredHighUsd: number | null;
+}
+
+export function formatValueMix(v: ValueMix): string {
+  const d = v.disclosedUsd ?? 0;
+  const hasInf = (v.inferredMidUsd ?? 0) > 0 || (v.inferredLowUsd ?? 0) > 0;
+  if (!hasInf) return money(d || null);
+  const banded = (v.inferredLowUsd ?? 0) > 0 && (v.inferredHighUsd ?? 0) > 0;
+  const inf = banded
+    ? `${money(v.inferredLowUsd)}\u2013${money(v.inferredHighUsd)} inferred`
+    : `\u2248${money(v.inferredMidUsd)} inferred (unbanded)`;
+  if (d > 0) return `${money(d)} disclosed + ${inf}`;
+  return inf;
+}
+
+/** True when inferred value outweighs disclosed — downstream confidence must step down. */
+export function inferredDominates(v: ValueMix): boolean {
+  return (v.inferredMidUsd ?? 0) > (v.disclosedUsd ?? 0);
+}

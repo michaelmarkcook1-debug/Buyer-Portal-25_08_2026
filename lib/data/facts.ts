@@ -174,6 +174,9 @@ export interface VendorDealFacts {
   industries: number;
   inPlay12: number;
   inPlay12Tcv: number | null;
+  /** Inferred-value companions (2026-08-23): never blended into the disclosed sums. */
+  inPlay12Inf: { low: number | null; mid: number | null; high: number | null };
+  inPlay24Inf: { low: number | null; mid: number | null; high: number | null };
   inPlay24: number;
   inPlay24Tcv: number | null;
   nearestEnd: string | null;
@@ -196,6 +199,8 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
     q<{
       ticker: string; contracts: string; tcv: string | null; industries: string;
       in12: string; in12_tcv: string | null; in24: string; in24_tcv: string | null;
+      in12_inf_low: string | null; in12_inf_mid: string | null; in12_inf_high: string | null;
+      in24_inf_low: string | null; in24_inf_mid: string | null; in24_inf_high: string | null;
       nearest_end: string | null; nearest_days: string | null; expired12: string;
       aw_t12: string; aw_t12_tcv: string | null; aw_p12: string; aw_p12_tcv: string | null;
     }>(
@@ -210,10 +215,22 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
                 AND d.end_date < current_date + interval '12 months') AS in12,
               sum(d.tcv_usd) FILTER (WHERE d.end_date >= current_date
                 AND d.end_date < current_date + interval '12 months') AS in12_tcv,
+              sum(d.tcv_low_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '12 months') AS in12_inf_low,
+              sum(d.tcv_mid_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '12 months') AS in12_inf_mid,
+              sum(d.tcv_high_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '12 months') AS in12_inf_high,
               count(*) FILTER (WHERE d.end_date >= current_date
                 AND d.end_date < current_date + interval '24 months') AS in24,
               sum(d.tcv_usd) FILTER (WHERE d.end_date >= current_date
                 AND d.end_date < current_date + interval '24 months') AS in24_tcv,
+              sum(d.tcv_low_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '24 months') AS in24_inf_low,
+              sum(d.tcv_mid_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '24 months') AS in24_inf_mid,
+              sum(d.tcv_high_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+                AND d.end_date < current_date + interval '24 months') AS in24_inf_high,
               to_char(min(d.end_date) FILTER (WHERE d.end_date >= current_date), 'YYYY-MM-DD') AS nearest_end,
               (min(d.end_date) FILTER (WHERE d.end_date >= current_date))::date - current_date AS nearest_days,
               count(*) FILTER (WHERE d.end_date >= current_date - interval '12 months'
@@ -263,6 +280,16 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
       industries: Number(r?.industries ?? 0),
       inPlay12: Number(r?.in12 ?? 0),
       inPlay12Tcv: r?.in12_tcv == null ? null : Number(r.in12_tcv),
+      inPlay12Inf: {
+        low: r?.in12_inf_low == null ? null : Number(r.in12_inf_low),
+        mid: r?.in12_inf_mid == null ? null : Number(r.in12_inf_mid),
+        high: r?.in12_inf_high == null ? null : Number(r.in12_inf_high),
+      },
+      inPlay24Inf: {
+        low: r?.in24_inf_low == null ? null : Number(r.in24_inf_low),
+        mid: r?.in24_inf_mid == null ? null : Number(r.in24_inf_mid),
+        high: r?.in24_inf_high == null ? null : Number(r.in24_inf_high),
+      },
       inPlay24: Number(r?.in24 ?? 0),
       inPlay24Tcv: r?.in24_tcv == null ? null : Number(r.in24_tcv),
       nearestEnd: r?.nearest_end ?? null,
@@ -283,6 +310,10 @@ export interface ExposureContract {
   line: string | null;
   industry: string | null;
   tcvUsd: number | null;
+  valueProvenance: string | null;
+  tcvLowUsd: number | null;
+  tcvMidUsd: number | null;
+  tcvHighUsd: number | null;
   endDate: string;
   daysRemaining: number;
 }
@@ -292,9 +323,11 @@ export async function getVendorExposure(ticker: string, limit = 8): Promise<Expo
   const rows = await q<{
     client_name: string; line: string | null; industry: string | null;
     tcv_usd: number | null; end_date: string; days: string;
+    value_provenance: string | null; tcv_low_usd: number | null; tcv_mid_usd: number | null; tcv_high_usd: number | null;
   }>(
     `SELECT d.client_name, t.display_name AS line, v.display_name AS industry,
-            d.tcv_usd, to_char(d.end_date, 'YYYY-MM-DD') AS end_date,
+            d.tcv_usd, d.value_provenance, d.tcv_low_usd, d.tcv_mid_usd, d.tcv_high_usd,
+            to_char(d.end_date, 'YYYY-MM-DD') AS end_date,
             (d.end_date::date - current_date) AS days
        FROM deal d
        JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
@@ -312,6 +345,10 @@ export async function getVendorExposure(ticker: string, limit = 8): Promise<Expo
     line: r.line,
     industry: r.industry,
     tcvUsd: r.tcv_usd,
+    valueProvenance: r.value_provenance,
+    tcvLowUsd: r.tcv_low_usd,
+    tcvMidUsd: r.tcv_mid_usd,
+    tcvHighUsd: r.tcv_high_usd,
     endDate: r.end_date,
     daysRemaining: Number(r.days),
   }));
@@ -1022,6 +1059,7 @@ export interface ScopeAggregates {
   contracts: number;
   inPlay12: number;
   inPlay12Tcv: number | null;
+  inPlay12Inf: { low: number | null; mid: number | null; high: number | null };
   inPlay24: number;
   inPlay24Tcv: number | null;
   expiredPast12: number;
@@ -1037,7 +1075,7 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
   if (tickers.length === 0) {
     return {
       vendors: 0, vendorsWithContracts: 0, contracts: 0,
-      inPlay12: 0, inPlay12Tcv: null, inPlay24: 0, inPlay24Tcv: null,
+      inPlay12: 0, inPlay12Tcv: null, inPlay12Inf: { low: null, mid: null, high: null }, inPlay24: 0, inPlay24Tcv: null,
       expiredPast12: 0, awardsT12: 0, awardsT12Vendors: 0, awardsPrior12: 0, awardsPrior12Vendors: 0,
       industries: 0,
     };
@@ -1053,6 +1091,12 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
               AND d.end_date < current_date + interval '12 months') AS in12,
             sum(d.tcv_usd) FILTER (WHERE d.end_date >= current_date
               AND d.end_date < current_date + interval '12 months') AS in12_tcv,
+            sum(d.tcv_low_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+              AND d.end_date < current_date + interval '12 months') AS in12_inf_low,
+            sum(d.tcv_mid_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+              AND d.end_date < current_date + interval '12 months') AS in12_inf_mid,
+            sum(d.tcv_high_usd) FILTER (WHERE d.value_provenance = 'inferred' AND d.end_date >= current_date
+              AND d.end_date < current_date + interval '12 months') AS in12_inf_high,
             count(*) FILTER (WHERE d.end_date >= current_date
               AND d.end_date < current_date + interval '24 months') AS in24,
             sum(d.tcv_usd) FILTER (WHERE d.end_date >= current_date
@@ -1080,6 +1124,7 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
     contracts: n("contracts"),
     inPlay12: n("in12"),
     inPlay12Tcv: m("in12_tcv"),
+    inPlay12Inf: { low: m("in12_inf_low"), mid: m("in12_inf_mid"), high: m("in12_inf_high") },
     inPlay24: n("in24"),
     inPlay24Tcv: m("in24_tcv"),
     expiredPast12: n("expired12"),

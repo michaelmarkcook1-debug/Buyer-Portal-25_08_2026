@@ -566,3 +566,47 @@ describe("opportunity reasons (sprint 4 §10/§20)", () => {
     expect(a).not.toBe(b);
   });
 });
+
+/* ── Value provenance (directive 2026-08-23) ── */
+
+import { formatValueMix, inferredDominates } from "@/lib/format";
+
+describe("TCV value provenance (2026-08-23 directive)", () => {
+  it("an inferred midpoint can never render as disclosed fact", () => {
+    const midOnly = formatValueMix({ disclosedUsd: null, inferredLowUsd: null, inferredMidUsd: 19_200_000, inferredHighUsd: null });
+    expect(midOnly).toContain("inferred");
+    expect(midOnly).toContain("≈");
+    const banded = formatValueMix({ disclosedUsd: null, inferredLowUsd: 9_600_000, inferredMidUsd: 19_200_000, inferredHighUsd: 38_400_000 });
+    expect(banded).toContain("inferred");
+    expect(banded).toContain("–");
+    expect(banded).not.toMatch(/^\$19/); // never leads with the bare midpoint
+  });
+
+  it("mixed-provenance sums stay distinguishable — never one blended figure", () => {
+    const mixed = formatValueMix({ disclosedUsd: 420_000_000, inferredLowUsd: 110_000_000, inferredMidUsd: 135_000_000, inferredHighUsd: 160_000_000 });
+    expect(mixed).toContain("disclosed");
+    expect(mixed).toContain("inferred");
+    expect(mixed).not.toContain("580"); // no silent total
+  });
+
+  it("disclosed/calculated values remain authoritative and unchanged", () => {
+    expect(formatValueMix({ disclosedUsd: 420_000_000, inferredLowUsd: null, inferredMidUsd: null, inferredHighUsd: null })).toBe("$420.0M");
+  });
+
+  it("missing TCV is not invented", () => {
+    expect(formatValueMix({ disclosedUsd: null, inferredLowUsd: null, inferredMidUsd: null, inferredHighUsd: null })).toBe("—");
+  });
+
+  it("inferred-dominated sums flag for confidence step-down", () => {
+    expect(inferredDominates({ disclosedUsd: 40_000_000, inferredLowUsd: null, inferredMidUsd: 60_000_000, inferredHighUsd: null })).toBe(true);
+    expect(inferredDominates({ disclosedUsd: 400_000_000, inferredLowUsd: null, inferredMidUsd: 60_000_000, inferredHighUsd: null })).toBe(false);
+  });
+
+  it("insight firewall + ownership remain intact with provenance language", () => {
+    const ctx = JSON.stringify({ f: "46 observed agreements ($7.2bn disclosed + $110M–$160M inferred)" });
+    const ok = validateInsight("Observed and inferred contract activity suggests approximately $110M–$160M of additional exposure beyond the $7.2bn disclosed.", ctx);
+    expect(ok.blocked).toEqual([]);
+    const bad = validateInsight("Your contracts include $110M of inferred exposure.", ctx);
+    expect(bad.ok).toBe(false);
+  });
+});

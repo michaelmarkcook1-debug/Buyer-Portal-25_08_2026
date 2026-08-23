@@ -50,7 +50,7 @@ import {
 } from "./rules";
 import { BAND_LABEL, deliveryExposure } from "./exposure";
 import { scopedTickers, type MarketScope } from "@/lib/market-scope";
-import { money, count, signed, shortDate } from "@/lib/format";
+import { formatValueMix, inferredDominates, money, count, signed, shortDate } from "@/lib/format";
 import {
   type Basis,
   type Confidence,
@@ -200,7 +200,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
   } else {
     const basis: Basis[] = [
       {
-        text: `${count(d.inPlay12)} observed agreement${d.inPlay12 === 1 ? "" : "s"} on the market record reach end-of-term within 12 months (${money(d.inPlay12Tcv)}); ${count(d.inPlay24)} within 24 months (${money(d.inPlay24Tcv)}).`,
+        text: `${count(d.inPlay12)} observed agreement${d.inPlay12 === 1 ? "" : "s"} on the market record reach end-of-term within 12 months (${formatValueMix({ disclosedUsd: d.inPlay12Tcv, inferredLowUsd: d.inPlay12Inf.low, inferredMidUsd: d.inPlay12Inf.mid, inferredHighUsd: d.inPlay12Inf.high })}); ${count(d.inPlay24)} within 24 months (${formatValueMix({ disclosedUsd: d.inPlay24Tcv, inferredLowUsd: d.inPlay24Inf.low, inferredMidUsd: d.inPlay24Inf.mid, inferredHighUsd: d.inPlay24Inf.high })}).`,
         source: "Curated contract tracker (market record)", ownership: "market",
       },
     ];
@@ -232,11 +232,16 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     const movement = ratioMove(d.inPlay12, d.expiredPast12);
     // Volume earns confidence; the spine's own data age then caps it — stale
     // contract evidence must not read confident (freeze directive §3).
-    const confidence: Confidence = capConfidenceByAge(
+    let confidence: Confidence = capConfidenceByAge(
       d.contracts >= 10 ? "high" : d.contracts >= 3 ? "medium" : "low",
       v.spineDataAsOf,
       { maxFreshDays: 120 },
     );
+    // Value-provenance rule (2026-08-23): a window whose money is dominated by
+    // INFERRED value cannot keep disclosed-grade confidence.
+    if (inferredDominates({ disclosedUsd: d.inPlay12Tcv, inferredLowUsd: d.inPlay12Inf.low, inferredMidUsd: d.inPlay12Inf.mid, inferredHighUsd: d.inPlay12Inf.high })) {
+      confidence = confidence === "high" ? "medium" : confidence === "medium" ? "low" : confidence;
+    }
     buyerLeverage = metric(
       "buyerLeverage",
       "Buyer Leverage",
@@ -1723,7 +1728,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       dimension: "Buyer leverage",
       state: agg.inPlay12 > agg.expiredPast12 ? "favourable" : agg.inPlay12 === 0 ? "unfavourable" : "stable",
       movement: ratioMove(agg.inPlay12, agg.expiredPast12),
-      detail: `${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${money(agg.inPlay12Tcv)}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
+      detail: `${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,
       confidence: "medium",
       source: "Curated contract tracker (market record)",
     });

@@ -264,7 +264,13 @@ export default async function VendorDetail({
                       <tr key={i} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                         <td className="px-5 py-2.5 font-medium" style={{ color: "var(--fg)" }}>{e.client}</td>
                         <td className="px-4 py-2.5" style={{ color: "var(--fg-muted)" }}>{e.line ?? "Unclassified"}</td>
-                        <td className="tabular px-4 py-2.5 text-right" style={{ color: "var(--fg)" }}>{money(e.tcvUsd)}</td>
+                        <td className="tabular px-4 py-2.5 text-right" style={{ color: "var(--fg)" }}>
+                          {e.valueProvenance === "inferred"
+                            ? (e.tcvLowUsd != null && e.tcvHighUsd != null
+                                ? `${money(e.tcvLowUsd)}\u2013${money(e.tcvHighUsd)} inf.`
+                                : `\u2248${money(e.tcvMidUsd)} inf.`)
+                            : money(e.tcvUsd)}
+                        </td>
                         <td className="px-4 py-2.5">
                           <span
                             className="mark-dir tabular"
