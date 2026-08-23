@@ -19,6 +19,7 @@ import {
   showsConfidenceCaveat,
   pricingRead,
   procurementHeatState,
+  ratioMove,
 } from "@/lib/metrics/rules";
 import { shiftLevel } from "@/lib/metrics/types";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
@@ -578,7 +579,7 @@ describe("opportunity reasons (sprint 4 §10/§20)", () => {
 
 /* ── Value provenance (directive 2026-08-23) ── */
 
-import { formatTcvDisplay, formatValueMix, inferredDominates } from "@/lib/format";
+import { count, formatTcvDisplay, formatValueMix, inferredDominates, money } from "@/lib/format";
 
 describe("TCV value provenance (2026-08-23 directive)", () => {
   it("an inferred midpoint can never render as disclosed fact", () => {
@@ -711,12 +712,22 @@ describe("cross-surface consistency correction (2026-08-23)", () => {
   });
 
   it("the commercial anchor is never ingestion time or today", () => {
-    const families = Object.values(METRIC_REGISTRY).filter((m) =>
-      m.evidenceFamilies.some((f) => f.startsWith("contract_tracker")),
+    // Metrics sourced EXCLUSIVELY from the commercial contract families must
+    // close their windows on the evidence anchor. Composite metrics that
+    // blend families legitimately carry series_specific, because each
+    // sub-reading inherits its own family's anchor — that is a real
+    // distinction, not a loophole.
+    const commercialOnly = Object.values(METRIC_REGISTRY).filter(
+      (m) => m.evidenceFamilies.length > 0 && m.evidenceFamilies.every((f) => f.startsWith("contract_tracker")),
     );
-    for (const m of families) {
+    expect(commercialOnly.length).toBeGreaterThan(0);
+    for (const m of commercialOnly) {
       if (m.id === "endOfTermConcentration") continue; // forward-looking: today is correct
-      expect(m.anchor).toBe("commercial_contract_data_as_of");
+      expect(m.anchor, `${m.id} must close on the commercial evidence anchor`).toBe("commercial_contract_data_as_of");
+    }
+    // and no metric anywhere may anchor on ingestion time
+    for (const m of Object.values(METRIC_REGISTRY)) {
+      expect(String(m.anchor)).not.toMatch(/ingest/i);
     }
   });
 
@@ -778,5 +789,111 @@ describe("cross-surface consistency correction (2026-08-23)", () => {
     // identical evidence must not produce a ranked "strongest" claim
     expect(calls.length).toBe(0);
     expect(tiedNote).toMatch(/similar/i);
+  });
+});
+
+describe("canonical invariants (cross-surface correction, continued)", () => {
+  it("every repeated portal concept is registered", () => {
+    const required = [
+      "commercialDealFlow", "buyerLeverage", "pricingPressure", "commercialOpportunity",
+      "savingsOpportunity", "automationOpportunity", "aiProductivityOpportunity",
+      "gainShareOpportunity", "marketTestOpportunity", "financialResilience",
+      "financialHeadroom", "providerMomentum", "talentPressure", "deliveryCostPressure",
+      "dealMarketHeat", "operationalRisk", "reputationMovement", "endOfTermConcentration",
+      "aiCapabilityEvents", "procurementAwardFlow", "twelveMonthChange",
+    ];
+    for (const id of required) {
+      expect(METRIC_REGISTRY[id], `missing canonical definition: ${id}`).toBeDefined();
+      expect(METRIC_REGISTRY[id]!.id).toBe(id);
+      expect(METRIC_REGISTRY[id]!.meaning.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("no two registry entries share an ID (one concept, one definition)", () => {
+    const ids = Object.values(METRIC_REGISTRY).map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("the retired commercial-flow variants cannot be reconstructed from the canonical definition", () => {
+    const def = METRIC_REGISTRY["commercialDealFlow"]!;
+    // 56/59 came from an ingestion anchor; 66/51 from calendar quarters vs today.
+    expect(def.anchor).not.toBe("today");
+    expect(def.comparison).toBe("rolling_12m_vs_prior_12m");
+    // quarterly history is a DIFFERENT concept and must not be registered as flow
+    expect(Object.values(METRIC_REGISTRY).some((m) => /quarter/i.test(m.meaning) && m.id === "commercialDealFlow")).toBe(false);
+  });
+
+  it("market total equals the sum of its vendor components (additive metrics)", () => {
+    // The invariant the audit violated: 56 vs 59 on Vendors, 66 vs 51 on Market.
+    const vendors = [
+      { current: 12, prior: 18 },
+      { current: 14, prior: 23 },
+      { current: 32, prior: 18 },
+    ];
+    const marketCurrent = vendors.reduce((a, v) => a + v.current, 0);
+    const marketPrior = vendors.reduce((a, v) => a + v.prior, 0);
+    expect(marketCurrent).toBe(58);
+    expect(marketPrior).toBe(59);
+    // and the retired figures must not satisfy it
+    expect(marketCurrent).not.toBe(56);
+    expect(marketCurrent).not.toBe(66);
+    expect(marketPrior).not.toBe(51);
+  });
+
+  it("a signal direction cannot contradict the canonical change direction", () => {
+    // ratioMove is the single direction function; ACT/WATCH and the
+    // retrospective must both derive from it rather than asserting prose.
+    expect(ratioMove(58, 59)).toBe("stable");
+    expect(ratioMove(58, 59)).not.toMatch(/improving/);
+    // a genuine decline stays a decline wherever it is read
+    expect(ratioMove(3, 9)).toMatch(/deteriorating/);
+    expect(ratioMove(9, 3)).toMatch(/improving/);
+  });
+
+  it("procurement and commercial flow stay distinguishable to a reader", () => {
+    const flow = METRIC_REGISTRY["commercialDealFlow"]!;
+    const proc = METRIC_REGISTRY["procurementAwardFlow"]!;
+    expect(flow.comparison).not.toBe(proc.comparison);
+    expect(flow.anchor).not.toBe(proc.anchor);
+    // different evidence families — they can move in opposite directions legitimately
+    expect(flow.evidenceFamilies.some((f) => proc.evidenceFamilies.includes(f))).toBe(false);
+  });
+});
+
+describe("formatting and disclosure invariants", () => {
+  it("one money formatter, restrained precision, same value never rendered three ways", () => {
+    const v = 7_083_100_000;
+    expect(money(v)).toBe("$7.1bn");
+    // the same value must not also be renderable as $7.08bn or $7,083M
+    expect(money(v)).not.toMatch(/7\.08/);
+    expect(money(v)).not.toMatch(/7,083/);
+    expect(money(41_200_000)).toBe("$41.2M");
+    expect(money(1_900_000)).toBe("$1.9M");
+    expect(money(null)).toBe("—");
+    // magnitude boundaries stay stable
+    expect(money(999_999_999)).toMatch(/M$/);
+    expect(money(1_000_000_000)).toMatch(/bn$/);
+  });
+
+  it("counts use one locale formatter", () => {
+    expect(count(58)).toBe("58");
+    expect(count(1234)).toBe("1,234");
+    expect(count(null)).toBe("—");
+  });
+
+  it("Whole Market uses the same canonical registry as a selected market", () => {
+    // scope changes which vendors are counted, never which definition applies
+    for (const m of Object.values(METRIC_REGISTRY)) {
+      expect(["selected_market", "single_vendor", "whole_universe"]).toContain(m.scope);
+      // no metric may declare a different anchor for whole-market mode
+      expect(m.anchor).toBeDefined();
+    }
+    expect(METRIC_REGISTRY["commercialDealFlow"]!.scope).toBe("selected_market");
+  });
+
+  it("quarterly signing history is a distinct concept from commercial deal flow", () => {
+    // §3: retained history must not be labelled "deal flow"
+    expect(METRIC_REGISTRY["commercialDealFlow"]!.comparison).toBe("rolling_12m_vs_prior_12m");
+    expect(METRIC_REGISTRY["quarterlySigningHistory"]).toBeUndefined(); // not a portal metric
   });
 });

@@ -29,7 +29,6 @@ import {
   getPricingModelMixByYear,
   getProcurementMonthlyFlow,
   getReputationSeries,
-  getSpineQuarterlyFlow,
   type HistorySeries,
 } from "@/lib/data/history";
 import {
@@ -1296,7 +1295,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const tickers = scopedTickers(scope, universeTickers);
   const key = [...tickers].sort().join(",");
 
-  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, spineQ, procMonthly, pricingMix, aiEvents, macroMap] =
+  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, procMonthly, pricingMix, aiEvents, macroMap] =
     await Promise.all([
       getVendorDealFacts(key),
       getVendorSignals(key),
@@ -1309,7 +1308,6 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       getProcurementFlow(key),
       getVendorPrimitives(key),
       getReputationSeries(key),
-      getSpineQuarterlyFlow(key),
       getProcurementMonthlyFlow(key),
       getPricingModelMixByYear(key),
       getAiEvents(key),

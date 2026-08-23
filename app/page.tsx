@@ -69,14 +69,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
   const developmentsAll = await getDevelopments(tickersKey, 12);
   const developments = developmentsAll.slice(0, 5);
 
-  const movers = intel.vendors
+  const moversAll = intel.vendors
     .map((v) => {
       const moving = [v.metrics.providerMomentum, v.metrics.reputationMovement, v.metrics.dealMarketHeat, v.metrics.talentPressure]
         .filter((m) => m.movement.includes("improving") || m.movement.includes("deteriorating"));
       return { v, moving };
     })
-    .filter((x) => x.moving.length > 0)
-    .slice(0, 4);
+    .filter((x) => x.moving.length > 0);
+  const movers = moversAll.slice(0, 4);
 
   return (
     <PortalShell active="home" ctx={ctx} returnTo="/">
@@ -211,7 +211,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
 
       {movers.length > 0 ? (
         <section className="mt-12">
-          <SectionHeader eyebrow="Movement" title="Vendor movers" />
+          <SectionHeader
+            eyebrow="Movement"
+            title="Vendor movers"
+            aside={
+              moversAll.length > movers.length
+                ? `Showing ${count(movers.length)} of ${count(moversAll.length)} vendors with movement`
+                : undefined
+            }
+          />
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
             {movers.map(({ v, moving }) => (
               <Panel key={v.ticker} className="px-5 py-4">

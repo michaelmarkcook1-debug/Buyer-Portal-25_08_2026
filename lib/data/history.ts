@@ -39,11 +39,16 @@ function reconstructed(series: Omit<HistorySeries, "mode">): HistorySeries {
   return { ...series, mode: assertHistoryMode("reconstructed", false) };
 }
 
-/** Commercial award flow per quarter, anchored to the spine's own data-as-of. */
+/**
+ * Quarterly signing history — a DIFFERENT concept from canonical
+ * commercialDealFlow (which is rolling 12 months to the evidence anchor).
+ * Kept for shape-over-time inspection; it must never be labelled "deal flow"
+ * or compared against the canonical figure as though equivalent.
+ */
 export const getSpineQuarterlyFlow = cache(async (tickersKey: string): Promise<HistorySeries> => {
   const tickers = tickersKey.split(",").filter(Boolean);
   if (tickers.length === 0) {
-    return reconstructed({ id: "spine-quarterly", label: "Commercial award flow", unit: "contracts", points: [], source: "Curated contract spine", note: "" });
+    return reconstructed({ id: "spine-quarterly", label: "Quarterly signing history", unit: "contracts", points: [], source: "Curated contract spine", note: "" });
   }
   const rows = await q<{ quarter: string; n: string }>(
     `SELECT to_char(date_trunc('quarter', d.start_date), 'YYYY') || ' Q' ||
@@ -61,7 +66,7 @@ export const getSpineQuarterlyFlow = cache(async (tickersKey: string): Promise<H
   );
   return reconstructed({
     id: "spine-quarterly",
-    label: "Commercial award flow (observed signings per quarter)",
+    label: "Quarterly signing history (observed signings per quarter)",
     unit: "contracts",
     points: rows.map((r) => ({ period: r.quarter, value: Number(r.n), n: Number(r.n) })),
     source: "Contract market record",

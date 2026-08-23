@@ -46,6 +46,14 @@ export interface MetricDefinition {
   formatter: "money" | "count" | "signed" | "state" | "level" | "percent";
 }
 
+/** Registry helpers — state/level metrics share a shape; only the inputs differ. */
+function state(id: string, meaning: string, evidenceFamilies: string[], anchor: EvidenceAnchor): MetricDefinition {
+  return { id, meaning, scope: "selected_market", evidenceFamilies, anchor, comparison: "latest_reading_vs_baseline", unit: "state", formatter: "state" };
+}
+function level(id: string, meaning: string, evidenceFamilies: string[]): MetricDefinition {
+  return { id, meaning, scope: "selected_market", evidenceFamilies, anchor: "series_specific", comparison: "latest_reading_vs_baseline", unit: "level", formatter: "level" };
+}
+
 export const METRIC_REGISTRY: Record<string, MetricDefinition> = {
   /* ── the metric the audit found contradicting itself ── */
   commercialDealFlow: {
@@ -93,6 +101,36 @@ export const METRIC_REGISTRY: Record<string, MetricDefinition> = {
     comparison: "rolling_12m_vs_prior_12m",
     unit: "count",
     formatter: "count",
+  },
+  /* ── vendor/market state metrics ──────────────────────────────────────
+     These already have ONE valid implementation in resolve.ts. They are
+     mapped here, not reimplemented: the registry records the contract so a
+     second implementation can never appear without failing a test. */
+  buyerLeverage: state("buyerLeverage", "Whether observed commercial conditions favour the buyer across the selected market.", ["contract_tracker", "contract_tracker_store"], "commercial_contract_data_as_of"),
+  pricingPressure: state("pricingPressure", "Direction of observed pricing conditions for the selected vendors.", ["contract_tracker", "contract_tracker_store"], "commercial_contract_data_as_of"),
+  commercialOpportunity: level("commercialOpportunity", "Overall commercial opportunity — the portal-wide ranking key.", ["contract_tracker", "contract_tracker_store", "signal:ai_shift", "edgar", "fred"]),
+  savingsOpportunity: level("savingsOpportunity", "Where commercial value may exist. Directional — never a guaranteed monetary saving.", ["contract_tracker", "contract_tracker_store", "fred"]),
+  automationOpportunity: level("automationOpportunity", "Automation capability set against a labour-heavy delivery base.", ["signal:ai_shift", "vendor_catalog"]),
+  aiProductivityOpportunity: level("aiProductivityOpportunity", "Whether AI delivery capability has moved enough to challenge productivity assumptions.", ["signal:ai_shift", "vendor_catalog"]),
+  gainShareOpportunity: level("gainShareOpportunity", "Whether productivity gains are outpacing commercial terms.", ["signal:ai_shift", "talent", "contract_tracker"]),
+  marketTestOpportunity: level("marketTestOpportunity", "Strength of the case for testing alternative suppliers or competitive tension.", ["contract_tracker", "procurement_contract_*"]),
+  financialResilience: state("financialResilience", "The vendor's own financial condition — held separate from buyer leverage.", ["edgar"], "series_specific"),
+  financialHeadroom: state("financialHeadroom", "Observed room to absorb commercial pressure or fund buyer investment.", ["edgar"], "series_specific"),
+  providerMomentum: state("providerMomentum", "Direction of the vendor's commercial momentum.", ["edgar", "contract_tracker", "procurement_contract_*"], "series_specific"),
+  talentPressure: state("talentPressure", "Delivery-workforce direction — a capacity question on multi-year commitments.", ["talent"], "today"),
+  deliveryCostPressure: state("deliveryCostPressure", "Macro delivery-cost direction. Never enterprise pricing.", ["fred"], "series_specific"),
+  dealMarketHeat: state("dealMarketHeat", "Demand pressure implied by observed win pace.", ["procurement_contract_*", "contract_tracker"], "today"),
+  operationalRisk: state("operationalRisk", "Observed operational risk to the buyer.", ["edgar", "reputation"], "series_specific"),
+  reputationMovement: state("reputationMovement", "Movement in the AG reputation tracker series.", ["reputation"], "series_specific"),
+  twelveMonthChange: {
+    id: "twelveMonthChange",
+    meaning: "The retrospective dimension set. Each dimension inherits the anchor and window of ITS OWN evidence family — they are not one measure and are never summed.",
+    scope: "selected_market",
+    evidenceFamilies: ["mixed"],
+    anchor: "series_specific",
+    comparison: "rolling_12m_vs_prior_12m",
+    unit: "state",
+    formatter: "state",
   },
 } as const;
 
