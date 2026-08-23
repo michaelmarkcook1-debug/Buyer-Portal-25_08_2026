@@ -15,7 +15,7 @@ import { validateInsight, VALIDATOR_VERSION } from "./validate";
  * failure mode renders as an explicit state — never as substitute prose.
  */
 
-import { OBJECTIVES, SCENARIOS_DEFAULT_OBJECTIVE, type InsightTab } from "./objectives";
+import { MARKET_FIRST_HIERARCHY, OBJECTIVES, SCENARIOS_DEFAULT_OBJECTIVE, TOP_LEVEL_TABS, type InsightTab } from "./objectives";
 export type { InsightTab };
 
 export type InsightResult =
@@ -259,6 +259,9 @@ export function buildContext(
   // Scenarios tab with NO scenario selected (sprint 3 fix 2): interpret the
   // baseline's scenario SENSITIVITY only — never invent modelled results.
   const objective = tab === "scenarios" && !opts.scenario ? SCENARIOS_DEFAULT_OBJECTIVE : OBJECTIVES[tab];
+  // Top-level heroes interpret the MARKET first; detail pages interpret their
+  // focal subject and are deliberately exempt.
+  const hierarchy = TOP_LEVEL_TABS.includes(tab) ? `\n\n${MARKET_FIRST_HIERARCHY}` : "";
   {
     const fam: string[] = [];
     fam.push(`commercial contract spine data-as-of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old — STALE evidence family; constrain current-conclusions accordingly)`);
@@ -275,7 +278,7 @@ export function buildContext(
     }
   }
 
-  sections.push("", `ANALYTICAL OBJECTIVE FOR THIS BRIEFING: ${objective}`);
+  sections.push("", `ANALYTICAL OBJECTIVE FOR THIS BRIEFING: ${objective + hierarchy}`);
   return sections.filter((s) => s !== "").join("\n");
 }
 
@@ -288,7 +291,44 @@ class InsightFailure extends Error {
   }
 }
 
-async function generateUncached(context: string): Promise<InsightResult> {
+
+/**
+ * Structural guard for top-level heroes: the opening must characterise the
+ * SELECTED MARKET, not promote one vendor to being the market.
+ *
+ * Semantic rather than a vendor-name blacklist: it uses the scope's own vendor
+ * names (so it works for any market) and passes as soon as the opening frames
+ * the market — including the legitimate case where one vendor genuinely
+ * dominates and the sentence says so. Returns null when the opening is fine.
+ */
+export function marketFirstViolation(text: string, tab: InsightTab, vendorNames: string[]): string | null {
+  if (!TOP_LEVEL_TABS.includes(tab)) return null;
+  const opening = text.trim().split(/(?<=[.:;])\s+/)[0] ?? "";
+  if (!opening) return null;
+  const lower = opening.toLowerCase();
+
+  // Market framing anywhere in the opening clears the guard.
+  const framesMarket =
+    /\b(across|throughout)\s+(the\s+)?(selected\s+)?(vendor\s+)?market\b/.test(lower) ||
+    /\bthe\s+selected\s+(vendor\s+)?market\b/.test(lower) ||
+    /\bthese\s+(three\s+)?vendors\b/.test(lower) ||
+    /\bthe\s+selected\s+vendors\b/.test(lower) ||
+    /\b(this|the)\s+market\b/.test(lower) ||
+    /\bmarket[- ]wide\b/.test(lower) ||
+    /\ball\s+(three|four|five)\b/.test(lower) ||
+    /\bbuyer'?s?\s+(commercial\s+)?position\b/.test(lower) ||
+    /\bdominates\s+(this|the)\s+market\b/.test(lower);
+  if (framesMarket) return null;
+
+  // Otherwise, an opening that leads on one scoped vendor is a violation.
+  const named = vendorNames.filter((n) => n && lower.includes(n.toLowerCase()));
+  if (named.length === 1) {
+    return `Top-level hero opened on a single vendor ("${named[0]}") without first establishing the selected-market pattern. Rewrite so the FIRST sentence characterises the selected market as a whole, then use ${named[0]} as the clearest example of that pattern.`;
+  }
+  return null;
+}
+
+async function generateUncached(context: string, tab: InsightTab, vendorNames: string[]): Promise<InsightResult> {
   const availability = llmAvailability();
   if (!availability.ok) return { status: "not-configured", reason: availability.reason };
 
@@ -341,6 +381,38 @@ async function generateUncached(context: string): Promise<InsightResult> {
     validation = validateInsight(retry.value.insight ?? "", context);
     if (!validation.ok) return { status: "blocked", reasons: validation.blocked, blockedText: retry.value.insight ?? "" };
   }
+  /* Structural pass (market-first hierarchy). Truth validation has already
+     succeeded, so a violation here is a STRUCTURE problem, not a truth one:
+     one corrective regeneration, and if the model still leads on a vendor the
+     briefing is delivered with the deviation logged. Withholding a truthful
+     briefing over ordering would cost the buyer more than it protects. */
+  const structural = marketFirstViolation(validation.text, tab, vendorNames);
+  if (structural) {
+    const fix = await generateStructured<{ insight: string }>(availability.config, {
+      system: SYSTEM_PROMPT,
+      user:
+        context +
+        "\n\nYOUR PREVIOUS DRAFT BROKE THE REQUIRED STRUCTURE — rewrite it keeping every figure and judgement, changing only the order so the market judgement comes first:\n- " +
+        structural,
+      maxTokens: 700,
+      tool: {
+        name: "submit_insight",
+        description: "Submit the restructured analyst insight for this briefing.",
+        input_schema: {
+          type: "object",
+          properties: { insight: { type: "string", description: "The restructured private executive briefing: 130-155 words, market judgement first." } },
+          required: ["insight"],
+        },
+      },
+    });
+    if (fix.ok) {
+      const revalidated = validateInsight(fix.value.insight ?? "", context);
+      if (revalidated.ok && !marketFirstViolation(revalidated.text, tab, vendorNames)) {
+        return { status: "ok", text: revalidated.text, warnings: revalidated.warnings };
+      }
+    }
+    console.warn("[analyst-insight:structure] " + JSON.stringify({ tab, issue: structural, at: new Date().toISOString() }));
+  }
   return { status: "ok", text: validation.text, warnings: validation.warnings };
 }
 
@@ -364,19 +436,20 @@ export async function getInsight(
   // Freshest dated signals ground the briefing (freeze directive §4/§8) —
   // deterministic, evidence-gated, computed with the runtime's own rules.
   const signals = await buildWatchSignals(intel, [...intel.scope.tickers].sort().join(","));
+  const vendorNames = intel.scope.names;
   const context = buildContext(intel, tab, { ...opts, signals });
   const dataVersion = `${intel.updatedAt ?? ""}|${intel.spine.lastIngest}`;
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v16", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v17", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
   // six hours as though it were the analysis.
   const cached = unstable_cache(
     async () => {
-      const result = await generateUncached(context);
+      const result = await generateUncached(context, tab, vendorNames);
       if (result.status !== "ok") throw new InsightFailure(result);
       return result;
     },

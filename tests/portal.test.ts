@@ -24,6 +24,8 @@ import {
 import { shiftLevel } from "@/lib/metrics/types";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
+import { marketFirstViolation } from "@/lib/insight/generate";
+import { MARKET_FIRST_HIERARCHY, TOP_LEVEL_TABS } from "@/lib/insight/objectives";
 import { buildCalls } from "@/components/WholeMarketLenses";
 
 /**
@@ -513,12 +515,13 @@ describe("tab-specific analytical objectives (sprint 4 §5)", () => {
     const values = Object.values(OBJECTIVES);
     expect(new Set(values).size).toBe(values.length);
     // each answers a distinct concern
-    expect(OBJECTIVES.home).toContain("SINGLE most important development");
-    expect(OBJECTIVES.market).toContain("DIVERGE");
-    expect(OBJECTIVES.vendors).toContain("DIFFERENTLY");
-    expect(OBJECTIVES["vendor-detail"]).toContain("THIS vendor");
-    expect(OBJECTIVES.opportunities).toContain("strongest commercial lever");
-    expect(OBJECTIVES.scenarios).toContain("alter vendor strategy");
+    // concepts, not casing — each tab keeps its distinct analytical concern
+    expect(OBJECTIVES.home).toMatch(/single most important development/i);
+    expect(OBJECTIVES.market).toMatch(/DIVERGE/i);
+    expect(OBJECTIVES.vendors).toMatch(/DIFFERENTLY/i);
+    expect(OBJECTIVES["vendor-detail"]).toMatch(/THIS vendor/i);
+    expect(OBJECTIVES.opportunities).toMatch(/strongest commercial lever/i);
+    expect(OBJECTIVES.scenarios).toMatch(/what the buyer would do differently/i);
     expect(SCENARIOS_DEFAULT_OBJECTIVE).toContain("Do not invent modelled outcomes");
   });
 });
@@ -940,5 +943,56 @@ describe("thin-evidence calibration (2026-08-23)", () => {
     expect(commercial.meaning).not.toMatch(/\baward/i);
     expect(procurement.meaning).toMatch(/award/i);
     expect(procurement.meaning).not.toMatch(/\bsigning/i);
+  });
+});
+
+describe("Analyst Insight market-first hierarchy (2026-08-23)", () => {
+  const scope = ["Accenture", "Cognizant", "TCS"];
+
+  it("flags a top-level hero that opens on a single vendor", () => {
+    const v = marketFirstViolation(
+      "The strongest lever right now sits with Accenture's renewal exposure, which dwarfs its peers.",
+      "opportunities", scope);
+    expect(v).not.toBeNull();
+    expect(v).toMatch(/Accenture/);
+  });
+
+  it("passes a hero that establishes the market before naming a vendor", () => {
+    expect(marketFirstViolation(
+      "Across the selected market, buyer value is concentrating in the gap between rising delivery productivity and commercial terms that have not moved with it.",
+      "opportunities", scope)).toBeNull();
+    expect(marketFirstViolation(
+      "These vendors are diverging on delivery capacity rather than price.",
+      "vendors", scope)).toBeNull();
+    expect(marketFirstViolation(
+      "This market currently favours the buyer, driven by a demand-side break.",
+      "market", scope)).toBeNull();
+  });
+
+  it("allows a single vendor to lead where it genuinely dominates the market", () => {
+    expect(marketFirstViolation(
+      "Accenture's renewal concentration dominates this market, accounting for the bulk of end-of-term value.",
+      "home", scope)).toBeNull();
+  });
+
+  it("detail pages may lead with their focal subject", () => {
+    expect(marketFirstViolation("Accenture is repricing faster than its peers.", "vendor-detail", scope)).toBeNull();
+    expect(marketFirstViolation("Accenture's pricing case rests on three readings.", "opportunity-detail", scope)).toBeNull();
+  });
+
+  it("is scope-driven, not a hardcoded vendor blacklist", () => {
+    // a vendor outside the selected scope must not trigger the guard
+    expect(marketFirstViolation("Infosys leads on automation.", "opportunities", scope)).toBeNull();
+    // but it does trigger for whatever market IS selected
+    expect(marketFirstViolation("Infosys leads on automation.", "opportunities", ["Infosys", "Unisys", "Mastek"])).not.toBeNull();
+  });
+
+  it("every top-level objective demands a market judgement first", () => {
+    for (const tab of TOP_LEVEL_TABS) {
+      expect(OBJECTIVES[tab]).toMatch(/market/i);
+    }
+    // and the opportunities objective no longer forbids market context
+    expect(OBJECTIVES.opportunities).not.toMatch(/do not re-narrate the market backdrop/i);
+    expect(MARKET_FIRST_HIERARCHY).toMatch(/MARKET JUDGEMENT/);
   });
 });
