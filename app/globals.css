@@ -355,6 +355,45 @@ a {
   }
 }
 
+/* Row detail on demand.
+   The portal ships no client JS, so the reveal is pure CSS: pointer hover and
+   keyboard focus on the row's own link. The detail is hidden with opacity
+   rather than `visibility`/`display`, so it stays in the accessibility tree
+   and a screen-reader user never loses it. Touch users follow the same link
+   through to the vendor's full reading. */
+.reveal {
+  position: relative;
+}
+.reveal-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 3px);
+  left: 0;
+  width: max-content;
+  max-width: min(34rem, 100%);
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-line);
+  border-left: 2px solid var(--accent-fill);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-2);
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 110ms ease;
+}
+.reveal:hover .reveal-panel,
+.reveal:focus-within .reveal-panel {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-panel {
+    transition: none;
+  }
+}
+
 /* Help panels. Preflight sets `margin: 0` on every element, which overrides
    the UA stylesheet's `margin: auto` for [popover] and pins the panel to the
    top-left corner of the viewport — far from the control that opened it and

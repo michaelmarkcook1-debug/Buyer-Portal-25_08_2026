@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
 import { InfoTip, fromSemantics } from "@/components/InfoTip";
 import { MarketStateBand, MetricCard } from "@/components/MetricCard";
@@ -123,14 +124,22 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           <Panel className="px-5 py-4">
             <div className="eyebrow">By vendor</div>
             <ul className="m-0 mt-2 list-none space-y-2 p-0">
+              {/* The reading is the state; the sentence behind it repeats across
+                  dozens of vendors, so it moves to hover/focus rather than
+                  filling the column. The name links through to the vendor's
+                  full reading, which is what gives the row a focus target. */}
               {intel.vendors.map((v) => (
-                <li key={v.ticker} className="flex flex-wrap items-baseline gap-x-4 text-[0.86rem]">
-                  <span className="w-44 truncate font-medium" style={{ color: "var(--fg)" }}>
+                <li key={v.ticker} className="reveal flex flex-wrap items-baseline gap-x-4 text-[0.86rem]">
+                  <Link
+                    href={`/vendors/${v.ticker.toLowerCase()}`}
+                    className="w-44 truncate font-medium underline-offset-4 hover:underline"
+                    style={{ color: "var(--fg)", textDecorationColor: "var(--accent-fill)" }}
+                  >
                     {v.name}
-                  </span>
+                  </Link>
                   <StateText state={v.metrics.aiProductivityOpportunity.state} metricId="aiProductivityOpportunity" className="text-[0.84rem]" />
                   {v.metrics.aiProductivityOpportunity.headline ? (
-                    <span className="min-w-0 flex-1 text-[0.8rem]" style={{ color: "var(--fg-muted)" }}>
+                    <span className="reveal-panel" role="note">
                       {v.metrics.aiProductivityOpportunity.headline}
                     </span>
                   ) : null}
