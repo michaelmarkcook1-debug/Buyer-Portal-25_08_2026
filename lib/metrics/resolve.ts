@@ -56,6 +56,7 @@ import {
   type Confidence,
   type MarketIntel,
   type Metric,
+  type MetricAnalysis,
   type MetricState,
   type Movement,
   type Opportunity,
@@ -66,6 +67,11 @@ import {
   type VendorMetrics,
   levelScore,
 } from "./types";
+import {
+  AUTOMATION_COPY, BUYER_LEVERAGE_COPY, COMMERCIAL_COPY, HEAT_COPY,
+  aiPressureAnalysis, demandAnalysis, intensityAnalysis, labourAnalysis,
+  pricingAnalysis, readingsFrom, riskAnalysis, rollupAnalysis, supplierAnalysis,
+} from "./market-analysis";
 import { buildWatchSignals } from "./watch";
 
 /**
@@ -1637,17 +1643,147 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     ),
   };
 
+  /* ── market-state explanations (§20 depth upgrade) ───────────────────
+     Attached from the SAME resolved objects the cards, charts, Analyst
+     Insight and signals read, so an explanation can never disagree with the
+     state it explains. The builders select drivers and phrase; they never
+     recalculate. ── */
+  const mv = (sel: (v: VendorIntel) => Metric) =>
+    vendors.map((v) => ({ name: v.name, metric: sel(v) }));
+  const byName = new Map(vendors.map((v) => [v.name, v.ticker]));
+  const rankBy = (pick: (t: string) => number | null | undefined) => (name: string) => {
+    const t = byName.get(name);
+    return t ? pick(t) ?? null : null;
+  };
+
+  const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined): Metric =>
+    analysis ? { ...metricValue, analysis } : metricValue;
+
+  /* The band shows these four and the Market grid does not, so they would
+     otherwise carry no explanation anywhere. Analysed on the strip objects
+     themselves, so band and grid can never diverge. */
+  strip.buyerLeverage = withAnalysis(
+    strip.buyerLeverage,
+    rollupAnalysis(readingsFrom(mv((v) => v.metrics.buyerLeverage)), strip.buyerLeverage.state, BUYER_LEVERAGE_COPY),
+  );
+  strip.automationOpportunity = withAnalysis(
+    strip.automationOpportunity,
+    rollupAnalysis(readingsFrom(mv((v) => v.metrics.automationOpportunity)), strip.automationOpportunity.state, AUTOMATION_COPY),
+  );
+  strip.commercialOpportunities = withAnalysis(
+    strip.commercialOpportunities,
+    rollupAnalysis(
+      // same derivation the rollup itself uses: the vendor's overall band
+      vendors.map((v) => ({
+        name: v.name,
+        state: (v.overall.level === "very-high" || v.overall.level === "high"
+          ? "favourable"
+          : v.overall.level === "medium"
+            ? "mixed"
+            : v.overall.level === "insufficient"
+              ? "insufficient"
+              : "stable") as MetricState,
+        rank: levelScore(v.overall.level),
+      })),
+      strip.commercialOpportunities.state,
+      COMMERCIAL_COPY,
+    ),
+  );
+  strip.marketHeat = withAnalysis(
+    strip.marketHeat,
+    rollupAnalysis(readingsFrom(mv((v) => v.metrics.dealMarketHeat)), strip.marketHeat.state, HEAT_COPY),
+  );
+  strip.pricingPressure = withAnalysis(
+    strip.pricingPressure,
+    pricingAnalysis(readingsFrom(mv((v) => v.metrics.pricingPressure)), strip.pricingPressure.state),
+  );
+  strip.aiProductivityPressure = withAnalysis(
+    strip.aiProductivityPressure,
+    aiPressureAnalysis(readingsFrom(mv((v) => v.metrics.aiProductivityOpportunity)), strip.aiProductivityPressure.state),
+  );
+  strip.competitiveIntensity = withAnalysis(
+    strip.competitiveIntensity,
+    agg.contracts === 0
+      ? undefined
+      : intensityAnalysis(agg.awardsT12Vendors, agg.awardsPrior12Vendors, tickers.length, strip.competitiveIntensity.state),
+  );
+  strip.servicesDemand = withAnalysis(
+    strip.servicesDemand,
+    agg.contracts === 0
+      ? undefined
+      : demandAnalysis(
+          {
+            // mirrors the canonical rule in strip.servicesDemand exactly
+            ledBy: proc.totalT90 + proc.totalPrior90 >= 5 ? "procurement" : "commercial",
+            t12: agg.awardsT12,
+            prior12: agg.awardsPrior12,
+            vendorsT12: agg.awardsT12Vendors,
+            perVendor: vendors.map((v) => ({
+              name: v.name,
+              t12: deals.get(v.ticker)?.awardsT12 ?? 0,
+              prior12: deals.get(v.ticker)?.awardsPrior12 ?? 0,
+            })),
+            procPerVendor: vendors.map((v) => ({
+              name: v.name,
+              t90: proc.byVendor.get(v.ticker)?.awardsT90 ?? 0,
+              prior90: proc.byVendor.get(v.ticker)?.awardsPrior90 ?? 0,
+            })),
+            procT90: proc.totalT90,
+            procPrior90: proc.totalPrior90,
+            asOf: shortDate(anchor.dataAsOf ?? anchor.lastIngest),
+            procAsOf: proc.lastIngest ? shortDate(proc.lastIngest) : null,
+          },
+          strip.servicesDemand.state,
+        ),
+  );
+
+  const labour = rollup("m.labour", "Labour Economics", m((v) => v.metrics.talentPressure),
+    "Vendor delivery workforces are expanding.", "Vendor delivery workforces are under strain.");
+  const supplier = rollup("m.supplier", "Supplier Economics", m((v) => v.metrics.financialResilience),
+    "Vendor financial positions are expanding.", "Vendor financial positions are strained.");
+  const oprisk = rollup("m.oprisk", "Operational Risk", m((v) => v.metrics.operationalRisk),
+    "No elevated operational risk across your market.", "Elevated operational risk across your market.");
+
   const economicsDimensions: Metric[] = [
     strip.pricingPressure,
-    rollup("m.labour", "Labour Economics", m((v) => v.metrics.talentPressure),
-      "Vendor delivery workforces are expanding.", "Vendor delivery workforces are under strain."),
+    withAnalysis(
+      labour,
+      labourAnalysis(
+        readingsFrom(mv((v) => v.metrics.talentPressure), rankBy((t) => signals.get(t)?.talent?.netFlow)),
+        labour.state,
+      ),
+    ),
     strip.competitiveIntensity,
-    rollup("m.supplier", "Supplier Economics", m((v) => v.metrics.financialResilience),
-      "Your vendors are financially expanding.", "Your vendors are financially strained."),
+    withAnalysis(
+      supplier,
+      supplierAnalysis(
+        readingsFrom(mv((v) => v.metrics.financialResilience), rankBy((t) => catalog.get(t)?.revenueGrowthYoy)),
+        supplier.state,
+      ),
+    ),
     strip.aiProductivityPressure,
     strip.servicesDemand,
-    rollup("m.oprisk", "Operational Risk", m((v) => v.metrics.operationalRisk),
-      "No elevated operational risk across your market.", "Elevated operational risk across your market."),
+    withAnalysis(
+      oprisk,
+      riskAnalysis(
+        {
+          // ranked by the underlying issue reading so the named drivers are the
+          // ones that actually carry the risk, not the alphabetically first
+          readings: readingsFrom(
+            mv((v) => v.metrics.operationalRisk),
+            rankBy((t) => signals.get(t)?.topIssues?.riskScore),
+          ),
+          topics: vendors.map((v) => ({
+            name: v.name,
+            titles: signals.get(v.ticker)?.topIssues?.issueTitles?.slice(0, 2) ?? [],
+            cyber: sec.get(v.ticker)?.byItem["1.05"] ?? 0,
+            restructuring: sec.get(v.ticker)?.byItem["2.05"] ?? 0,
+          })),
+        },
+        oprisk.state,
+        oprisk.confidence,
+      ),
+    ),
   ];
   const buyerEconomics = (() => {
     const assessed = economicsDimensions.filter((x) => x.state !== "insufficient");

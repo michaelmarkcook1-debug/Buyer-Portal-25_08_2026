@@ -21,11 +21,15 @@ import {
   procurementHeatState,
   ratioMove,
 } from "@/lib/metrics/rules";
-import { shiftLevel } from "@/lib/metrics/types";
+import { shiftLevel, type MetricState } from "@/lib/metrics/types";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
 import { METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
+import {
+  BUYER_LEVERAGE_COPY, HEAT_COPY, aiPressureAnalysis, demandAnalysis, intensityAnalysis,
+  labourAnalysis, pricingAnalysis, riskAnalysis, rollupAnalysis, supplierAnalysis,
+} from "@/lib/metrics/market-analysis";
 import { MARKET_FIRST_HIERARCHY, TOP_LEVEL_TABS } from "@/lib/insight/objectives";
 import { buildCalls } from "@/components/WholeMarketLenses";
 
@@ -1125,5 +1129,125 @@ describe("semantic labels and colour meaning (2026-08-23)", () => {
     expect(displayState("m.supplier", "unfavourable").effect).toBe("caution");
     // broader competition genuinely is a buyer win
     expect(displayState("m.intensity", "favourable").effect).toBe("favourable");
+  });
+});
+
+describe("market-state analytical depth (2026-08-24)", () => {
+  const r = (name: string, state: MetricState, rank?: number) => ({ name, state, rank: rank ?? null });
+
+  it("names the vendors that drive the reading, not the alphabetically first", () => {
+    const readings = [r("Alpha", "unfavourable", -10), r("Zeta", "unfavourable", -9000), r("Mid", "unfavourable", -50)];
+    const a = labourAnalysis(readings, "unfavourable")!;
+    expect(a.driver).toMatch(/Zeta/);
+    // ranked by magnitude: the -10 vendor must not displace the -9000 one
+    expect(a.driver).not.toMatch(/Alpha/);
+  });
+
+  it("caps named drivers and never implies the list is exhaustive", () => {
+    const many = Array.from({ length: 17 }, (_, i) => r(`V${i}`, "unfavourable", -(i + 1) * 100));
+    const a = labourAnalysis(many, "unfavourable")!;
+    const named = many.filter((v) => a.driver.includes(v.name)).length;
+    expect(named).toBeLessThanOrEqual(3);
+    expect(a.driver).toMatch(/among 17/);
+  });
+
+  it("a three-vendor market names drivers plainly, without an 'among' remainder", () => {
+    const a = labourAnalysis([r("A", "unfavourable", -5), r("B", "unfavourable", -4), r("C", "stable")], "unfavourable")!;
+    expect(a.driver).not.toMatch(/among/);
+  });
+
+  it("distribution counts are supporting data, never the explanation", () => {
+    const a = labourAnalysis([r("A", "unfavourable", -5), r("B", "favourable", 5)], "mixed")!;
+    expect(a.distribution).toMatch(/assessed vendors read favourable/);
+    // the count must not be what the driver sentence says
+    expect(a.driver).not.toMatch(/\d+ of \d+ assessed/);
+    expect(a.driver).toMatch(/A|B/);
+  });
+
+  it("services demand explains the SAME series that set the state", () => {
+    const base = {
+      t12: 58, prior12: 59, vendorsT12: 3,
+      perVendor: [{ name: "A", t12: 1, prior12: 9 }, { name: "B", t12: 57, prior12: 50 }],
+      procPerVendor: [{ name: "A", t90: 1, prior90: 8 }, { name: "B", t90: 2, prior90: 1 }],
+      procT90: 3, procPrior90: 9, asOf: "19 May 2026", procAsOf: "20 Aug 2026",
+    };
+    const led = demandAnalysis({ ...base, ledBy: "procurement" }, "unfavourable")!;
+    expect(led.driver).toMatch(/Public awards/);
+    expect(led.driver).toMatch(/3 from 9/);
+    // the other series appears only as context, after the lead
+    expect(led.driver.indexOf("Public awards")).toBeLessThan(led.driver.indexOf("58"));
+
+    const com = demandAnalysis({ ...base, ledBy: "commercial" }, "unfavourable")!;
+    expect(com.driver).toMatch(/Commercial signings/);
+    expect(com.driver).toMatch(/58 from 59/);
+  });
+
+  it("explanations carry no buyer-ownership language", () => {
+    const built = [
+      labourAnalysis([r("A", "unfavourable", -5)], "unfavourable"),
+      supplierAnalysis([r("A", "favourable", 5)], "favourable"),
+      aiPressureAnalysis([r("A", "favourable")], "favourable"),
+      pricingAnalysis([r("A", "favourable")], "favourable"),
+      intensityAnalysis(3, 5, 6, "unfavourable"),
+      rollupAnalysis([r("A", "favourable")], "favourable", BUYER_LEVERAGE_COPY),
+      rollupAnalysis([r("A", "favourable")], "favourable", HEAT_COPY),
+    ].filter(Boolean);
+    expect(built.length).toBeGreaterThan(5);
+    for (const a of built) {
+      const all = [a!.driver, a!.implication, a!.evidence, a!.limitation ?? "", a!.test ?? ""].join(" ");
+      expect(all, a!.driver.slice(0, 40)).not.toMatch(
+        /\byour (contract|renewal|spend|commitment|rate|saving|exposure|supplier portfolio)/i,
+      );
+    }
+  });
+
+  it("explanations expose no formulas, weights or thresholds", () => {
+    const all = [
+      labourAnalysis([r("A", "unfavourable", -5)], "unfavourable"),
+      supplierAnalysis([r("A", "unfavourable", -5)], "unfavourable"),
+      riskAnalysis({ readings: [r("A", "unfavourable", 80)], topics: [{ name: "A", titles: [], cyber: 0, restructuring: 0 }] }, "unfavourable", "medium"),
+    ]
+      .filter(Boolean)
+      .map((a) => [a!.driver, a!.implication, a!.evidence, a!.limitation ?? "", a!.test ?? ""].join(" "))
+      .join(" ");
+    expect(all).not.toMatch(/\b(weight|threshold|score of|coefficient|percentile|formula)\b/i);
+    // the ranking input must never surface as a number in the copy
+    expect(all).not.toMatch(/\b80\b/);
+  });
+
+  it("a thin risk read says what is known and why it is not enough", () => {
+    const a = riskAnalysis(
+      { readings: [r("A", "unfavourable", 80), r("B", "stable", 10)], topics: [{ name: "A", titles: [], cyber: 0, restructuring: 0 }] },
+      "unfavourable",
+      "medium",
+    )!;
+    expect(a.driver).toMatch(/issue-tracking read alone/);
+    expect(a.driver).toMatch(/No disclosed incident/);
+  });
+
+  it("a named disclosure is not repeated after the vendor that carries it", () => {
+    const a = riskAnalysis(
+      { readings: [r("Kyndryl", "unfavourable", 90)], topics: [{ name: "Kyndryl", titles: [], cyber: 0, restructuring: 1 }] },
+      "unfavourable",
+      "medium",
+    )!;
+    expect(a.driver.match(/Kyndryl/g)?.length).toBe(1);
+  });
+
+  it("one named vendor takes a singular verb", () => {
+    const a = rollupAnalysis([r("TCS", "favourable"), r("Other", "unfavourable")], "mixed", HEAT_COPY)!;
+    expect(a.driver).toMatch(/TCS is winning less/);
+    expect(a.driver).not.toMatch(/TCS are winning/);
+  });
+
+  it("every dimension answers what, why, who, so-what and what-to-check", () => {
+    const a = labourAnalysis([r("A", "unfavourable", -5), r("B", "favourable", 5)], "mixed")!;
+    expect(a.driver.length).toBeGreaterThan(40); // what + who
+    expect(a.implication.length).toBeGreaterThan(40); // so what
+    expect(a.test).toBeTruthy(); // what to check
+    expect(a.evidence).toBeTruthy(); // what supports it
+    const words = `${a.driver} ${a.implication}`.split(/\s+/).length;
+    expect(words).toBeGreaterThanOrEqual(30);
+    expect(words).toBeLessThanOrEqual(95);
   });
 });

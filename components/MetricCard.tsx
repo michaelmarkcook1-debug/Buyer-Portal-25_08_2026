@@ -24,7 +24,40 @@ export function MetricCard({ m, hideInfo = false }: { m: Metric; hideInfo?: bool
       </div>
       <StateText state={m.state} metricId={m.id} className="text-[1.02rem]" />
       <MovementText movement={m.movement} className="text-[0.78rem]" />
-      {m.headline ? (
+      {m.analysis ? (
+        /* The analytical body replaces the templated headline: with a driver
+           present, the headline only restated the state. */
+        <div className="mt-1.5 flex flex-col gap-2">
+          <p className="m-0 text-[0.8rem] leading-snug" style={{ color: "var(--fg)" }}>
+            {m.analysis.driver}
+          </p>
+          <p className="m-0 text-[0.78rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+            <span style={{ color: "var(--fg-dim)" }}>For the buyer: </span>
+            {m.analysis.implication}
+          </p>
+          {m.analysis.limitation ? (
+            <p className="m-0 text-[0.76rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+              <span style={{ color: "var(--fg-dim)" }}>Limitation: </span>
+              {m.analysis.limitation}
+            </p>
+          ) : null}
+          {m.analysis.test ? (
+            <p
+              className="m-0 rounded-[var(--radius-sm)] px-2.5 py-2 text-[0.76rem] leading-snug"
+              style={{ background: "var(--bg-elev-2)", color: "var(--fg-muted)" }}
+            >
+              <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
+                Worth testing
+              </span>{" "}
+              {m.analysis.test}
+            </p>
+          ) : null}
+          <div className="code text-[0.68rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+            {m.analysis.evidence}
+            {m.analysis.distribution ? ` · ${m.analysis.distribution}` : ""}
+          </div>
+        </div>
+      ) : m.headline ? (
         <p className="m-0 text-[0.8rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
           {m.headline}
         </p>
@@ -54,7 +87,22 @@ export function IntelligenceStrip({ metrics }: { metrics: Metric[] }) {
  * The executive strip as ONE editorial band (sprint: design review §5/§12) —
  * a single panel with hairline-divided readings instead of five KPI tiles.
  * Confidence steps down to a shared footnote; the states carry the row.
+ *
+ * Each reading carries ONE line on why it reads that way. The full analytical
+ * body — implication, limitation, what to test — belongs to the Market page
+ * cards, so the band stays scannable.
  */
+/**
+ * The lead sentence of a driver. The band carries the finding; the second
+ * sentence (usually the contrasting series or the counter-trend vendors)
+ * belongs to the fuller card on the Market page. Splits only on a full stop
+ * that starts a new sentence, so "$7.1bn" and "19 May" stay intact.
+ */
+function leadSentence(text: string): string {
+  const m = /^(.*?[.?!])\s+[A-Z]/.exec(text);
+  return m ? m[1]! : text;
+}
+
 export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
   return (
     <Panel className="px-0 py-0">
@@ -74,6 +122,14 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
             </div>
             <StateText state={m.state} metricId={m.id} className="text-[1.05rem]" />
             <MovementText movement={m.movement} className="text-[0.76rem]" />
+            {/* The band is a summary: one line on WHY, never the full body.
+                The Market page carries driver, implication, limitation and
+                the investigation prompt for the same dimensions. */}
+            {m.analysis ? (
+              <p className="m-0 mt-1 text-[0.76rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                {leadSentence(m.analysis.driver)}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>

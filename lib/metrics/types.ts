@@ -65,6 +65,27 @@ export interface Basis {
   asOf?: string | null;
 }
 
+/**
+ * Why the current reading exists. The state says WHAT the variable is doing
+ * and colour says what it MEANS for the buyer; this says why it reads this
+ * way, which vendors drive it, and what to check next. Built only from the
+ * canonical resolved object — never recalculated per surface.
+ */
+export interface MetricAnalysis {
+  /** What is causing the state, naming the vendors that materially drive it. */
+  driver: string;
+  /** Why a sourcing, vendor-management or CIO reader should care. */
+  implication: string;
+  /** Evidence families behind the reading — never formulas or weights. */
+  evidence: string;
+  /** Shown only where it materially changes interpretation. */
+  limitation?: string;
+  /** One concrete question worth putting to the vendor or the evidence. */
+  test?: string;
+  /** Distribution across vendors — supporting data, never the analysis. */
+  distribution?: string;
+}
+
 export interface Metric {
   id: string;
   label: string;
@@ -77,6 +98,8 @@ export interface Metric {
   asOf: string | null;
   /** Present when a scenario adjusted this metric — modelled, not evidence. */
   modelled?: string;
+  /** Why this reading exists. Absent where there is nothing to explain. */
+  analysis?: MetricAnalysis;
 }
 
 export interface Opportunity {
