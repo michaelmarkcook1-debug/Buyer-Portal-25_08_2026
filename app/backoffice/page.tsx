@@ -75,40 +75,40 @@ export default function BackofficePage() {
             <table className="w-full border-collapse text-[0.95rem]">
               <thead>
                 <tr>
-                  <th className="eyebrow px-3 py-2 text-left font-semibold">Component</th>
-                  <th className="eyebrow px-3 py-2 text-left font-semibold">Estimated cost</th>
-                  <th className="eyebrow px-3 py-2 text-left font-semibold">Why</th>
+                  <th className="eyebrow px-3 py-2.5 text-left font-semibold">Component</th>
+                  <th className="eyebrow px-3 py-2.5 text-left font-semibold">Estimated cost</th>
+                  <th className="eyebrow px-3 py-2.5 text-left font-semibold">Why</th>
                 </tr>
               </thead>
               <tbody style={{ color: "var(--fg)" }}>
                 <tr style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
-                  <td className="px-3 py-2.5">External data sources</td>
-                  <td className="tabular px-3 py-2.5">$0.00</td>
-                  <td className="px-3 py-2.5" style={{ color: "var(--fg-muted)" }}>SEC EDGAR and FRED are free; the AG API and AI Enterprise DB are your own services.</td>
+                  <td className="px-3 py-3">External data sources</td>
+                  <td className="tabular px-3 py-3">$0.00</td>
+                  <td className="px-3 py-3" style={{ color: "var(--fg-muted)" }}>SEC EDGAR and FRED are free; the AG API and AI Enterprise DB are your own services.</td>
                 </tr>
                 <tr style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
-                  <td className="px-3 py-2.5">LLM usage in the pipeline</td>
-                  <td className="tabular px-3 py-2.5">$0.00</td>
-                  <td className="px-3 py-2.5" style={{ color: "var(--fg-muted)" }}>Classification and materiality gating are deterministic — no model calls during refresh.</td>
+                  <td className="px-3 py-3">LLM usage in the pipeline</td>
+                  <td className="tabular px-3 py-3">$0.00</td>
+                  <td className="px-3 py-3" style={{ color: "var(--fg-muted)" }}>Classification and materiality gating are deterministic — no model calls during refresh.</td>
                 </tr>
                 <tr style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
-                  <td className="px-3 py-2.5">Neon database compute</td>
-                  <td className="tabular px-3 py-2.5">≈ $0.01–0.05</td>
-                  <td className="px-3 py-2.5" style={{ color: "var(--fg-muted)" }}>Roughly 5–10 minutes of autoscaled activity for staging, promotion and snapshots.</td>
+                  <td className="px-3 py-3">Neon database compute</td>
+                  <td className="tabular px-3 py-3">≈ $0.01–0.05</td>
+                  <td className="px-3 py-3" style={{ color: "var(--fg-muted)" }}>Roughly 5–10 minutes of autoscaled activity for staging, promotion and snapshots.</td>
                 </tr>
                 <tr style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
-                  <td className="px-3 py-2.5">Analyst Insight regeneration (consequential)</td>
-                  <td className="tabular px-3 py-2.5">≈ $0.30–0.60</td>
-                  <td className="px-3 py-2.5" style={{ color: "var(--fg-muted)" }}>
+                  <td className="px-3 py-3">Analyst Insight regeneration (consequential)</td>
+                  <td className="tabular px-3 py-3">≈ $0.30–0.60</td>
+                  <td className="px-3 py-3" style={{ color: "var(--fg-muted)" }}>
                     If the data changed, cached briefings expire; the next visit to each surface regenerates
                     (~12–16 briefings × roughly $0.02–0.03 each on claude-sonnet-5, including occasional retries).
                     Only pages actually visited regenerate.
                   </td>
                 </tr>
                 <tr style={{ borderTop: "1px solid var(--surface-line)" }}>
-                  <td className="px-3 py-2.5 font-medium">Typical total per refresh cycle</td>
-                  <td className="tabular px-3 py-2.5 font-medium">under $1</td>
-                  <td className="px-3 py-2.5" style={{ color: "var(--fg-muted)" }}>Dominated by insight regeneration; the pipeline itself costs effectively nothing.</td>
+                  <td className="px-3 py-3 font-medium">Typical total per refresh cycle</td>
+                  <td className="tabular px-3 py-3 font-medium">under $1</td>
+                  <td className="px-3 py-3" style={{ color: "var(--fg-muted)" }}>Dominated by insight regeneration; the pipeline itself costs effectively nothing.</td>
                 </tr>
               </tbody>
             </table>

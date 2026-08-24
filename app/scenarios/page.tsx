@@ -122,8 +122,8 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                   <table className="w-full border-collapse text-[0.95rem]">
                     <thead>
                       <tr>
-                        <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                        <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
+                        <th className="eyebrow px-4 py-2.5 text-left font-semibold">
                           <span className="inline-flex items-center gap-1.5">
                             Baseline → scenario
                             <InfoTip content={{
@@ -135,7 +135,7 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                             }} />
                           </span>
                         </th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                        <th className="eyebrow px-4 py-2.5 text-left font-semibold">
                           <span className="inline-flex items-center gap-1.5">
                             Rank move
                             <InfoTip content={{
@@ -147,7 +147,7 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                             }} />
                           </span>
                         </th>
-                        <th className="eyebrow px-4 py-3 text-left font-semibold">
+                        <th className="eyebrow px-4 py-2.5 text-left font-semibold">
                           <span className="inline-flex items-center gap-1.5">
                             Most-shifted opportunity
                             <InfoTip content={{

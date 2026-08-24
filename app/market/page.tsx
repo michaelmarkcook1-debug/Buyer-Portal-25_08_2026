@@ -97,9 +97,27 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <StateText state={intel.buyerEconomics.state} metricId="m.buyerEconomics" className="display text-[1.7rem]" />
             <MovementText movement={intel.buyerEconomics.movement} className="text-[1.02rem]" />
           </div>
+          {/* The exposure chart lives INSIDE its own analytical unit and spans
+              the grid: one heading, one interpretation, one conclusion. It
+              previously sat in a separate section below, restating the same
+              finding with its own header and prose. */}
           <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
             {intel.buyerEconomics.dimensions.map((m) => (
-              <MetricCard key={m.id} m={m} />
+              <div key={m.id}>
+                <MetricCard
+                  m={m}
+                  visual={
+                    m.id === "m.exposure" && exposureShown.length > 0 ? (
+                      <ExposureConcentrationChart
+                        bars={exposureShown}
+                        totalCount={exposureBars.reduce((a, b) => a + b.count, 0)}
+                        moneyFmt={money}
+                        valueLabel="Bars show DISCLOSED value only. A dashed, lighter bar marks a vendor whose value is mostly estimated; withheld value draws no bar."
+                      />
+                    ) : undefined
+                  }
+                />
+              </div>
             ))}
           </div>
         </Panel>
@@ -300,35 +318,6 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           </div>
         )}
       </section>
-
-      {/* CHART 1 — where observed commercial value is concentrated. */}
-      {exposureShown.length > 0 ? (
-        <section className="mt-12">
-          <SectionHeader
-            eyebrow="Commercial exposure"
-            title="Where observed value is concentrated"
-            aside={isWhole ? `Leading ${count(exposureShown.length)} of ${count(exposureBars.length)} vendors with exposure` : undefined}
-          />
-          <div className="mt-5">
-            <Panel className="px-6 py-5">
-              <ExposureConcentrationChart
-                bars={exposureShown}
-                totalCount={exposureBars.reduce((a, b) => a + b.count, 0)}
-                moneyFmt={money}
-                valueLabel="Bars show DISCLOSED value only. A dashed, lighter bar marks a vendor whose value is mostly estimated from comparable agreements; withheld value draws no bar."
-                interpretation={
-                  exposureTop && exposureShare >= 0.5
-                    ? `Commercial exposure is concentrated: ${exposureTop.name} alone accounts for ${Math.round(exposureShare * 100)}% of the disclosed value entering the 12-month end-of-term window.`
-                    : exposureTop
-                      ? `Exposure is spread across ${count(exposureBars.length)} vendors rather than sitting with one; ${exposureTop.name} carries the largest single share at ${Math.round(exposureShare * 100)}%.`
-                      : "No disclosed value is held against the agreements reaching end-of-term in this window."
-                }
-                footnote={`Curated contract record${intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} · agreements reaching end-of-term within 12 months`}
-              />
-            </Panel>
-          </div>
-        </section>
-      ) : null}
 
       <section className="mt-12">
         <SectionHeader

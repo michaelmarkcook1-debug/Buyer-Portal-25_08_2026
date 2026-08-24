@@ -54,8 +54,8 @@ function RankedOpportunityTable({ rows }: { rows: VendorIntel[] }) {
                     <table className="w-full border-collapse text-[0.95rem]">
                       <thead>
                         <tr>
-                          <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
-                          <th className="eyebrow px-4 py-3 text-left font-semibold">
+                          <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
+                          <th className="eyebrow px-4 py-2.5 text-left font-semibold">
                             <span className="inline-flex items-center gap-1.5">
                               Overall
                               <InfoTip content={fromSemantics(METRIC_DICTIONARY["commercialOpportunity"]!)} />

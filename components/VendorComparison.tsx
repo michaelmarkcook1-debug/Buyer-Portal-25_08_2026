@@ -88,7 +88,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
         <table className="w-full border-collapse text-[0.96rem]">
           <thead>
             <tr>
-              <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
+              <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
               {cols.map((c) => (
                 <th key={c.key} className="eyebrow px-4 py-3 text-left font-semibold">
                   <span className="inline-flex items-center gap-1.5">
@@ -105,7 +105,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
             {vendors.map((v, i) => (
               <tr key={v.ticker} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                 <td className="px-5 py-3">
-                  <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="group inline-flex items-baseline gap-2.5">
+                  <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="tap-link group inline-flex items-baseline gap-2.5">
                     <span className="code tabular w-5 text-right text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
                       {i + 1}
                     </span>
@@ -132,7 +132,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
       <ul className="m-0 list-none divide-y p-0 md:hidden" style={{ borderColor: "var(--surface-line-soft)" }}>
         {vendors.map((v, i) => (
           <li key={v.ticker} className="px-5 py-4" style={{ borderColor: "var(--surface-line-soft)" }}>
-            <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="flex items-baseline justify-between gap-3">
+            <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="tap-link flex items-baseline justify-between gap-3">
               <span className="font-medium" style={{ color: "var(--fg)" }}>
                 <span className="code tabular mr-2 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
                   {i + 1}

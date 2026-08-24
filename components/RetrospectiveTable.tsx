@@ -108,7 +108,7 @@ export function RetrospectiveTable({
         <table className="w-full border-collapse text-[0.95rem]">
           <thead>
             <tr>
-              <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
+              <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
               {DIMENSIONS.map((d) => (
                 <th key={d.key} className="eyebrow px-4 py-3 text-left font-semibold">
                   <span className="inline-flex items-center gap-1.5">
@@ -128,7 +128,7 @@ export function RetrospectiveTable({
                   <td className="px-5 py-3">
                     <Link
                       href={`/vendors/${v.ticker.toLowerCase()}`}
-                      className="font-medium underline-offset-4 hover:underline"
+                      className="tap-link font-medium underline-offset-4 hover:underline"
                       style={{ color: "var(--fg)", textDecorationColor: "var(--accent-fill)" }}
                     >
                       {v.name}

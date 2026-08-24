@@ -12,7 +12,21 @@ import { CONFIDENCE_LABEL, ModelledTag, MovementText, Panel, StateText } from ".
  * different subjects — there the explanation belongs once on the section
  * heading, not repeated on every card.
  */
-export function MetricCard({ m, hideInfo = false }: { m: Metric; hideInfo?: boolean }) {
+export function MetricCard({
+  m,
+  hideInfo = false,
+  visual,
+}: {
+  m: Metric;
+  hideInfo?: boolean;
+  /**
+   * Optional graphic rendered between the driver and the buyer implication.
+   * A chart that answers the same question as the card belongs INSIDE it —
+   * two headings and two interpretations for one conclusion is the bulk this
+   * consolidation removes.
+   */
+  visual?: React.ReactNode;
+}) {
   return (
     <Panel className="flex min-w-0 flex-col gap-1.5 px-4 py-4">
       <div className="eyebrow flex items-center gap-2">
@@ -31,6 +45,7 @@ export function MetricCard({ m, hideInfo = false }: { m: Metric; hideInfo?: bool
           <p className="m-0 text-[0.9rem] leading-snug" style={{ color: "var(--fg)" }}>
             {m.analysis.driver}
           </p>
+          {visual ? <div className="mt-1">{visual}</div> : null}
           <p className="m-0 text-[0.88rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>For the buyer: </span>
             {m.analysis.implication}

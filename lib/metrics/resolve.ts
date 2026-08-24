@@ -1905,6 +1905,17 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
                 .map((v) => ({ name: v.name, n: deals.get(v.ticker)?.inPlay12 ?? 0 }))
                 .filter((x) => x.n > 0)
                 .sort((a, b) => b.n - a.n),
+              topByValue: (() => {
+                // concentration judged on DISCLOSED value, matching the chart
+                const byValue = vendors
+                  .map((v) => ({ name: v.name, usd: v.coverage.inPlay12DisclosedUsd ?? 0 }))
+                  .filter((x) => x.usd > 0)
+                  .sort((a, b) => b.usd - a.usd);
+                const totalUsd = byValue.reduce((a, b) => a + b.usd, 0);
+                return byValue[0] && totalUsd > 0
+                  ? { name: byValue[0].name, share: byValue[0].usd / totalUsd }
+                  : null;
+              })(),
               asOf: shortDate(anchor.dataAsOf ?? anchor.lastIngest),
             },
             exposure.state,

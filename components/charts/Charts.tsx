@@ -78,8 +78,9 @@ export function ExposureConcentrationChart({
   bars: ExposureBar[];
   totalCount: number;
   valueLabel: string;
-  interpretation: string;
-  footnote: string;
+  /** Omitted where the surrounding card already carries the interpretation. */
+  interpretation?: string;
+  footnote?: string;
   moneyFmt: (n: number) => string;
 }) {
   const withValue = bars.filter((b) => b.disclosedUsd != null && b.disclosedUsd > 0);
@@ -179,8 +180,8 @@ export function SigningsSlopeChart({
 }: {
   rows: SigningsRow[];
   windowLabel: string;
-  interpretation: string;
-  footnote: string;
+  interpretation?: string;
+  footnote?: string;
 }) {
   const max = Math.max(1, ...rows.flatMap((r) => [r.prior, r.current]));
   const rowH = 36;
@@ -261,8 +262,8 @@ export function DistributionChart({
 }: {
   rows: { dimension: string; bands: DistributionBand[] }[];
   total: number;
-  interpretation: string;
-  footnote: string;
+  interpretation?: string;
+  footnote?: string;
 }) {
   return (
     <Figure

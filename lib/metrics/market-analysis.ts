@@ -680,28 +680,28 @@ export interface ExposureInputs {
   value: string;
   valueIsInferred: boolean;
   perVendor: { name: string; n: number }[];
+  /**
+   * Concentration is judged on DISCLOSED VALUE, not agreement count. Counting
+   * agreements said "spread across 3 vendors" while the value chart beside it
+   * said "99% sits with one" — the same concept reaching opposite conclusions
+   * because the two were measuring different things.
+   */
+  topByValue: { name: string; share: number } | null;
   asOf: string;
 }
 
 export function exposureAnalysis(e: ExposureInputs, state: MetricState): MetricAnalysis | undefined {
   if (e.total === 0 && e.within24 === 0) return undefined;
-  const top = e.perVendor[0];
-  const share = top && e.total > 0 ? top.n / e.total : 0;
-  const concentrated = share >= 0.5 && e.perVendor.length > 1;
+  const top = e.topByValue;
+  const concentrated = top != null && top.share >= 0.5;
 
-  const shape = concentrated
-    ? `Exposure is concentrated: ${top!.name} alone accounts for ${top!.n} of them.`
-    : e.perVendor.length > 1
-      ? `Exposure is spread across ${e.perVendor.length} vendors rather than sitting with one.`
-      : e.perVendor.length === 1
-        ? `All of it sits with ${top!.name}.`
-        : "";
-
+  /* The chart shows the shape. Text states the headline and the consequence —
+     it must not narrate the bars the reader can already see (§4). */
   const driver =
-    `${e.total} observed agreement${e.total === 1 ? "" : "s"} reach end-of-term within 12 months across the selected market, carrying ${e.value}. ${shape}`.trim();
+    `${e.total} observed agreement${e.total === 1 ? "" : "s"} reach end-of-term within 12 months across the selected market, carrying ${e.value}.`;
 
   const implication = concentrated
-    ? "Concentrated exposure means the market's negotiating opportunity is really one vendor's renewal — sequencing that conversation matters more than any market-wide posture."
+    ? `Because that value sits overwhelmingly with ${top!.name}, near-term leverage in this market is really one relationship — sequencing that renewal matters more than any market-wide posture.`
     : state === "favourable"
       ? "A broad renewal window is the practical source of commercial leverage: value entering play is what makes a commercial conversation timely rather than speculative."
       : "With little reaching end-of-term, there is no natural commercial trigger in the near term; economic value is more likely to come from scope or service-model change than renegotiation.";

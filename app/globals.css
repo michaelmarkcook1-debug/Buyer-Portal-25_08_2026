@@ -577,3 +577,18 @@ a {
 /* Card height on a phone is driven by the analysis text itself, not by gaps.
    Shortening it means shortening the content, which is a later phase — the
    trade taken here is deliberate: larger, readable text on a longer page. */
+
+/* ── Table rhythm (Phase 3) ────────────────────────────────────────────
+   Table headers inherited .eyebrow's 0.22em tracking. At uppercase 12.5px
+   that reads as shouting rather than labelling, and it was the single
+   biggest reason dense tables felt harder to scan than they needed to be.
+   Headers stay uppercase and small-but-readable; the tracking comes down. */
+main table th.eyebrow {
+  letter-spacing: 0.09em;
+  vertical-align: bottom;
+}
+/* Numeric columns compare down the column, so they line up and share width. */
+main table td.tabular,
+main table th.tabular {
+  font-variant-numeric: lining-nums tabular-nums;
+}

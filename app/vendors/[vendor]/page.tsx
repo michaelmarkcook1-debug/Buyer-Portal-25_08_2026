@@ -121,7 +121,7 @@ export default async function VendorDetail({
     <PortalShell active="vendors" ctx={ctx} returnTo={returnTo}>
       <div className="mb-6">
         <div className="eyebrow">
-          <Link href="/vendors" style={{ color: "var(--fg-dim)" }}>Vendors</Link> · {focal.ticker}
+          <Link href="/vendors" className="tap-link" style={{ color: "var(--fg-dim)" }}>Vendors</Link> · {focal.ticker}
         </div>
         <h2 className="display mt-2 text-[2rem] leading-tight" style={{ color: "var(--fg)" }}>
           {focal.name}
@@ -334,21 +334,21 @@ export default async function VendorDetail({
                 <table className="w-full border-collapse text-[0.95rem]">
                   <thead>
                     <tr>
-                      <th className="eyebrow px-5 py-3 text-left font-semibold">Client</th>
-                      <th className="eyebrow px-4 py-3 text-left font-semibold">Service line</th>
-                      <th className="eyebrow px-4 py-3 text-right font-semibold">Total value</th>
-                      <th className="eyebrow px-4 py-3 text-left font-semibold">End of term</th>
+                      <th className="eyebrow px-5 py-2.5 text-left font-semibold">Client</th>
+                      <th className="eyebrow px-4 py-2.5 text-left font-semibold">Service line</th>
+                      <th className="eyebrow px-4 py-2.5 text-right font-semibold">Total value</th>
+                      <th className="eyebrow px-4 py-2.5 text-left font-semibold">End of term</th>
                     </tr>
                   </thead>
                   <tbody>
                     {exposure.map((e, i) => (
                       <tr key={i} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
-                        <td className="px-5 py-2.5 font-medium" style={{ color: "var(--fg)" }}>{e.client}</td>
-                        <td className="px-4 py-2.5" style={{ color: "var(--fg-muted)" }}>{e.line ?? "Unclassified"}</td>
-                        <td className="tabular px-4 py-2.5 text-right" style={{ color: "var(--fg)" }}>
+                        <td className="px-5 py-3 font-medium" style={{ color: "var(--fg)" }}>{e.client}</td>
+                        <td className="px-4 py-3" style={{ color: "var(--fg-muted)" }}>{e.line ?? "Unclassified"}</td>
+                        <td className="tabular px-4 py-3 text-right" style={{ color: "var(--fg)" }}>
                           {formatTcvDisplay(e)}
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-3">
                           <span
                             className="mark-dir tabular"
                             style={{ color: e.daysRemaining <= 60 ? "var(--data-watch-ink)" : "var(--fg-muted)" }}

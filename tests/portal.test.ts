@@ -1325,21 +1325,23 @@ describe("buyer economics is a distinct layer from market state (2026-08-24)", (
   it("exposure keeps disclosed and estimated value separate", () => {
     const inferred = exposureAnalysis(
       { total: 4, prior: 2, within24: 9, value: "$100M–$300M estimated", valueIsInferred: true,
-        perVendor: [{ name: "A", n: 4 }], asOf: "19 May 2026" }, "favourable")!;
+        perVendor: [{ name: "A", n: 4 }], topByValue: { name: "A", share: 1 }, asOf: "19 May 2026" }, "favourable")!;
     expect(inferred.limitation).toMatch(/estimated/i);
     const disclosed = exposureAnalysis(
       { total: 38, prior: 20, within24: 77, value: "$7.2bn", valueIsInferred: false,
-        perVendor: [{ name: "A", n: 20 }, { name: "B", n: 18 }], asOf: "19 May 2026" }, "favourable")!;
+        perVendor: [{ name: "A", n: 20 }, { name: "B", n: 18 }], topByValue: { name: "A", share: 0.4 }, asOf: "19 May 2026" }, "favourable")!;
     expect(disclosed.limitation).toBeUndefined();
   });
 
   it("exposure names concentration when one vendor carries the window", () => {
     const conc = exposureAnalysis(
       { total: 10, prior: 3, within24: 12, value: "$1bn", valueIsInferred: false,
-        perVendor: [{ name: "Atos", n: 8 }, { name: "Other", n: 2 }], asOf: "19 May 2026" }, "favourable")!;
-    expect(conc.driver).toMatch(/concentrated/i);
-    expect(conc.driver).toMatch(/Atos/);
-    expect(conc.implication).toMatch(/one vendor/i);
+        perVendor: [{ name: "Atos", n: 8 }, { name: "Other", n: 2 }],
+        topByValue: { name: "Atos", share: 0.92 }, asOf: "19 May 2026" }, "favourable")!;
+    // the CHART carries the shape; the text carries the consequence (§4)
+    expect(conc.driver).not.toMatch(/concentrated/i);
+    expect(conc.implication).toMatch(/Atos/);
+    expect(conc.implication).toMatch(/one relationship/i);
   });
 
   it("economic explanations carry no buyer-ownership language", () => {
@@ -1347,7 +1349,7 @@ describe("buyer economics is a distinct layer from market state (2026-08-24)", (
       deliveryCostAnalysis([{ name: "A", state: "unfavourable", rank: null }], "unfavourable", 1, 3),
       headroomAnalysis([{ name: "A", state: "unfavourable", rank: null }], "unfavourable"),
       exposureAnalysis({ total: 5, prior: 2, within24: 8, value: "$1bn", valueIsInferred: false,
-        perVendor: [{ name: "A", n: 5 }], asOf: "19 May 2026" }, "favourable"),
+        perVendor: [{ name: "A", n: 5 }], topByValue: { name: "A", share: 1 }, asOf: "19 May 2026" }, "favourable"),
       productivityTermsAnalysis({ capability: "favourable", automation: "favourable", gainShare: [], labour: [],
         shareFirst: { period: "2024", value: 0 }, shareLast: { period: "2026", value: 0 }, coverage: null }, "favourable"),
     ].filter(Boolean);
@@ -1428,5 +1430,42 @@ describe("Phase 2 charts and whole-market restructure (2026-08-24)", () => {
     const vendorsPage = readFileSync(resolve(__dirname, "../app/vendors/page.tsx"), "utf8");
     expect(vendorsPage).toMatch(/signingsT12/);
     expect(vendorsPage).not.toMatch(/awardsT90|procurement.*Slope/i);
+  });
+});
+
+describe("Phase 3 consolidation invariants (2026-08-24)", () => {
+  it("the exposure text states the headline and consequence, never the bars", () => {
+    // the chart shows the shape; narrating it in prose is the duplication
+    // Phase 3 removed. Concentration is judged on DISCLOSED VALUE so the two
+    // representations can never reach opposite conclusions again.
+    const conc = exposureAnalysis(
+      { total: 10, prior: 3, within24: 12, value: "$1bn", valueIsInferred: false,
+        perVendor: [{ name: "Atos", n: 8 }, { name: "Other", n: 2 }],
+        topByValue: { name: "Atos", share: 0.92 }, asOf: "19 May 2026" }, "favourable")!;
+    expect(conc.driver).toMatch(/10 observed agreements/);
+    expect(conc.driver).not.toMatch(/spread across|concentrated/i);
+    expect(conc.implication).toMatch(/Atos/);
+
+    // count-majority but value-minority must NOT read as concentrated
+    const spread = exposureAnalysis(
+      { total: 10, prior: 3, within24: 12, value: "$1bn", valueIsInferred: false,
+        perVendor: [{ name: "A", n: 8 }, { name: "B", n: 2 }],
+        topByValue: { name: "A", share: 0.2 }, asOf: "19 May 2026" }, "favourable")!;
+    expect(spread.implication).not.toMatch(/one relationship/i);
+  });
+
+  it("charts render without their own caption when a card carries it", () => {
+    // interpretation/footnote are optional so a chart can sit inside an
+    // analytical unit without producing a second interpretation of one finding
+    const src = readFileSync(resolve(__dirname, "../components/charts/Charts.tsx"), "utf8");
+    expect(src).toMatch(/interpretation\?: string/);
+    expect(src).toMatch(/footnote\?: string/);
+  });
+
+  it("table headers label rather than shout", () => {
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
+    expect(css).toMatch(/main table th\.eyebrow/);
+    // 0.22em uppercase at 12.5px was the scanning cost
+    expect(css).toMatch(/letter-spacing:\s*0\.09em/);
   });
 });
