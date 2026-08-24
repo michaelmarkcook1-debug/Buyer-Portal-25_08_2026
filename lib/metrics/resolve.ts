@@ -69,8 +69,9 @@ import {
 } from "./types";
 import {
   AUTOMATION_COPY, BUYER_LEVERAGE_COPY, COMMERCIAL_COPY, HEAT_COPY,
-  aiPressureAnalysis, demandAnalysis, intensityAnalysis, labourAnalysis,
-  pricingAnalysis, readingsFrom, riskAnalysis, rollupAnalysis, supplierAnalysis,
+  aiPressureAnalysis, demandAnalysis, deliveryCostAnalysis, exposureAnalysis,
+  headroomAnalysis, intensityAnalysis, pricingAnalysis, productivityTermsAnalysis,
+  readingsFrom, riskAnalysis, rollupAnalysis,
 } from "./market-analysis";
 import { buildWatchSignals } from "./watch";
 
@@ -1559,6 +1560,14 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const m = (sel: (v: VendorIntel) => Metric) => vendors.map(sel);
 
   const strip = {
+    /* A market CONDITION, not an economic force: it belongs with delivery
+       resilience, never under buyer economics. Declared here so the shape
+       matches MarketIntel["strip"]; the analysis is attached below. */
+    operationalRisk: rollup(
+      "m.oprisk", "Operational Risk", m((v) => v.metrics.operationalRisk),
+      "No elevated operational risk across your market.",
+      "Elevated operational risk across your market.",
+    ),
     buyerLeverage: rollup(
       "m.buyerLeverage", "Buyer Leverage", m((v) => v.metrics.buyerLeverage),
       "Decision windows are open across your market.",
@@ -1737,54 +1746,184 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         ),
   );
 
-  const labour = rollup("m.labour", "Labour Economics", m((v) => v.metrics.talentPressure),
-    "Vendor delivery workforces are expanding.", "Vendor delivery workforces are under strain.");
-  const supplier = rollup("m.supplier", "Supplier Economics", m((v) => v.metrics.financialResilience),
-    "Vendor financial positions are expanding.", "Vendor financial positions are strained.");
-  const oprisk = rollup("m.oprisk", "Operational Risk", m((v) => v.metrics.operationalRisk),
-    "No elevated operational risk across your market.", "Elevated operational risk across your market.");
+  const oprisk = strip.operationalRisk;
+
+  /* ── Buyer economics ───────────────────────────────────────────────────
+     A distinct analytical layer from Market State. Market State says WHAT
+     conditions are changing; this says what those conditions do to the
+     buyer's commercial position ECONOMICALLY. Nothing here repeats a strip
+     reading: pricing, demand, intensity and AI pressure stay above, and
+     operational risk is a delivery condition that sits with delivery
+     resilience, not an economic force. ── */
+
+  // A. What is happening to the cost of delivering the work.
+  const deliveryCost = rollup(
+    "m.deliveryCost", "Delivery Cost Economics", m((v) => v.metrics.deliveryCostPressure),
+    "Published cost inputs are easing across the selected market.",
+    "Published cost inputs are rising across the selected market.",
+  );
+
+  // B. Whether suppliers can afford to invest or concede.
+  const headroom = rollup(
+    "m.headroom", "Supplier Financial Headroom", m((v) => v.metrics.financialHeadroom),
+    "Filed positions show room to fund investment or concession.",
+    "Filed positions show little room to fund investment or concession.",
+  );
+
+  // C. How much observed commercial value enters a negotiation-sensitive
+  //    window, and how concentrated it is. Counts and value are canonical;
+  //    disclosed and inferred value stay separate via formatValueMix.
+  const exposure = (() => {
+    if (agg.contracts === 0) {
+      return insufficientMetric("m.exposure", "Commercial Exposure", "No contract evidence in scope.");
+    }
+    const perVendor = vendors
+      .map((v) => ({ name: v.name, n: deals.get(v.ticker)?.inPlay12 ?? 0 }))
+      .filter((x) => x.n > 0)
+      .sort((a, b) => b.n - a.n);
+    const total = agg.inPlay12;
+    const topShare = total > 0 && perVendor[0] ? perVendor[0].n / total : 0;
+    const state: MetricState =
+      total === 0 ? "unfavourable" : total >= Math.max(3, vendors.length) ? "favourable" : "stable";
+    return metric(
+      "m.exposure", "Commercial Exposure", state,
+      ratioMove(agg.inPlay12, agg.expiredPast12), agg.inPlay12Tcv != null ? "medium" : "low",
+      null,
+      [{
+        text: `${count(total)} observed agreement${total === 1 ? "" : "s"} reach end-of-term within 12 months across the selected market (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}); ${count(agg.inPlay24)} within 24 months.`,
+        source: "Curated contract tracker (market record)", ownership: "market",
+      }],
+      anchor.dataAsOf ?? anchor.lastIngest,
+    );
+  })();
+
+  // D. Whether provider productivity is running ahead of how they charge.
+  const productivityTerms = (() => {
+    const capability = strip.aiProductivityPressure.state;
+    const automation = strip.automationOpportunity.state;
+    if (capability === "insufficient" && automation === "insufficient") {
+      return insufficientMetric("m.prodTerms", "Productivity vs Commercial Terms",
+        "No substantiated capability movement is held for the selected vendors.");
+    }
+    const capabilityMoving = capability === "favourable" || automation === "favourable";
+    const withShare = pricingMix.points.filter((pt) => pt.value != null);
+    const first = withShare[0];
+    const last = withShare[withShare.length - 1];
+    const shareMoved = first && last && last.value != null && first.value != null
+      ? Math.abs(last.value - first.value) >= 2
+      : null;
+    /* Four real cases, not two: a gap only exists where capability moved and
+       terms did not. "Neither moved" is no gap at all, and must not read as
+       though productivity were lagging. */
+    const state: MetricState =
+      shareMoved === null
+        ? "mixed"
+        : capabilityMoving && !shareMoved
+          ? "favourable"
+          : capabilityMoving && shareMoved
+            ? "stable"
+            : !capabilityMoving && shareMoved
+              ? "unfavourable"
+              : "mixed";
+    const basis: Basis[] = [];
+    if (first && last && first.value != null && last.value != null) {
+      basis.push({
+        text: `Consumption/outcome-shaped share of observed agreements ${first.value}% (${first.period}) → ${last.value}% (${last.period}).`,
+        source: pricingMix.source, ownership: "market",
+      });
+    }
+    return metric(
+      "m.prodTerms", "Productivity vs Commercial Terms", state, "insufficient",
+      withShare.length >= 2 ? "medium" : "low", null, basis,
+      anchor.dataAsOf ?? anchor.lastIngest,
+    );
+  })();
 
   const economicsDimensions: Metric[] = [
-    strip.pricingPressure,
     withAnalysis(
-      labour,
-      labourAnalysis(
-        readingsFrom(mv((v) => v.metrics.talentPressure), rankBy((t) => signals.get(t)?.talent?.netFlow)),
-        labour.state,
+      deliveryCost,
+      deliveryCostAnalysis(
+        readingsFrom(mv((v) => v.metrics.deliveryCostPressure)),
+        deliveryCost.state,
+        vendors.filter((v) => v.metrics.deliveryCostPressure.basis.some((b) => /not evidenced/i.test(b.text))).length,
+        vendors.length,
       ),
     ),
-    strip.competitiveIntensity,
     withAnalysis(
-      supplier,
-      supplierAnalysis(
-        readingsFrom(mv((v) => v.metrics.financialResilience), rankBy((t) => catalog.get(t)?.revenueGrowthYoy)),
-        supplier.state,
+      headroom,
+      headroomAnalysis(
+        readingsFrom(mv((v) => v.metrics.financialHeadroom), rankBy((t) => prims.get(t)?.get("operating_margin_pct")?.value)),
+        headroom.state,
       ),
     ),
-    strip.aiProductivityPressure,
-    strip.servicesDemand,
     withAnalysis(
-      oprisk,
-      riskAnalysis(
-        {
-          // ranked by the underlying issue reading so the named drivers are the
-          // ones that actually carry the risk, not the alphabetically first
-          readings: readingsFrom(
-            mv((v) => v.metrics.operationalRisk),
-            rankBy((t) => signals.get(t)?.topIssues?.riskScore),
+      exposure,
+      agg.contracts === 0
+        ? undefined
+        : exposureAnalysis(
+            {
+              total: agg.inPlay12,
+              prior: agg.expiredPast12,
+              within24: agg.inPlay24,
+              value: formatValueMix({
+                disclosedUsd: agg.inPlay12Tcv,
+                inferredLowUsd: agg.inPlay12Inf.low,
+                inferredMidUsd: agg.inPlay12Inf.mid,
+                inferredHighUsd: agg.inPlay12Inf.high,
+              }),
+              valueIsInferred: inferredDominates({
+                disclosedUsd: agg.inPlay12Tcv,
+                inferredLowUsd: agg.inPlay12Inf.low,
+                inferredMidUsd: agg.inPlay12Inf.mid,
+                inferredHighUsd: agg.inPlay12Inf.high,
+              }),
+              perVendor: vendors
+                .map((v) => ({ name: v.name, n: deals.get(v.ticker)?.inPlay12 ?? 0 }))
+                .filter((x) => x.n > 0)
+                .sort((a, b) => b.n - a.n),
+              asOf: shortDate(anchor.dataAsOf ?? anchor.lastIngest),
+            },
+            exposure.state,
           ),
-          topics: vendors.map((v) => ({
-            name: v.name,
-            titles: signals.get(v.ticker)?.topIssues?.issueTitles?.slice(0, 2) ?? [],
-            cyber: sec.get(v.ticker)?.byItem["1.05"] ?? 0,
-            restructuring: sec.get(v.ticker)?.byItem["2.05"] ?? 0,
-          })),
+    ),
+    withAnalysis(
+      productivityTerms,
+      productivityTermsAnalysis(
+        {
+          capability: strip.aiProductivityPressure.state,
+          automation: strip.automationOpportunity.state,
+          gainShare: readingsFrom(mv((v) => v.metrics.gainShareOpportunity)),
+          labour: readingsFrom(mv((v) => v.metrics.talentPressure)),
+          shareFirst: pricingMix.points.filter((pt) => pt.value != null)[0] ?? null,
+          shareLast: pricingMix.points.filter((pt) => pt.value != null).slice(-1)[0] ?? null,
+          coverage: pricingMix.coverage
+            ? `${count(pricingMix.coverage.classifiedCount)} of ${count(pricingMix.coverage.observedCount)} observed agreements carrying a commercial-model classification`
+            : null,
         },
-        oprisk.state,
-        oprisk.confidence,
+        productivityTerms.state,
       ),
     ),
-  ];
+  ].filter((x) => x.state !== "insufficient" || x.basis.length > 0);
+  strip.operationalRisk = withAnalysis(
+    oprisk,
+    riskAnalysis(
+      {
+        readings: readingsFrom(
+          mv((v) => v.metrics.operationalRisk),
+          rankBy((t) => signals.get(t)?.topIssues?.riskScore),
+        ),
+        topics: vendors.map((v) => ({
+          name: v.name,
+          titles: signals.get(v.ticker)?.topIssues?.issueTitles?.slice(0, 2) ?? [],
+          cyber: sec.get(v.ticker)?.byItem["1.05"] ?? 0,
+          restructuring: sec.get(v.ticker)?.byItem["2.05"] ?? 0,
+        })),
+      },
+      oprisk.state,
+      oprisk.confidence,
+    ),
+  );
+
   const buyerEconomics = (() => {
     const assessed = economicsDimensions.filter((x) => x.state !== "insufficient");
     const fav = assessed.filter((x) => x.state === "favourable").length;

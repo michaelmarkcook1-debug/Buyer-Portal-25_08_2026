@@ -276,6 +276,47 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     },
   },
 
+  "m.exposure": {
+    name: "Commercial exposure",
+    definition:
+      "How much observed commercial value reaches end-of-term within the next 12 months across the selected market.",
+    interpretation:
+      "Substantial means a broad renewal window is open — that is what makes a commercial conversation timely rather than speculative.",
+    caveat:
+      "It counts agreements on the market record, never your own contracts, and disclosed value is never blended with estimated value.",
+    window: "Agreements reaching end-of-term within 12 months.",
+    labels: {
+      favourable: "Substantial", stable: "Moderate", unfavourable: "Minimal",
+      mixed: "Uneven", insufficient: "Insufficient evidence",
+    },
+    /* Value entering play is the practical source of commercial leverage;
+       an empty renewal window removes the natural trigger. */
+    effect: {
+      favourable: "favourable", stable: "neutral", unfavourable: "unfavourable",
+      mixed: "caution", insufficient: "unknown",
+    },
+  },
+
+  "m.prodTerms": {
+    name: "Productivity vs commercial terms",
+    definition:
+      "Whether substantiated delivery-productivity movement has been followed by any change in how vendors charge.",
+    interpretation:
+      "Ahead of terms means capability has moved while pricing structures have not — the gain sits with the supplier until a buyer asks for it.",
+    caveat:
+      "It reads the STRUCTURE of observed agreements, not their rates; nothing here is a price benchmark.",
+    labels: {
+      favourable: "Ahead of terms", stable: "In step with terms", unfavourable: "Behind terms",
+      mixed: "No gap evidenced", insufficient: "Insufficient evidence",
+    },
+    /* Only the gap is a buyer opportunity. No gap is ordinary context, not a
+       caution — there is simply nothing here to claim. */
+    effect: {
+      favourable: "favourable", stable: "neutral", unfavourable: "neutral",
+      mixed: "neutral", insufficient: "unknown",
+    },
+  },
+
   "m.buyerEconomics": {
     name: "Buyer economics",
     definition:
@@ -325,6 +366,8 @@ const ROLLUP_ALIASES: Record<string, string> = {
   "m.commercial": "commercialOpportunity",
   "m.heat": "dealMarketHeat",
   "m.oprisk": "operationalRisk",
+  "m.deliveryCost": "deliveryCostPressure",
+  "m.headroom": "financialHeadroom",
   "m.aiPressure": "aiProductivityOpportunity",
 };
 

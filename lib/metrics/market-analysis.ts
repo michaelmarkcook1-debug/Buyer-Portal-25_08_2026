@@ -588,3 +588,187 @@ export const HEAT_COPY: RollupCopy = {
   limitation: "Public awards are a fresher but narrower read than the commercial record.",
   test: "Is the cooling visible in the segments you buy, or only in public-sector work?",
 };
+
+/* ══════════════════════ buyer economics ══════════════════════════════════
+   A distinct layer from Market State. Market State reports the condition
+   ("services demand is softening"); these translate conditions into what
+   they do to the buyer's commercial position. None of them restates a strip
+   reading — each answers an economic question the strip does not.          */
+
+/* A. Are supplier delivery costs rising or falling? ────────────────────── */
+
+export function deliveryCostAnalysis(
+  readings: VendorReading[],
+  state: MetricState,
+  unevidencedLocations: number,
+  totalVendors: number,
+): MetricAnalysis | undefined {
+  if (assessed(readings) === 0) return undefined;
+  const rising = drivers(readings, "unfavourable", 2);
+  const easing = drivers(readings, "favourable", 2);
+  const nRising = n(readings, "unfavourable");
+  const nEasing = n(readings, "favourable");
+
+  const driver =
+    rising.length && easing.length
+      ? `Published wage and currency movements cut both ways: cost inputs are rising against ${among(rising, nRising)}, while ${among(easing, nEasing)} sit against series that have eased.`
+      : rising.length
+        ? `Published wage and currency movements are lifting the cost of delivering the work, most directly at ${among(rising, nRising)}.`
+        : easing.length
+          ? `Published wage and currency movements have eased against the delivery bases in this market, most clearly at ${among(easing, nEasing)}.`
+          : `Published wage and currency series are broadly flat against the delivery bases in this market.`;
+
+  const implication =
+    state === "unfavourable"
+      ? "Rising input costs give suppliers a defensible reason to resist rate reduction — the economic case shifts from price toward scope, mix and commercial model."
+      : state === "favourable"
+        ? "When supplier input costs ease and rates do not, the gap is the buyer's to claim: this is the strongest economic footing for a rate conversation."
+        : "With input costs flat, cost movement is neither a supplier defence nor a buyer argument — leverage has to come from demand or renewal timing instead.";
+
+  return {
+    driver,
+    implication,
+    evidence: "Published wage indices · FX series · delivery-location exposure",
+    limitation:
+      unevidencedLocations > 0
+        ? `Delivery-location mix is not evidenced for ${unevidencedLocations} of ${totalVendors} selected vendors, which read at market level rather than vendor level.`
+        : undefined,
+    test: "Have input-cost movements actually been passed through into the rates you are quoted?",
+  };
+}
+
+/* B. Can suppliers afford to concede or invest? ────────────────────────── */
+
+export function headroomAnalysis(readings: VendorReading[], state: MetricState): MetricAnalysis | undefined {
+  if (assessed(readings) === 0) return undefined;
+  const roomy = drivers(readings, "favourable", 2);
+  const tight = drivers(readings, "unfavourable", 2);
+  const nRoomy = n(readings, "favourable");
+  const nTight = n(readings, "unfavourable");
+
+  const driver =
+    roomy.length && tight.length
+      ? `Capacity to absorb commercial pressure is unevenly distributed: filed margin and balance-sheet positions leave room at ${among(roomy, nRoomy)}, while ${among(tight, nTight)} have materially less.`
+      : roomy.length
+        ? `Filed margin and balance-sheet positions leave room to fund investment or concession across the market, most clearly at ${among(roomy, nRoomy)}.`
+        : tight.length
+          ? `Filed margin and balance-sheet positions leave little room to fund investment or concession, tightest at ${among(tight, nTight)}.`
+          : `Filed positions show moderate capacity across the selected vendors, with no vendor standing clearly apart.`;
+
+  const implication =
+    state === "unfavourable"
+      ? "Little headroom cuts both ways economically: a constrained supplier may defend revenue harder, and may also lack the capacity to fund transition or transformation you are relying on."
+      : "Room to concede is not willingness to concede — but it does mean a refusal is a commercial choice rather than an economic constraint, which is a different conversation.";
+
+  return {
+    driver,
+    implication,
+    evidence: "Filed operating margin · cash · long-term debt (SEC EDGAR)",
+    limitation: coverageLimit(readings, "Regulatory-filed financial evidence"),
+    test: "Where headroom exists, is it being funded into delivery for accounts like yours, or returned to shareholders?",
+    distribution: distributionOf(readings),
+  };
+}
+
+/* C. How much observed value enters a negotiation-sensitive window? ────── */
+
+export interface ExposureInputs {
+  total: number;
+  prior: number;
+  within24: number;
+  /** Pre-formatted, provenance-safe: disclosed and inferred never blended. */
+  value: string;
+  valueIsInferred: boolean;
+  perVendor: { name: string; n: number }[];
+  asOf: string;
+}
+
+export function exposureAnalysis(e: ExposureInputs, state: MetricState): MetricAnalysis | undefined {
+  if (e.total === 0 && e.within24 === 0) return undefined;
+  const top = e.perVendor[0];
+  const share = top && e.total > 0 ? top.n / e.total : 0;
+  const concentrated = share >= 0.5 && e.perVendor.length > 1;
+
+  const shape = concentrated
+    ? `Exposure is concentrated: ${top!.name} alone accounts for ${top!.n} of them.`
+    : e.perVendor.length > 1
+      ? `Exposure is spread across ${e.perVendor.length} vendors rather than sitting with one.`
+      : e.perVendor.length === 1
+        ? `All of it sits with ${top!.name}.`
+        : "";
+
+  const driver =
+    `${e.total} observed agreement${e.total === 1 ? "" : "s"} reach end-of-term within 12 months across the selected market, carrying ${e.value}. ${shape}`.trim();
+
+  const implication = concentrated
+    ? "Concentrated exposure means the market's negotiating opportunity is really one vendor's renewal — sequencing that conversation matters more than any market-wide posture."
+    : state === "favourable"
+      ? "A broad renewal window is the practical source of commercial leverage: value entering play is what makes a commercial conversation timely rather than speculative."
+      : "With little reaching end-of-term, there is no natural commercial trigger in the near term; economic value is more likely to come from scope or service-model change than renegotiation.";
+
+  return {
+    driver,
+    implication,
+    evidence: `Curated contract record to ${e.asOf} · ${e.within24} within 24 months`,
+    limitation: e.valueIsInferred
+      ? "Most of this value is estimated from comparable agreements rather than disclosed, so treat the total as a range and the count as the firmer figure."
+      : undefined,
+    test: "Which of these end-of-term agreements cover services you actually buy?",
+  };
+}
+
+/* D. Is productivity moving faster than commercial terms? ──────────────── */
+
+export interface ProdTermsInputs {
+  capability: MetricState;
+  automation: MetricState;
+  gainShare: VendorReading[];
+  labour: VendorReading[];
+  shareFirst: { period: string; value: number | null } | null;
+  shareLast: { period: string; value: number | null } | null;
+  coverage?: string | null;
+}
+
+export function productivityTermsAnalysis(p: ProdTermsInputs, state: MetricState): MetricAnalysis | undefined {
+  const capabilityMoving = p.capability === "favourable" || p.automation === "favourable";
+  const contracting = n(p.labour, "unfavourable");
+  const first = p.shareFirst, last = p.shareLast;
+  const haveShare = first?.value != null && last?.value != null;
+  const delta = haveShare ? last!.value! - first!.value! : null;
+
+  const termsLine = haveShare
+    ? delta === 0
+      ? `consumption and outcome-shaped pricing has not moved at all, holding at ${last!.value}% of observed agreements`
+      : `consumption and outcome-shaped pricing moved only ${delta! > 0 ? "up" : "down"} to ${last!.value}% of observed agreements from ${first!.value}%`
+    : "the commercial-model record is too thin to say whether pricing structures have followed";
+
+  const capabilityLine = capabilityMoving
+    ? `Delivery capability has advanced materially${contracting > 0 ? `, and delivery headcount is contracting at ${contracting} vendor${contracting === 1 ? "" : "s"}` : ""}`
+    : "Delivery capability has not moved materially on the substantiated record";
+
+  const driver =
+    !capabilityMoving && delta === 0
+      ? `Neither side of this has moved: capability shows no substantiated advance, and ${termsLine} — there is no productivity-to-terms gap to claim in the current record.`
+      : `${capabilityLine}, while ${termsLine}.`;
+
+  const implication =
+    state === "favourable"
+      ? "That gap is the economic point: productivity gains that commercial structures have not absorbed sit with the supplier by default until a buyer asks for them."
+      : state === "stable"
+        ? "Commercial structures are moving with capability, so the productivity argument is already partly priced in — the remaining value is in the detail of the mechanism, not its existence."
+        : state === "unfavourable"
+          ? "Without substantiated capability movement, a productivity-based commercial argument has nothing underneath it yet."
+          : delta === 0 && !capabilityMoving
+            ? "With neither capability nor pricing structure moving, a productivity-based commercial argument has nothing to stand on yet — this is a dimension to watch rather than act on."
+            : "The commercial-model record is too thin to tell whether productivity gains are being shared, which is itself worth putting to the vendor.";
+
+  return {
+    driver,
+    implication,
+    evidence: "Substantiated capability events · observed pricing-model mix",
+    limitation: p.coverage
+      ? `Pricing-model evidence covers ${p.coverage}; rate LEVELS remain unverifiable from the observed record.`
+      : "Rate levels remain unverifiable from the observed record — this reads structure, not price.",
+    test: "Is there a mechanism in your agreements that converts a productivity gain into a price change?",
+  };
+}

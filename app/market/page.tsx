@@ -60,22 +60,26 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         />
       </section>
 
+      {/* The strip above reports what conditions are changing. This section is
+          a DIFFERENT layer: what those conditions do to the buyer's commercial
+          position economically. Nothing here restates a strip reading — cost,
+          supplier capacity, value entering play and the productivity-to-terms
+          gap are questions the strip does not answer. */}
       <section className="mt-12">
-        <SectionHeader eyebrow="Key market state" title="Buyer economics" />
+        <SectionHeader
+          eyebrow="What the conditions above mean"
+          title="Buyer economics"
+          aside="What economic forces are changing the buyer's commercial position?"
+        />
         <Panel hero className="mt-5 px-6 py-6 sm:px-8">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <StateText state={intel.buyerEconomics.state} metricId="m.buyerEconomics" className="display text-[1.7rem]" />
             <MovementText movement={intel.buyerEconomics.movement} className="text-[0.95rem]" />
           </div>
-          {/* Design review §6: the strip above already carries pricing, demand,
-              intensity and AI pressure — repeat NOTHING; show only the
-              dimensions unique to this economics read. */}
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {intel.buyerEconomics.dimensions
-              .filter((m) => !["m.pricingPressure", "m.servicesDemand", "m.intensity", "m.aiPressure"].includes(m.id))
-              .map((m) => (
-                <MetricCard key={m.id} m={m} />
-              ))}
+          <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {intel.buyerEconomics.dimensions.map((m) => (
+              <MetricCard key={m.id} m={m} />
+            ))}
           </div>
         </Panel>
       </section>
@@ -152,7 +156,13 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
 
       <section className="mt-12">
         <SectionHeader eyebrow="Delivery economics" title="Labour and delivery" />
+        {/* Operational risk is a delivery CONDITION, not an economic force. It
+            was previously filed under buyer economics, where it answered no
+            economic question; it belongs here beside delivery continuity. */}
         <div className="mt-5">
+          <MetricCard m={intel.strip.operationalRisk} />
+        </div>
+        <div className="mt-3">
           <Panel>
             <ul className="m-0 list-none divide-y p-0" style={{ borderColor: "var(--surface-line-soft)" }}>
               {intel.vendors.map((v) => {
@@ -219,7 +229,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             the explanation sits once on the heading — not 66 times in a wide
             market. */}
         <SectionHeader
-          eyebrow="Supplier economics"
+          eyebrow="By vendor"
           title="Vendor financial position"
           aside={
             <span className="inline-flex items-center gap-1.5">

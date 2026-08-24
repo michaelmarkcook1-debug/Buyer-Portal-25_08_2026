@@ -27,8 +27,9 @@ import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
 import { METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
 import {
-  BUYER_LEVERAGE_COPY, HEAT_COPY, aiPressureAnalysis, demandAnalysis, intensityAnalysis,
-  labourAnalysis, pricingAnalysis, riskAnalysis, rollupAnalysis, supplierAnalysis,
+  BUYER_LEVERAGE_COPY, HEAT_COPY, aiPressureAnalysis, demandAnalysis, deliveryCostAnalysis,
+  exposureAnalysis, headroomAnalysis, intensityAnalysis, labourAnalysis, pricingAnalysis,
+  productivityTermsAnalysis, riskAnalysis, rollupAnalysis, supplierAnalysis,
 } from "@/lib/metrics/market-analysis";
 import { MARKET_FIRST_HIERARCHY, TOP_LEVEL_TABS } from "@/lib/insight/objectives";
 import { buildCalls } from "@/components/WholeMarketLenses";
@@ -1255,5 +1256,101 @@ describe("market-state analytical depth (2026-08-24)", () => {
     const words = `${a.driver} ${a.implication}`.split(/\s+/).length;
     expect(words).toBeGreaterThanOrEqual(30);
     expect(words).toBeLessThanOrEqual(95);
+  });
+});
+
+describe("buyer economics is a distinct layer from market state (2026-08-24)", () => {
+  const STRIP_IDS = [
+    "m.buyerLeverage", "m.pricingPressure", "m.demand", "m.intensity",
+    "m.aiPressure", "m.automation", "m.commercial", "m.heat",
+  ];
+  const ECONOMIC_IDS = ["m.deliveryCost", "m.headroom", "m.exposure", "m.prodTerms"];
+
+  it("no economic dimension reuses a market-state metric", () => {
+    for (const id of ECONOMIC_IDS) expect(STRIP_IDS).not.toContain(id);
+  });
+
+  it("operational risk is not an economic dimension", () => {
+    // it is a delivery CONDITION; it belongs with delivery resilience
+    expect(ECONOMIC_IDS).not.toContain("m.oprisk");
+  });
+
+  it("every economic dimension carries its own vocabulary and buyer effect", () => {
+    for (const id of ECONOMIC_IDS) {
+      for (const st of ["favourable", "unfavourable"] as const) {
+        const d = displayState(id, st);
+        expect(d.label, `${id}/${st}`).not.toMatch(/^(Favourable|Unfavourable)$/);
+        expect(d.label.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("commercial exposure treats an empty renewal window as weakening, not neutral", () => {
+    expect(displayState("m.exposure", "favourable").label).toBe("Substantial");
+    expect(displayState("m.exposure", "favourable").effect).toBe("favourable");
+    expect(displayState("m.exposure", "unfavourable").label).toBe("Minimal");
+    expect(displayState("m.exposure", "unfavourable").effect).toBe("unfavourable");
+  });
+
+  it("no productivity gap is context, never a buyer opportunity or a caution", () => {
+    expect(displayState("m.prodTerms", "favourable").label).toBe("Ahead of terms");
+    expect(displayState("m.prodTerms", "favourable").effect).toBe("favourable");
+    // neither capability nor terms moving must not read as productivity lagging
+    expect(displayState("m.prodTerms", "mixed").label).toBe("No gap evidenced");
+    expect(displayState("m.prodTerms", "mixed").effect).toBe("neutral");
+  });
+
+  it("rollup economics inherit the vendor metric's approved vocabulary", () => {
+    expect(displayState("m.deliveryCost", "unfavourable").label).toBe("Rising");
+    expect(displayState("m.deliveryCost", "favourable").label).toBe("Falling");
+    expect(displayState("m.headroom", "favourable").label).toBe("High");
+    expect(displayState("m.headroom", "unfavourable").label).toBe("Low");
+  });
+
+  it("economic explanations answer an economic question, not a condition", () => {
+    const cost = deliveryCostAnalysis(
+      [{ name: "A", state: "unfavourable", rank: null }], "unfavourable", 0, 1)!;
+    // must talk about cost and what it does to the commercial position
+    expect(`${cost.driver} ${cost.implication}`).toMatch(/cost/i);
+    expect(cost.implication).toMatch(/rate|commercial|scope|price/i);
+
+    const room = headroomAnalysis([{ name: "A", state: "favourable", rank: null }], "favourable")!;
+    expect(room.implication).toMatch(/concede|concession|commercial/i);
+  });
+
+  it("exposure keeps disclosed and estimated value separate", () => {
+    const inferred = exposureAnalysis(
+      { total: 4, prior: 2, within24: 9, value: "$100M–$300M estimated", valueIsInferred: true,
+        perVendor: [{ name: "A", n: 4 }], asOf: "19 May 2026" }, "favourable")!;
+    expect(inferred.limitation).toMatch(/estimated/i);
+    const disclosed = exposureAnalysis(
+      { total: 38, prior: 20, within24: 77, value: "$7.2bn", valueIsInferred: false,
+        perVendor: [{ name: "A", n: 20 }, { name: "B", n: 18 }], asOf: "19 May 2026" }, "favourable")!;
+    expect(disclosed.limitation).toBeUndefined();
+  });
+
+  it("exposure names concentration when one vendor carries the window", () => {
+    const conc = exposureAnalysis(
+      { total: 10, prior: 3, within24: 12, value: "$1bn", valueIsInferred: false,
+        perVendor: [{ name: "Atos", n: 8 }, { name: "Other", n: 2 }], asOf: "19 May 2026" }, "favourable")!;
+    expect(conc.driver).toMatch(/concentrated/i);
+    expect(conc.driver).toMatch(/Atos/);
+    expect(conc.implication).toMatch(/one vendor/i);
+  });
+
+  it("economic explanations carry no buyer-ownership language", () => {
+    const built = [
+      deliveryCostAnalysis([{ name: "A", state: "unfavourable", rank: null }], "unfavourable", 1, 3),
+      headroomAnalysis([{ name: "A", state: "unfavourable", rank: null }], "unfavourable"),
+      exposureAnalysis({ total: 5, prior: 2, within24: 8, value: "$1bn", valueIsInferred: false,
+        perVendor: [{ name: "A", n: 5 }], asOf: "19 May 2026" }, "favourable"),
+      productivityTermsAnalysis({ capability: "favourable", automation: "favourable", gainShare: [], labour: [],
+        shareFirst: { period: "2024", value: 0 }, shareLast: { period: "2026", value: 0 }, coverage: null }, "favourable"),
+    ].filter(Boolean);
+    expect(built.length).toBe(4);
+    for (const a of built) {
+      const all = [a!.driver, a!.implication, a!.evidence, a!.limitation ?? "", a!.test ?? ""].join(" ");
+      expect(all).not.toMatch(/\byour (contract|renewal|spend|commitment|rate|saving|exposure)s?\b/i);
+    }
   });
 });

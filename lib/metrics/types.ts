@@ -220,6 +220,9 @@ export interface MarketIntel {
     servicesDemand: Metric;
     competitiveIntensity: Metric;
     aiProductivityPressure: Metric;
+    /** Delivery/supplier-management risk. A market CONDITION, not an economic
+        force — it sits with delivery resilience, never under buyer economics. */
+    operationalRisk: Metric;
   };
   buyerEconomics: {
     state: MetricState;
