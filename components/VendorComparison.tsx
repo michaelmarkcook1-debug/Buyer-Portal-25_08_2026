@@ -52,7 +52,7 @@ function Cell({ v, col }: { v: VendorIntel; col: string }) {
             {v.overall.modelled ? <ModelledTag note={v.overall.modelled} /> : null}
           </span>
           {v.overall.reason ? (
-            <span className="max-w-[38ch] text-[0.72rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+            <span className="max-w-[38ch] text-[0.82rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
               {v.overall.reason}
             </span>
           ) : null}
@@ -85,7 +85,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
     <Panel className="overflow-hidden">
       {/* Desktop: the table, scrolling inside its own container if it must. */}
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full border-collapse text-[0.88rem]">
+        <table className="w-full border-collapse text-[0.96rem]">
           <thead>
             <tr>
               <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
@@ -106,7 +106,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
               <tr key={v.ticker} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                 <td className="px-5 py-3">
                   <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="group inline-flex items-baseline gap-2.5">
-                    <span className="code tabular w-5 text-right text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+                    <span className="code tabular w-5 text-right text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
                       {i + 1}
                     </span>
                     <span
@@ -118,7 +118,7 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
                   </Link>
                 </td>
                 {cols.map((c) => (
-                  <td key={c.key} className="px-4 py-3">
+                  <td key={c.key} className="tabular px-4 py-3">
                     <Cell v={v} col={c.key} />
                   </td>
                 ))}
@@ -134,17 +134,17 @@ export function VendorComparison({ vendors, variant }: { vendors: VendorIntel[];
           <li key={v.ticker} className="px-5 py-4" style={{ borderColor: "var(--surface-line-soft)" }}>
             <Link href={`/vendors/${v.ticker.toLowerCase()}`} className="flex items-baseline justify-between gap-3">
               <span className="font-medium" style={{ color: "var(--fg)" }}>
-                <span className="code tabular mr-2 text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+                <span className="code tabular mr-2 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
                   {i + 1}
                 </span>
                 {v.name}
               </span>
               <Cell v={v} col="overall" />
             </Link>
-            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.8rem]">
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.9rem]">
               {cols.slice(1, 5).map((c) => (
                 <div key={c.key} className="flex items-baseline justify-between gap-2">
-                  <span className="eyebrow text-[0.58rem]">{c.label}</span>
+                  <span className="eyebrow text-[0.7rem]">{c.label}</span>
                   <Cell v={v} col={c.key} />
                 </div>
               ))}

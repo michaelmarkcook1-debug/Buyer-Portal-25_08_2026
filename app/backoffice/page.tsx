@@ -19,7 +19,7 @@ export default function BackofficePage() {
       <h1 className="display mt-2 text-[1.9rem] leading-tight" style={{ color: "var(--fg)" }}>
         Manual data refresh
       </h1>
-      <p className="mt-3 max-w-[70ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mt-3 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         Refresh is manual until further notice: run → validate results → review the portal → continue
         testing. This button invokes the AG repo&rsquo;s single sanctioned entry point
         (<span className="code">ops/refresh-manual.sh</span>) — identical to running it in a terminal.
@@ -39,7 +39,7 @@ export default function BackofficePage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <div className="eyebrow">Runs (in order)</div>
-              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.86rem]" style={{ color: "var(--fg)" }}>
+              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.95rem]" style={{ color: "var(--fg)" }}>
                 <li>AnalystGenius intelligence — GET-only read</li>
                 <li>AI Enterprise — read-only extract</li>
                 <li>AI/commercial capability events (confirmed store set + partnerships)</li>
@@ -52,7 +52,7 @@ export default function BackofficePage() {
             </div>
             <div>
               <div className="eyebrow">Deliberately excluded</div>
-              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.86rem]" style={{ color: "var(--fg-muted)" }}>
+              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
                 <li>Contract Tracker discovery / import / confirmation — frozen at its confirmed 16 Apr 2026 state</li>
                 <li>xlsx bridge (manual-export dependent)</li>
                 <li>Any write to the protected AnalystGenius production service — its only touchpoint is a read</li>
@@ -61,7 +61,7 @@ export default function BackofficePage() {
             </div>
           </div>
           <Hairline className="my-4" />
-          <p className="code m-0 text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+          <p className="code m-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             Stage failures are reported individually and never hidden; a failed stage does not block the others.
             Terminal equivalent: cd &quot;AG Sourcing Tool 20_06_2026&quot; &amp;&amp; ./ops/refresh-manual.sh
           </p>
@@ -72,7 +72,7 @@ export default function BackofficePage() {
         <SectionHeader eyebrow="Economics" title="Cost estimate per refresh" aside="Estimates, not meters" />
         <Panel className="mt-5 px-6 py-5">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[0.86rem]">
+            <table className="w-full border-collapse text-[0.95rem]">
               <thead>
                 <tr>
                   <th className="eyebrow px-3 py-2 text-left font-semibold">Component</th>
@@ -113,7 +113,7 @@ export default function BackofficePage() {
               </tbody>
             </table>
           </div>
-          <p className="code mt-3 mb-0 text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+          <p className="code mt-3 mb-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             Wall-clock: ~6–12 minutes. Excluded: Contract Tracker discovery (frozen) — reopening that workstream
             adds its own OpenAI extraction cost (~$0.40/run at July&rsquo;s observed size).
           </p>

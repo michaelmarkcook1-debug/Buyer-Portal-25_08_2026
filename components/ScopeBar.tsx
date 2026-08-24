@@ -49,14 +49,14 @@ export function ScopeBar({
       <div className="mx-auto flex max-w-[var(--max-width)] flex-wrap items-center gap-x-5 gap-y-1.5 px-5 py-2.5 sm:px-8">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <span className="eyebrow shrink-0">Tracking</span>
-          <span className="truncate text-[0.92rem] font-medium" style={{ color: "var(--fg)" }}>
+          <span className="truncate text-[1rem] font-medium" style={{ color: "var(--fg)" }}>
             {tracking}
           </span>
         </div>
 
         <details className="relative">
           <summary
-            className="tap cursor-pointer list-none rounded-md px-2.5 py-1 text-[0.82rem] transition-colors"
+            className="tap cursor-pointer list-none rounded-md px-2.5 py-1 text-[0.92rem] transition-colors"
             style={{ color: "var(--accent-ink)", background: "var(--accent-soft)" }}
           >
             Change vendors
@@ -70,11 +70,11 @@ export function ScopeBar({
             }}
           >
             <div className="eyebrow">Define your market</div>
-            <p className="mt-1.5 mb-2 text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            <p className="mt-1.5 mb-2 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               Select the vendors you contract with or want to track. Your selection defines every
               metric, comparison and insight in the portal.
             </p>
-            <p className="mt-0 mb-3 text-[0.78rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+            <p className="mt-0 mb-3 text-[0.88rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
               Contract observations are market evidence — agreements between these vendors and other
               organisations. AnalystGenius holds none of your own contracts, spend or renewal dates.
             </p>
@@ -88,7 +88,7 @@ export function ScopeBar({
                 {universe.map((v) => (
                   <label
                     key={v.ticker}
-                    className="tap tap-stack flex cursor-pointer items-start gap-2.5 rounded-md px-1.5 py-1.5 text-[0.85rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
+                    className="tap tap-stack flex cursor-pointer items-start gap-2.5 rounded-md px-1.5 py-1.5 text-[0.94rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
                   >
                     <input
                       type="checkbox"
@@ -101,7 +101,7 @@ export function ScopeBar({
                       <span className="block truncate" style={{ color: "var(--fg)" }}>
                         {v.name}
                       </span>
-                      <span className="code block text-[0.66rem]" style={{ color: "var(--fg-dim)" }}>
+                      <span className="code block text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
                         {v.contracts > 0 ? `${v.contracts} contracts · ${v.inPlay24} in play` : "no contracts on record"}
                         {v.signalTypes > 0 ? ` · ${v.signalTypes} signal types` : ""}
                       </span>
@@ -112,14 +112,14 @@ export function ScopeBar({
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="submit"
-                  className="tap cursor-pointer rounded-md px-4 py-1.5 text-[0.85rem] font-semibold"
+                  className="tap cursor-pointer rounded-md px-4 py-1.5 text-[0.94rem] font-semibold"
                   style={{ background: "var(--accent-fill)", color: "#07142a", border: "none" }}
                 >
                   Track selected vendors
                 </button>
                 <Link
                   href={`/select?market=whole&return=${encodeURIComponent(returnTo)}`}
-                  className="tap rounded-md px-3 py-1.5 text-[0.85rem]"
+                  className="tap rounded-md px-3 py-1.5 text-[0.94rem]"
                   style={{ color: "var(--rail-ink)" }}
                 >
                   Whole market instead
@@ -132,7 +132,7 @@ export function ScopeBar({
         {scope.mode !== "whole_market" ? (
           <Link
             href={`/select?market=whole&return=${encodeURIComponent(returnTo)}`}
-            className="tap text-[0.82rem]"
+            className="tap text-[0.92rem]"
             style={{ color: "var(--rail-ink)" }}
           >
             Whole Market
@@ -141,12 +141,12 @@ export function ScopeBar({
 
         <div className="ml-auto flex items-center gap-4">
           {scope.mode !== "unset" ? (
-            <span className="code hidden text-[0.7rem] md:inline" style={{ color: "var(--fg-dim)" }}>
+            <span className="code hidden text-[0.8rem] md:inline" style={{ color: "var(--fg-dim)" }}>
               12-month baseline from {shortDate(scope.baselineStart)}
             </span>
           ) : null}
           {updatedAt ? (
-            <span className="code text-[0.7rem]" style={{ color: "var(--fg-dim)" }} title="Latest ingest across connected sources">
+            <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }} title="Latest ingest across connected sources">
               Updated {shortDate(updatedAt)}
             </span>
           ) : null}
@@ -156,7 +156,7 @@ export function ScopeBar({
       {spineDataAgeDays != null && spineDataAgeDays > 45 ? (
         <div style={{ background: "var(--data-watch-soft)" }}>
           <div
-            className="mx-auto max-w-[var(--max-width)] px-5 py-1.5 text-[0.78rem] sm:px-8"
+            className="mx-auto max-w-[var(--max-width)] px-5 py-1.5 text-[0.88rem] sm:px-8"
             style={{ color: "var(--data-watch-ink)" }}
           >
             Commercial contract evidence is as of {shortDate(spineDataAsOf)} ({agoDays(spineDataAgeDays)}) —

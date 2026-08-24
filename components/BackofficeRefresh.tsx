@@ -61,7 +61,7 @@ export function BackofficeRefresh() {
         >
           {status?.running ? "Refresh running…" : "Run manual refresh"}
         </button>
-        <span className="code text-[0.72rem]" style={{ color: "var(--fg-dim)" }}>
+        <span className="code text-[0.82rem]" style={{ color: "var(--fg-dim)" }}>
           {status?.running
             ? `Started ${status.startedAt ?? ""} — one run at a time.`
             : status?.exitCode != null
@@ -71,19 +71,19 @@ export function BackofficeRefresh() {
       </div>
 
       {status?.configured === false ? (
-        <p className="mt-3 mb-0 text-[0.84rem]" style={{ color: "var(--data-watch-ink)" }}>
+        <p className="mt-3 mb-0 text-[0.94rem]" style={{ color: "var(--data-watch-ink)" }}>
           Not configured: set BACKOFFICE_REFRESH_DIR in .env.local to the AG Sourcing Tool repo path.
         </p>
       ) : null}
       {error ? (
-        <p className="mt-3 mb-0 text-[0.84rem]" style={{ color: "var(--data-risk-ink)" }}>
+        <p className="mt-3 mb-0 text-[0.94rem]" style={{ color: "var(--data-risk-ink)" }}>
           {error}
         </p>
       ) : null}
 
       {status?.logTail?.length ? (
         <pre
-          className="code mt-4 max-h-72 overflow-auto rounded-[var(--radius-md)] px-4 py-3 text-[0.72rem] leading-relaxed"
+          className="code mt-4 max-h-72 overflow-auto rounded-[var(--radius-md)] px-4 py-3 text-[0.82rem] leading-relaxed"
           style={{ background: "var(--bg-elev-2)", color: "var(--fg-muted)", border: "1px solid var(--surface-line-soft)" }}
         >
           {status.logTail.join("\n")}

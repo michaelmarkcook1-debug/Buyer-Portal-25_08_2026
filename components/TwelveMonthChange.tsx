@@ -38,10 +38,10 @@ export function TwelveMonthChange({
             <div className="w-52 shrink-0 font-medium" style={{ color: "var(--fg)" }}>
               {c.dimension}
             </div>
-            <MovementText movement={c.movement} className="w-44 shrink-0 text-[0.84rem]" />
-            <div className="min-w-0 text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            <MovementText movement={c.movement} className="w-44 shrink-0 text-[0.94rem]" />
+            <div className="min-w-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               {c.detail}
-              <span className="code ml-2 text-[0.64rem]" style={{ color: "var(--fg-dim)" }}>
+              <span className="code ml-2 text-[0.76rem]" style={{ color: "var(--fg-dim)" }}>
                 · {c.source} · confidence {CONFIDENCE_LABEL[c.confidence]}
               </span>
             </div>

@@ -86,8 +86,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                   style={i > 0 ? { borderLeft: "1px solid var(--surface-line-soft)" } : undefined}
                 >
                   <div className="eyebrow">{label}</div>
-                  <LevelText level={d.best} className="text-[1.05rem]" />
-                  <p className="m-0 text-[0.74rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                  <LevelText level={d.best} className="text-[1.1rem]" />
+                  <p className="m-0 text-[0.84rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                     {d.assessed === 0
                       ? "No vendor carries sufficient evidence."
                       : `${d.highPlus} of ${d.assessed} assessed at High or above.`}
@@ -109,7 +109,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
           {anyAssessed ? (
             <Panel className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-[0.86rem]">
+                <table className="w-full border-collapse text-[0.95rem]">
                   <thead>
                     <tr>
                       <th className="eyebrow px-5 py-3 text-left font-semibold">Vendor</th>
@@ -139,7 +139,13 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                             href={`/vendors/${v.ticker.toLowerCase()}`}
                             className="group inline-flex items-baseline gap-2.5"
                           >
-                            <span className="code tabular w-5 text-right text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+                            {/* Gold marks rank POSITION — never the state value.
+                                This is the emphasis the ranking legitimately
+                                earns; the level keeps its buyer-effect colour. */}
+                            <span
+                              className={`code tabular w-5 text-right text-[0.8rem] ${i === 0 ? "font-bold" : ""}`}
+                              style={{ color: i === 0 ? "var(--accent-ink)" : "var(--fg-dim)" }}
+                            >
                               {i + 1}
                             </span>
                             <span
@@ -154,26 +160,26 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                           <div className="flex flex-col gap-1">
                             <LevelText level={v.overall.level} emphasis={i === 0} />
                             {v.overall.reason ? (
-                              <span className="max-w-[36ch] text-[0.72rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                              <span className="max-w-[36ch] text-[0.82rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                                 {v.overall.reason}
                               </span>
                             ) : null}
                           </div>
                         </td>
                         {(() => {
-                          /* Gold marks each vendor's DOMINANT lever only (§14):
-                             the strongest unique family per row carries the
-                             emphasis; everything else reads in standard ink. */
+                          /* Each vendor's DOMINANT lever carries typographic
+                             emphasis (weight + hairline rule). Colour stays
+                             semantic — emphasis marks position, never meaning. */
                           const scored = OPPORTUNITY_TYPES.map((t) => ({ t, s: levelScore(v.opportunities[t].level) })).sort((a, b) => b.s - a.s);
                           const dominant = scored[0]!.s > (scored[1]?.s ?? -1) ? scored[0]!.t : null;
                           return OPPORTUNITY_TYPES.map((t) => (
                             <td key={t} className="px-4 py-3">
                               <Link
                                 href={`/opportunities/${v.ticker.toLowerCase()}/${t}`}
-                                className="underline-offset-4 hover:underline"
+                                className="tap-link underline-offset-4 hover:underline"
                                 style={{ textDecorationColor: "var(--accent-fill)" }}
                               >
-                                <LevelText level={v.opportunities[t].level} className="text-[0.84rem]" emphasis={t === dominant} />
+                                <LevelText level={v.opportunities[t].level} className="text-[0.94rem]" emphasis={t === dominant} />
                               </Link>
                             </td>
                           ));
@@ -208,16 +214,16 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                     {OPPORTUNITY_LABELS[tm.type]}
                   </span>
                   {tm.up === 0 && tm.down === 0 ? (
-                    <span className="text-[0.84rem] italic" style={{ color: "var(--fg-dim)" }}>
+                    <span className="text-[0.94rem] italic" style={{ color: "var(--fg-dim)" }}>
                       No movement the record can support
                       {intel.signalTrackingSince ? ` — tracking since ${shortDate(intel.signalTrackingSince)}` : ""}
                     </span>
                   ) : (
                     <>
                       {tm.up > 0 ? (
-                        <MovementText movement="improving" className="text-[0.84rem]" />
+                        <MovementText movement="improving" className="text-[0.94rem]" />
                       ) : null}
-                      <span className="text-[0.84rem]" style={{ color: "var(--fg-muted)" }}>
+                      <span className="text-[0.94rem]" style={{ color: "var(--fg-muted)" }}>
                         {tm.up} vendor{tm.up === 1 ? "" : "s"} improving · {tm.down} deteriorating
                       </span>
                     </>

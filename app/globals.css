@@ -72,9 +72,13 @@
   --fs-display: clamp(1.6rem, 2.4vw, 2.4rem);
   --fs-h1: 1.6rem;
   --fs-h2: 1.18rem;
-  --fs-body: 0.95rem;
-  --fs-small: 0.82rem;
-  --fs-micro: 0.7rem;
+  /* Phase 1 readability correction. The audit measured 68% of Market text at
+     <=13px and evidence lines at 10-11px — too small for an executive buyer
+     product. The small tier moves up; display sizes are untouched so the
+     hierarchy between them widens rather than flattens. */
+  --fs-body: 1rem;
+  --fs-small: 0.9rem;
+  --fs-micro: 0.78rem;
 
   --tracking-display: -0.018em;
   --tracking-tight: -0.01em;
@@ -270,7 +274,7 @@ body {
   /* 16px on phones (figure-dense reading surface); the tighter brand scale
      returns once there is room for it. */
   font-size: 1rem;
-  line-height: 1.55;
+  line-height: 1.62;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background-color var(--motion-standard) var(--ease-premium),
@@ -333,6 +337,15 @@ a {
   }
 }
 
+/* Inline text links in dense rows measured 17-21px tall — below the 24px
+   minimum for a tap target. Height comes from alignment, not font size, so the
+   text stays exactly as set. */
+.tap-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
 /* Small inline controls (the "i" affordances) must stay visually restrained
    while still being reachable. The hit area is an overlay, so the dot keeps
    its 15px footprint and the surrounding layout does not shift. */
@@ -378,8 +391,8 @@ a {
   background: var(--surface-solid);
   box-shadow: var(--shadow-2);
   color: var(--fg-muted);
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.86rem;
+  line-height: 1.55;
   opacity: 0;
   pointer-events: none;
   transition: opacity 110ms ease;
@@ -535,3 +548,18 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Phase 1: mobile rhythm ────────────────────────────────────────────
+   Raising the type scale added ~13% page height on phones. Recover it from
+   SPACING, never from text: a phone reader gets the same larger type with a
+   tighter vertical rhythm, so legibility improves without the page becoming
+   longer than it needs to be. Structural shortening is a later phase. */
+@media (max-width: 640px) {
+  main > section.mt-12 { margin-top: 1.9rem; }
+  main > section.mt-10 { margin-top: 1.7rem; }
+  main > section.mt-8 { margin-top: 1.5rem; }
+  main > section.mt-6 { margin-top: 1.25rem; }
+}
+/* Card height on a phone is driven by the analysis text itself, not by gaps.
+   Shortening it means shortening the content, which is a later phase — the
+   trade taken here is deliberate: larger, readable text on a longer page. */

@@ -175,6 +175,15 @@ export function ConfidenceText({ confidence }: { confidence: Confidence }) {
   );
 }
 
+/**
+ * An opportunity level as text.
+ *
+ * `emphasis` marks a RANKING position (the top-ranked vendor, a row's dominant
+ * lever). It may change weight and it may add a rule, but it must NEVER change
+ * the colour: colour is reserved for what the reading means for the buyer.
+ * Overriding it with the brand accent made a Medium at rank 1 look stronger
+ * than a Very High at rank 2, which inverted the very thing the page ranks.
+ */
 export function LevelText({ level, className = "", emphasis = false }: { level: OpportunityLevel; className?: string; emphasis?: boolean }) {
   if (level === "insufficient") {
     return (
@@ -186,7 +195,13 @@ export function LevelText({ level, className = "", emphasis = false }: { level: 
   return (
     <span
       className={`mark-dir ${emphasis ? "font-semibold" : "font-medium"} ${className}`}
-      style={{ color: emphasis ? "var(--accent-ink)" : EFFECT_INK[levelEffect(level)] }}
+      style={{
+        color: EFFECT_INK[levelEffect(level)],
+        // rank emphasis reads as typographic weight plus a hairline, never as hue
+        ...(emphasis
+          ? { borderBottom: "2px solid var(--accent-fill)", paddingBottom: "1px" }
+          : null),
+      }}
     >
       {LEVEL_LABEL[level]}
     </span>
@@ -205,7 +220,7 @@ export function ClassChip({ cls }: { cls: WatchClass }) {
   const s = CLASS_STYLE[cls];
   return (
     <span
-      className="code inline-flex items-center rounded-[6px] px-2 py-0.5 text-[11px] font-semibold tracking-[0.14em]"
+      className="code inline-flex items-center rounded-[6px] px-2 py-1 text-[12.5px] font-semibold tracking-[0.14em]"
       style={{ background: s.bg, color: s.fg, boxShadow: `inset 0 0 0 1px ${s.ring}` }}
     >
       {cls}
@@ -236,9 +251,9 @@ export function BasisList({
   return (
     <ul className={`m-0 list-none space-y-1.5 p-0 ${className}`}>
       {basis.map((b, i) => (
-        <li key={i} className="text-[0.86rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <li key={i} className="text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {b.text}{" "}
-          <span className="code text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             · {b.source}
             {b.asOf ? ` · ${b.asOf}` : ""}
             {b.ownership === "market" ? " · market evidence" : b.ownership === "buyer" ? " · buyer-owned" : ""}
@@ -259,7 +274,7 @@ export function EmptyEvidence({ title, body }: { title: string; body: string }) 
       <div className="font-medium" style={{ color: "var(--fg)" }}>
         {title}
       </div>
-      <p className="mt-1 mb-0 text-[0.9rem] leading-relaxed">{body}</p>
+      <p className="mt-1 mb-0 text-[0.98rem] leading-relaxed">{body}</p>
     </div>
   );
 }
@@ -268,7 +283,7 @@ export function EmptyEvidence({ title, body }: { title: string; body: string }) 
 export function ModelledTag({ note }: { note: string }) {
   return (
     <span
-      className="code inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[0.66rem] uppercase tracking-[0.12em]"
+      className="code inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[0.78rem] uppercase tracking-[0.12em]"
       style={{ background: "var(--rail-soft)", color: "var(--rail-ink)" }}
       title={note}
     >

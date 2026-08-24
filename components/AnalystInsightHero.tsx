@@ -61,7 +61,7 @@ function InsightResultView({
         <div className="font-medium" style={{ color: "var(--fg)" }}>
           Analyst Insight is not configured.
         </div>
-        <p className="code mt-1 mb-0 text-[0.78rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="code mt-1 mb-0 text-[0.88rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {result.reason}
         </p>
       </div>
@@ -78,7 +78,7 @@ function InsightResultView({
         <div className="font-medium" style={{ color: "var(--fg)" }}>
           Analyst Insight temporarily unavailable.
         </div>
-        <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.84rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           The intelligence below is complete and unaffected.
         </p>
       </div>
@@ -113,7 +113,7 @@ function InsightResultView({
       >
         {body}
       </p>
-      <div className="code mt-5 text-[0.68rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code mt-5 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
         Grounded in the canonical intelligence below · interpretation, not additional data
         {scenario ? ` · modelled under “${scenario.label}”` : ""}
       </div>

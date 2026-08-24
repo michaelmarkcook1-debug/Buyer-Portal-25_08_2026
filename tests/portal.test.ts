@@ -1294,6 +1294,8 @@ describe("buyer economics is a distinct layer from market state (2026-08-24)", (
 
   it("no productivity gap is context, never a buyer opportunity or a caution", () => {
     expect(displayState("m.prodTerms", "favourable").label).toBe("Ahead of terms");
+    // "Behind terms" read as productivity lagging; the state is the reverse
+    expect(displayState("m.prodTerms", "unfavourable").label).toBe("Terms moved first");
     expect(displayState("m.prodTerms", "favourable").effect).toBe("favourable");
     // neither capability nor terms moving must not read as productivity lagging
     expect(displayState("m.prodTerms", "mixed").label).toBe("No gap evidenced");

@@ -51,17 +51,17 @@ export function DbNotConfigured() {
       <h2 className="display mt-3 text-[1.6rem]" style={{ color: "var(--fg)" }}>
         The canonical intelligence spine is not connected.
       </h2>
-      <p className="mx-auto mt-3 max-w-[52ch] text-[0.92rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mx-auto mt-3 max-w-[52ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         Set <span className="code">DATABASE_URL</span> in <span className="code">.env.local</span> — the fastest
         path is copying the sibling repo&rsquo;s env file:
       </p>
       <pre
-        className="code mx-auto mt-4 max-w-full overflow-x-auto rounded-[var(--radius-md)] px-4 py-3 text-left text-[0.78rem]"
+        className="code mx-auto mt-4 max-w-full overflow-x-auto rounded-[var(--radius-md)] px-4 py-3 text-left text-[0.88rem]"
         style={{ background: "var(--bg-elev-2)", border: "1px solid var(--surface-line-soft)", color: "var(--fg-muted)" }}
       >
         cp &quot;../AG Sourcing Tool 20_06_2026/.env&quot; .env.local
       </pre>
-      <p className="mt-4 mb-0 text-[0.84rem]" style={{ color: "var(--fg-dim)" }}>
+      <p className="mt-4 mb-0 text-[0.94rem]" style={{ color: "var(--fg-dim)" }}>
         Nothing renders from placeholder data — an unconnected portal says so.
       </p>
     </Panel>
@@ -84,13 +84,13 @@ export function FirstRunSelector({
       <h2 className="display mt-3 max-w-[26ch] text-[1.9rem] leading-tight" style={{ color: "var(--fg)" }}>
         Select the Services vendors you care about.
       </h2>
-      <p className="mt-3 max-w-[64ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mt-3 max-w-[64ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         AnalystGenius identifies where market change has created new commercial
         opportunity. Your selected vendors define the market: every metric, benchmark, ranking and
         analyst insight is scoped to them — vendors you contract with, vendors you are tracking, or
         the whole supported market.
       </p>
-      <p className="mt-2.5 max-w-[64ch] text-[0.85rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+      <p className="mt-2.5 max-w-[64ch] text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
         Contract observations throughout the portal are market evidence — agreements between these
         vendors and other organisations. AnalystGenius holds none of your own contracts, spend or
         renewal dates.
@@ -101,14 +101,14 @@ export function FirstRunSelector({
           {ctx.universe.map((v) => (
             <label
               key={v.ticker}
-              className="tap tap-stack flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-[0.88rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
+              className="tap tap-stack flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-[0.96rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
             >
               <input type="checkbox" name="vendors" value={v.ticker} className="mt-1.5 accent-[var(--accent-fill)]" />
               <span className="min-w-0">
                 <span className="block truncate" style={{ color: "var(--fg)" }}>
                   {v.name}
                 </span>
-                <span className="code block text-[0.66rem]" style={{ color: "var(--fg-dim)" }}>
+                <span className="code block text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
                   {v.contracts > 0 ? `${v.contracts} contracts · ${v.inPlay24} in play` : "no contracts on record"}
                   {v.signalTypes > 0 ? ` · ${v.signalTypes} signal types` : ""}
                 </span>
@@ -119,14 +119,14 @@ export function FirstRunSelector({
         <div className="mt-6 flex flex-wrap items-center gap-4">
           <button
             type="submit"
-            className="tap cursor-pointer rounded-md px-5 py-2 text-[0.9rem] font-semibold"
+            className="tap cursor-pointer rounded-md px-5 py-2 text-[0.98rem] font-semibold"
             style={{ background: "var(--accent-fill)", color: "#07142a", border: "none" }}
           >
             Track selected vendors
           </button>
           <Link
             href={`/select?market=whole&return=${encodeURIComponent(returnTo)}`}
-            className="tap text-[0.9rem]"
+            className="tap text-[0.98rem]"
             style={{ color: "var(--rail-ink)" }}
           >
             Or track the whole market — all {ctx.universe.length} AG-covered vendors
@@ -143,7 +143,7 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
     <footer style={{ borderTop: "1px solid var(--surface-line-soft)", background: "var(--bg-elev-2)" }}>
       <div className="mx-auto max-w-[var(--max-width)] px-5 py-6 sm:px-8">
         {ctx.dbReady ? (
-          <ul className="code m-0 flex list-none flex-wrap gap-x-6 gap-y-1.5 p-0 text-[0.68rem]" style={{ color: "var(--fg-dim)" }}>
+          <ul className="code m-0 flex list-none flex-wrap gap-x-6 gap-y-1.5 p-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             {ctx.freshness.map((f) => (
               <li key={f.source} title={f.feeds}>
                 {f.source}: {f.lastSeen ? `${shortDate(f.lastSeen)} (${agoDays(f.daysSince)})` : "never"}
@@ -152,7 +152,7 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
             ))}
           </ul>
         ) : null}
-        <p className="mt-3 mb-0 max-w-[100ch] text-[0.72rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+        <p className="mt-3 mb-0 max-w-[100ch] text-[0.82rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
           Evidence families above move at different speeds — filings, AI capability events,
           procurement and market data refresh faster than the commercial contract record, and a
           conclusion may rest on the fresher families. Opportunity readings are directional
@@ -171,7 +171,7 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/ag-mark-on-light.png" alt="" width={22} height={22} className="h-[22px] w-[22px] select-none" />
           </span>
-          <span className="code text-[0.7rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             AnalystGenius · Buyer Portal
           </span>
         </div>

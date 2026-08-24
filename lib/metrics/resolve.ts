@@ -1540,14 +1540,27 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       const keyChange = moving[0]
         ? `${moving[0].label} ${moving[0].movement.replace(/-/g, " ")}${moving[0].basis[0] ? ` — ${moving[0].basis[0].text}` : ""}`
         : null;
+      /* basis[0] on operational risk is the internal score line. It must never
+         be the buyer-facing sentence — prefer a NAMED issue or disclosure, and
+         fall back to a plain statement rather than exposing a score. */
+      const riskLine = v.metrics.operationalRisk.basis
+        .map((b) => b.text)
+        .find((t) => !/^AG risk score/i.test(t));
       const risk =
         v.metrics.operationalRisk.state === "unfavourable"
-          ? v.metrics.operationalRisk.basis[0]?.text ?? "Elevated operational risk on the current record."
+          ? riskLine ?? "Elevated operational risk on the current record."
           : v.metrics.talentPressure.state === "unfavourable"
             ? "Delivery workforce is contracting — capacity risk on multi-year commitments."
             : null;
       v.differentiation = {
-        strongest: `Strongest lever: ${FAMILY_WORD[strongest.type]} (${strongest.level.replace(/-/g, " ")}). ${strongest.reason ?? ""}`.trim(),
+        /* The reason usually opens with the same level word, so the
+           parenthetical repeated it ("pricing (very high). Very high — ..."). */
+        strongest: (() => {
+          const lvl = strongest.level.replace(/-/g, " ");
+          const reason = strongest.reason ?? "";
+          const repeats = reason.toLowerCase().startsWith(lvl.toLowerCase());
+          return `Strongest lever: ${FAMILY_WORD[strongest.type]}${repeats ? "" : ` (${lvl})`}. ${reason}`.trim();
+        })(),
         weakest: weakest !== strongest ? `Weakest lever: ${FAMILY_WORD[weakest.type]} (${weakest.level.replace(/-/g, " ")}).` : null,
         keyChange,
         relatives,

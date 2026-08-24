@@ -302,11 +302,11 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     definition:
       "Whether substantiated delivery-productivity movement has been followed by any change in how vendors charge.",
     interpretation:
-      "Ahead of terms means capability has moved while pricing structures have not — the gain sits with the supplier until a buyer asks for it.",
+      "Ahead of terms means capability has moved while pricing structures have not — the gain sits with the supplier until a buyer asks for it. Terms moved first is the reverse: pricing structure changed without substantiated capability movement behind it.",
     caveat:
       "It reads the STRUCTURE of observed agreements, not their rates; nothing here is a price benchmark.",
     labels: {
-      favourable: "Ahead of terms", stable: "In step with terms", unfavourable: "Behind terms",
+      favourable: "Ahead of terms", stable: "In step with terms", unfavourable: "Terms moved first",
       mixed: "No gap evidenced", insufficient: "Insufficient evidence",
     },
     /* Only the gap is a buyer opportunity. No gap is ordinary context, not a
