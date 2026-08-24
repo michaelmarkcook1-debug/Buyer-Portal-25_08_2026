@@ -337,6 +337,20 @@ a {
   }
 }
 
+/* Screen-reader-only text. Charts carry their full numbers here so the SVG is
+   never the sole route to the data. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 /* Inline text links in dense rows measured 17-21px tall — below the 24px
    minimum for a tap target. Height comes from alignment, not font size, so the
    text stays exactly as set. */

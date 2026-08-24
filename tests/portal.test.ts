@@ -22,10 +22,12 @@ import {
   ratioMove,
 } from "@/lib/metrics/rules";
 import { shiftLevel, type MetricState } from "@/lib/metrics/types";
+import { levelInk, stateInk } from "@/components/charts/Charts";
+import { EFFECT_INK } from "@/components/ui";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
-import { METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
+import { LEVEL_VOCABULARY, METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
 import {
   BUYER_LEVERAGE_COPY, HEAT_COPY, aiPressureAnalysis, demandAnalysis, deliveryCostAnalysis,
   exposureAnalysis, headroomAnalysis, intensityAnalysis, labourAnalysis, pricingAnalysis,
@@ -1354,5 +1356,77 @@ describe("buyer economics is a distinct layer from market state (2026-08-24)", (
       const all = [a!.driver, a!.implication, a!.evidence, a!.limitation ?? "", a!.test ?? ""].join(" ");
       expect(all).not.toMatch(/\byour (contract|renewal|spend|commitment|rate|saving|exposure)s?\b/i);
     }
+  });
+});
+
+describe("Phase 2 charts and whole-market restructure (2026-08-24)", () => {
+  const chartSrc = readFileSync(resolve(__dirname, "../components/charts/Charts.tsx"), "utf8");
+
+  it("charts never colour a level with the brand accent", () => {
+    // Phase 1 removed gold from state values; a chart must not reintroduce it
+    for (const lv of ["very-high", "high", "medium", "low", "insufficient"] as const) {
+      expect(levelInk(lv)).not.toMatch(/accent/);
+    }
+    expect(levelInk("very-high")).toBe("var(--data-positive-ink)");
+    expect(levelInk("insufficient")).toBe("var(--fg-dim)");
+  });
+
+  it("chart state colour comes from the dictionary's buyer effect, not magnitude", () => {
+    // talent pressure "high" is bad for the buyer; AI productivity "high" is good
+    expect(stateInk("talentPressure", "unfavourable")).toBe(EFFECT_INK.unfavourable);
+    expect(stateInk("aiProductivityOpportunity", "favourable")).toBe(EFFECT_INK.favourable);
+    // vendor financial strength stays neutral — never a buyer win
+    expect(stateInk("financialResilience", "favourable")).toBe(EFFECT_INK.neutral);
+  });
+
+  it("charts derive no figures of their own", () => {
+    // every value is passed in from the canonical resolved object; a chart that
+    // starts summing facts can silently disagree with the table beside it
+    expect(chartSrc).not.toMatch(/awardsT12|inPlay12Tcv|getScopeAggregates|resolveIntelligence/);
+  });
+
+  it("the exposure chart never blends disclosed and inferred value", () => {
+    // one bar is drawn from disclosedUsd only; inference is a separate encoding
+    expect(chartSrc).toMatch(/disclosedUsd/);
+    expect(chartSrc).not.toMatch(/disclosedUsd\s*\+\s*inferred/);
+    expect(chartSrc).toMatch(/inferred/);
+  });
+
+  it("charts expose their numbers outside the graphic", () => {
+    // colour is never the sole carrier: sr-only description plus visible counts
+    expect(chartSrc).toMatch(/sr-only/);
+    expect(chartSrc).toMatch(/role="img"/);
+    expect(chartSrc).toMatch(/aria-label/);
+  });
+
+  it("no proprietary internal score reaches buyer-facing output", () => {
+    const surfaces = [
+      "../components/charts/Charts.tsx",
+      "../components/ui.tsx",
+      "../components/MetricCard.tsx",
+      "../lib/metrics/market-analysis.ts",
+    ].map((f) => readFileSync(resolve(__dirname, f), "utf8")).join("\n");
+    // rendered copy must never quote the internal score, confidence number,
+    // similarity score or weighting
+    expect(surfaces).not.toMatch(/AG risk score/);
+    expect(surfaces).not.toMatch(/riskScore\s*\}/);
+    expect(surfaces).not.toMatch(/similarity|modelScore|weighting/i);
+  });
+
+  it("distribution bands use canonical vocabulary, never invented labels", () => {
+    // the whole-market distribution labels each band from the shared scale
+    for (const lv of ["very-high", "high", "medium", "low", "insufficient"] as const) {
+      expect(LEVEL_VOCABULARY[lv]).toBeTruthy();
+    }
+    expect(LEVEL_VOCABULARY["very-high"]).toBe("Very High");
+    expect(LEVEL_VOCABULARY.insufficient).toBe("Insufficient evidence");
+  });
+
+  it("signings charts read commercial signings, never procurement awards", () => {
+    // the two are separate measures on separate windows and must stay lexically
+    // distinct wherever either is shown
+    const vendorsPage = readFileSync(resolve(__dirname, "../app/vendors/page.tsx"), "utf8");
+    expect(vendorsPage).toMatch(/signingsT12/);
+    expect(vendorsPage).not.toMatch(/awardsT90|procurement.*Slope/i);
   });
 });

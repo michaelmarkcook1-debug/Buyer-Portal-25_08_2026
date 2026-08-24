@@ -1461,6 +1461,17 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         contracts: d?.contracts ?? 0,
         inPlay12: d?.inPlay12 ?? 0,
         inPlay24: d?.inPlay24 ?? 0,
+        inPlay12DisclosedUsd: d?.inPlay12Tcv ?? null,
+        inPlay12Inferred: d
+          ? inferredDominates({
+              disclosedUsd: d.inPlay12Tcv,
+              inferredLowUsd: d.inPlay12Inf.low,
+              inferredMidUsd: d.inPlay12Inf.mid,
+              inferredHighUsd: d.inPlay12Inf.high,
+            })
+          : false,
+        signingsT12: d?.awardsT12 ?? 0,
+        signingsPrior12: d?.awardsPrior12 ?? 0,
         hasSignals: signals.has(ticker),
         hasSec: sec.has(ticker),
       },

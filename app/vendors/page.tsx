@@ -1,5 +1,6 @@
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
+import { SigningsSlopeChart } from "@/components/charts/Charts";
 import { RetrospectiveTable } from "@/components/RetrospectiveTable";
 import { VendorComparison } from "@/components/VendorComparison";
 import { WholeMarketLenses } from "@/components/WholeMarketLenses";
@@ -52,6 +53,21 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
   // A market this wide is unreadable as a flat table — lead with curation and
   // keep the full universe one disclosure away (§13/§14).
   const curated = intel.vendors.length > CURATED_ROWS;
+  /* CHART 2 inputs — canonical commercial signings, rolling 12 months to the
+     evidence anchor against the preceding 12. Never procurement awards, which
+     are a separate measure on a separate window. */
+  const signingsAll = intel.vendors
+    .filter((v) => v.coverage.signingsT12 > 0 || v.coverage.signingsPrior12 > 0)
+    .map((v) => ({ name: v.name, prior: v.coverage.signingsPrior12, current: v.coverage.signingsT12 }));
+  const byDelta = [...signingsAll].sort((a, b) => (b.current - b.prior) - (a.current - a.prior));
+  /* Whole Market plots the extremes, not 66 rows: strongest risers and
+     strongest fallers, with the middle stated as a count rather than drawn. */
+  const signingsRows = curated
+    ? [...byDelta.filter((r) => r.current > r.prior).slice(0, 4), ...byDelta.filter((r) => r.current < r.prior).slice(-4)]
+    : signingsAll;
+  const signingsMiddle = signingsAll.length - signingsRows.length;
+  const signingsTotalNow = signingsAll.reduce((a, r) => a + r.current, 0);
+  const signingsTotalPrior = signingsAll.reduce((a, r) => a + r.prior, 0);
 
   return (
     <PortalShell active="vendors" ctx={ctx} returnTo="/vendors">
@@ -104,6 +120,30 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
           </div>
         </section>
       )}
+
+      {/* CHART 2 — which vendors are gaining or losing commercial momentum.
+          Complements the retrospective table; it does not replace it. */}
+      {signingsRows.length > 0 ? (
+        <section className="mt-12">
+          <SectionHeader
+            eyebrow="Commercial momentum"
+            title="Signings, current window against prior"
+            aside={curated ? `Strongest movers of ${count(signingsAll.length)} vendors with signing activity` : undefined}
+          />
+          <div className="mt-5">
+            <Panel className="px-6 py-5">
+              <SigningsSlopeChart
+                rows={signingsRows}
+                windowLabel={`Rolling 12 months${intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} against the preceding 12`}
+                interpretation={`${count(signingsTotalNow)} observed signings across the selected market against ${count(signingsTotalPrior)} in the prior window.${
+                  signingsMiddle > 0 ? ` ${count(signingsMiddle)} further vendors moved less and are not plotted.` : ""
+                } A vendor winning more work is not automatically good news for a buyer — rising activity tends to reduce the room to press.`}
+                footnote="Curated contract record · commercial signings only, never public procurement awards"
+              />
+            </Panel>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-12">
         <SectionHeader

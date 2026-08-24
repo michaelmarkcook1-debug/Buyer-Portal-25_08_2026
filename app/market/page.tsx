@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
+import { DistributionChart, ExposureConcentrationChart, stateInk } from "@/components/charts/Charts";
 import { InfoTip, fromSemantics } from "@/components/InfoTip";
 import { MarketStateBand, MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
@@ -15,7 +16,7 @@ import {
 import { getDevelopments, getScopeLines } from "@/lib/data/facts";
 import { count, money, shortDate } from "@/lib/format";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
-import { METRIC_DICTIONARY } from "@/lib/metrics/dictionary";
+import { METRIC_DICTIONARY, displayState } from "@/lib/metrics/dictionary";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
@@ -38,6 +39,26 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
 
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
   const tickersKey = [...intel.scope.tickers].sort().join(",");
+  /* Whole Market is a DISCOVERY scope: the same page rendered for 66 vendors
+     is detail mode applied to a universe. Charts summarise; the full per-vendor
+     detail moves behind explicit disclosure. */
+  const isWhole = ctx.scope.mode === "whole_market";
+  const exposureBars = intel.vendors
+    .filter((v) => v.coverage.inPlay12 > 0)
+    .sort((a, b) => (b.coverage.inPlay12DisclosedUsd ?? 0) - (a.coverage.inPlay12DisclosedUsd ?? 0) || b.coverage.inPlay12 - a.coverage.inPlay12)
+    .map((v) => ({
+      name: v.name,
+      count: v.coverage.inPlay12,
+      disclosedUsd: v.coverage.inPlay12DisclosedUsd,
+      inferred: v.coverage.inPlay12Inferred,
+    }));
+  const exposureShown = isWhole ? exposureBars.slice(0, 8) : exposureBars;
+  const exposureTop = exposureShown[0];
+  const exposureTotalDisclosed = exposureBars.reduce((a, b) => a + (b.disclosedUsd ?? 0), 0);
+  const exposureShare =
+    exposureTop?.disclosedUsd && exposureTotalDisclosed > 0
+      ? exposureTop.disclosedUsd / exposureTotalDisclosed
+      : 0;
   const [lines, developments] = await Promise.all([
     getScopeLines(tickersKey),
     getDevelopments(tickersKey, 20),
@@ -238,12 +259,76 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             </span>
           }
         />
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {intel.vendors.map((v) => (
-            <MetricCard key={v.ticker} hideInfo m={{ ...v.metrics.financialResilience, label: v.name }} />
-          ))}
-        </div>
+        {isWhole ? (
+          /* 66 identical cards is not a market view — it is the same variable
+             restated 66 times. The distribution says what the cards said, and
+             every card stays one disclosure away. */
+          <div className="mt-5 flex flex-col gap-4">
+            <Panel className="px-6 py-5">
+              <DistributionChart
+                total={intel.vendors.length}
+                rows={[
+                  {
+                    dimension: "Financial resilience",
+                    bands: (["favourable", "stable", "unfavourable", "mixed", "insufficient"] as const).map((st) => ({
+                      label: displayState("financialResilience", st).label,
+                      count: intel.vendors.filter((v) => v.metrics.financialResilience.state === st).length,
+                      ink: stateInk("financialResilience", st),
+                    })),
+                  },
+                ]}
+                interpretation={`Across ${count(intel.vendors.length)} covered vendors, financial condition is not uniform — read it as market context, not as buyer advantage.`}
+                footnote="Revenue growth · filed operating margin (SEC XBRL where listed)"
+              />
+            </Panel>
+            <details className="group">
+              <summary className="tap cursor-pointer list-none text-[0.95rem]" style={{ color: "var(--accent-ink)" }}>
+                Show all {count(intel.vendors.length)} vendors
+              </summary>
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {intel.vendors.map((v) => (
+                  <MetricCard key={v.ticker} hideInfo m={{ ...v.metrics.financialResilience, label: v.name }} />
+                ))}
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {intel.vendors.map((v) => (
+              <MetricCard key={v.ticker} hideInfo m={{ ...v.metrics.financialResilience, label: v.name }} />
+            ))}
+          </div>
+        )}
       </section>
+
+      {/* CHART 1 — where observed commercial value is concentrated. */}
+      {exposureShown.length > 0 ? (
+        <section className="mt-12">
+          <SectionHeader
+            eyebrow="Commercial exposure"
+            title="Where observed value is concentrated"
+            aside={isWhole ? `Leading ${count(exposureShown.length)} of ${count(exposureBars.length)} vendors with exposure` : undefined}
+          />
+          <div className="mt-5">
+            <Panel className="px-6 py-5">
+              <ExposureConcentrationChart
+                bars={exposureShown}
+                totalCount={exposureBars.reduce((a, b) => a + b.count, 0)}
+                moneyFmt={money}
+                valueLabel="Bars show DISCLOSED value only. A dashed, lighter bar marks a vendor whose value is mostly estimated from comparable agreements; withheld value draws no bar."
+                interpretation={
+                  exposureTop && exposureShare >= 0.5
+                    ? `Commercial exposure is concentrated: ${exposureTop.name} alone accounts for ${Math.round(exposureShare * 100)}% of the disclosed value entering the 12-month end-of-term window.`
+                    : exposureTop
+                      ? `Exposure is spread across ${count(exposureBars.length)} vendors rather than sitting with one; ${exposureTop.name} carries the largest single share at ${Math.round(exposureShare * 100)}%.`
+                      : "No disclosed value is held against the agreements reaching end-of-term in this window."
+                }
+                footnote={`Curated contract record${intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} · agreements reaching end-of-term within 12 months`}
+              />
+            </Panel>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-12">
         <SectionHeader

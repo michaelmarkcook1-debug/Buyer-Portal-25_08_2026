@@ -158,6 +158,13 @@ export interface VendorIntel {
     contracts: number;
     inPlay12: number;
     inPlay24: number;
+    /* Canonical figures the Phase 2 charts read. Exposed here rather than
+       recomputed per page, so a bar can never disagree with a table. Disclosed
+       and inferred value stay separate — they are never summed. */
+    inPlay12DisclosedUsd: number | null;
+    inPlay12Inferred: boolean;
+    signingsT12: number;
+    signingsPrior12: number;
     hasSignals: boolean;
     hasSec: boolean;
   };
