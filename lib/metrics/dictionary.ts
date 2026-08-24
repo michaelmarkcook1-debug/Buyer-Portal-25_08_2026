@@ -206,22 +206,26 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
 
   "m.demand": {
     name: "Services demand",
-    definition: "Whether award activity across your market is expanding or contracting.",
+    definition: "Whether award activity across your market is growing or softening.",
     interpretation:
-      "Expanding means more work is being awarded than in the prior window; contracting means less.",
+      "Expanding means more work is being awarded than in the prior window; softening means less.",
     caveat:
-      "Demand is context for reading the other signals — on its own it neither helps nor hurts your position.",
+      "Softening demand is not automatically your gain — it can widen a vendor's appetite to defend revenue, or signal instability worth understanding first.",
     window: "Current window vs the prior equivalent window.",
+    /* "Contracting" was ambiguous in a portal about contracting: read as a
+       noun it means signing activity, which is a different measure entirely.
+       "Softening" is unambiguous, and stays clear of the Hot/Cool vocabulary
+       market heat already owns. */
     labels: {
-      favourable: "Expanding", stable: "Steady", unfavourable: "Contracting",
+      favourable: "Expanding", stable: "Steady", unfavourable: "Softening",
       mixed: "Mixed", insufficient: "Insufficient evidence",
     },
-    /* Deliberately neutral: a busy market gives you more comparables but also
-       tighter vendor capacity. The buyer read lives in market heat and pricing
-       conditions — colouring demand as well would count it twice. */
+    /* Growth is ordinary market context and stays neutral. A softening market
+       is not: it is the reading that should make a buyer look, which is what
+       amber means here — attention, not advantage. */
     effect: {
-      favourable: "neutral", stable: "neutral", unfavourable: "neutral",
-      mixed: "neutral", insufficient: "unknown",
+      favourable: "neutral", stable: "neutral", unfavourable: "caution",
+      mixed: "caution", insufficient: "unknown",
     },
   },
 

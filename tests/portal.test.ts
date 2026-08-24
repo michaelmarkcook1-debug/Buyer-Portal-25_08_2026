@@ -1099,6 +1099,9 @@ describe("semantic labels and colour meaning (2026-08-23)", () => {
     expect(displayState("m.intensity", "favourable").label).toBe("Broadening");
     expect(displayState("m.supplier", "unfavourable").label).toBe("Strained");
     expect(displayState("m.demand", "favourable").label).toBe("Expanding");
+    // "Contracting" read as a noun means signing activity — a different measure
+    expect(displayState("m.demand", "unfavourable").label).toBe("Softening");
+    expect(displayState("m.demand", "unfavourable").label).not.toMatch(/Contracting/);
     expect(displayState("m.buyerEconomics", "favourable").label).toBe("Buyer favourable");
     // rollups of a vendor metric inherit that metric's vocabulary
     expect(displayState("m.oprisk", "unfavourable").label).toBe("High");
@@ -1125,6 +1128,9 @@ describe("semantic labels and colour meaning (2026-08-23)", () => {
     // demand and supplier health are context, not advantage — same rule the
     // vendor-level financial resilience entry follows
     expect(displayState("m.demand", "favourable").effect).toBe("neutral");
+    // a softening market is the reading that should make a buyer look
+    expect(displayState("m.demand", "unfavourable").effect).toBe("caution");
+    expect(displayState("m.demand", "unfavourable").effect).not.toBe("favourable");
     expect(displayState("m.supplier", "favourable").effect).toBe("neutral");
     expect(displayState("m.supplier", "unfavourable").effect).toBe("caution");
     // broader competition genuinely is a buyer win
