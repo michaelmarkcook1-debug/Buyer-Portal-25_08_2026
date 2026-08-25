@@ -174,6 +174,17 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
             AnalystGenius · Buyer Portal
           </span>
+          {/* Operator utility, deliberately in the footer rather than the tab
+              bar: the Backoffice is not a buyer surface and must not read as a
+              sixth destination. */}
+          <Link
+            href="/backoffice"
+            prefetch={false}
+            className="tap-link code ml-auto text-[0.8rem] underline-offset-4 hover:underline"
+            style={{ color: "var(--fg-dim)" }}
+          >
+            Backoffice
+          </Link>
         </div>
       </div>
     </footer>

@@ -1674,3 +1674,28 @@ describe("local-manual operating mode (2026-08-25)", () => {
     expect(banner).toMatch(/MODE_LABEL/);
   });
 });
+
+describe("Backoffice entry point (2026-08-25)", () => {
+  const shell = readFileSync(resolve(__dirname, "../components/PortalShell.tsx"), "utf8");
+  const masthead = readFileSync(resolve(__dirname, "../components/Masthead.tsx"), "utf8");
+
+  it("is reachable from the product as a footer utility link", () => {
+    expect(shell).toMatch(/href="\/backoffice"/);
+    const footer = shell.slice(shell.indexOf("function PortalFooter"));
+    expect(footer).toMatch(/href="\/backoffice"/);
+  });
+
+  it("is not a sixth primary tab", () => {
+    // the five-tab IA is fixed; the operator area must stay outside it
+    expect(masthead).not.toMatch(/backoffice/i);
+    const nav = masthead.slice(masthead.indexOf("const NAV"), masthead.indexOf("export type NavId"));
+    expect(nav.match(/id:/g) ?? []).toHaveLength(5);
+  });
+
+  it("stays visually subordinate — dim ink, footer type size", () => {
+    const link = shell.slice(shell.indexOf('href="/backoffice"') - 320, shell.indexOf('href="/backoffice"') + 260);
+    expect(link).toMatch(/--fg-dim/);
+    expect(link).toMatch(/text-\[0\.8rem\]/);
+    expect(link).not.toMatch(/accent-fill|display/);
+  });
+});
