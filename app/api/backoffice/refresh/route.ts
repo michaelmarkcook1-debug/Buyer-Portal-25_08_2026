@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { NextRequest, NextResponse } from "next/server";
 import {
   detectExecutor,
+  githubConfig,
   localScriptConfig,
   remoteRunnerUrl,
 } from "@/lib/backoffice/executor";
@@ -82,6 +83,39 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
   if (!run) {
     // Another instance claimed the slot between the check and the insert.
     return NextResponse.json({ error: "REFRESH ALREADY RUNNING", run: await activeRun() }, { status: 409 });
+  }
+
+  if (executor.mode === "github-actions") {
+    /* Dispatch and return. The workflow claims the run for its own execution
+       id and reports progress into the shared operational row, which the
+       Backoffice polls — the HTTP request never waits for the pipeline. */
+    const gh = githubConfig()!;
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/workflows/${gh.workflow}/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${gh.token}`,
+            "content-type": "application/json",
+            "x-github-api-version": "2022-11-28",
+          },
+          body: JSON.stringify({ ref: gh.ref, inputs: { refresh_run_id: run.id, mode: "refresh" } }),
+        },
+      );
+      if (!res.ok) {
+        /* Release the slot rather than leaving a run nothing is executing.
+           The body can echo configuration, so it is scrubbed before storage. */
+        const body = scrubSecrets((await res.text()).slice(0, 300));
+        await finishRun(run.id, `GitHub did not accept the workflow dispatch (HTTP ${res.status}). ${body}`);
+        return NextResponse.json({ started: false, error: "GitHub did not accept the workflow dispatch." }, { status: 502 });
+      }
+    } catch (e) {
+      await finishRun(run.id, scrubSecrets(e instanceof Error ? e.message : String(e)));
+      return NextResponse.json({ started: false, error: "Could not reach GitHub to dispatch the refresh." }, { status: 502 });
+    }
+    return NextResponse.json({ started: true, run });
   }
 
   if (executor.mode === "remote-runner") {

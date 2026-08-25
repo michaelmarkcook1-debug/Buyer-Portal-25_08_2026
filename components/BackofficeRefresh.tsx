@@ -27,6 +27,7 @@ interface StageResult {
 
 interface Run {
   id: string;
+  runnerRef?: string | null;
   startedAt: string;
   finishedAt: string | null;
   status: "running" | "success" | "failed";
@@ -37,10 +38,10 @@ interface Run {
 }
 
 interface Executor {
-  mode: "local-manual" | "remote-runner";
+  mode: "local-manual" | "github-actions" | "remote-runner";
   canRun: boolean;
   healthy: boolean;
-  reason: "local-execution" | "local-testing-mode" | "remote-runner";
+  reason: "local-execution" | "local-testing-mode" | "github-actions" | "remote-runner";
   detail: string;
   location: string;
 }
@@ -57,6 +58,7 @@ const POLL_MS = 4000;
 const MODE_LABEL: Record<Status["executor"]["reason"], string> = {
   "local-execution": "Manual mode — runs on this machine",
   "local-testing-mode": "Local manual mode",
+  "github-actions": "Manual mode — GitHub Actions",
   "remote-runner": "Remote runner configured",
 };
 
@@ -129,6 +131,12 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
   };
 
   const run = status?.run ?? null;
+  /* Built from the repo identity the status endpoint reports — never from a
+     token, which is server-side only and never reaches this component. */
+  const ghBase =
+    status?.executor.mode === "github-actions" && status.executor.location.includes("/")
+      ? `https://github.com/${status.executor.location}`
+      : null;
   const running = run?.status === "running";
   const canRun = status?.executor.canRun ?? initial.canRun;
   const stages = run?.stages ?? REFRESH_STAGES.map((s) => ({ id: s.id, status: "pending" as StageStatus, startedAt: null, finishedAt: null, message: null }));
@@ -183,6 +191,17 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
             {clock(run.startedAt)} · {duration(run.startedAt, run.finishedAt)}
             {run.currentStage ? ` · ${run.currentStage}` : ""}
           </span>
+        ) : null}
+        {run?.runnerRef && status?.executor.mode === "github-actions" && ghBase ? (
+          <a
+            href={`${ghBase}/actions/runs/${run.runnerRef}`}
+            target="_blank"
+            rel="noreferrer"
+            className="tap-link code text-[0.86rem] underline-offset-4 hover:underline"
+            style={{ color: "var(--fg-muted)" }}
+          >
+            View workflow run
+          </a>
         ) : (
           <span className="code text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
             {canRun ? "IDLE — no run recorded" : "LOCAL EXECUTION ONLY — no run recorded yet"}

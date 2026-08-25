@@ -703,14 +703,21 @@ describe("pilot-readiness sprint (2026-08-23)", () => {
   });
 
   it("refresh remains manual — no scheduler is armed in source", () => {
+    // Comments in this workflow discuss scheduling in order to rule it out, so
+    // the guard reads the CONFIGURATION, not the prose. Matching raw text here
+    // would pass on a sentence and fail on a real trigger.
     const wf = readFileSync(
       resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026", ".github/workflows/data-refresh.yml"),
       "utf8",
     );
-    // A schedule: trigger anywhere in the workflow would arm automatic refresh.
-    expect(wf).not.toMatch(/^\s{2}schedule:/m);
-    expect(wf).toMatch(/workflow_dispatch/);
-    expect(wf).toMatch(/CURRENTLY DISABLED/i);
+    const code = wf
+      .split("\n")
+      .filter((l) => !/^\s*#/.test(l))
+      .join("\n");
+    expect(code).not.toMatch(/^\s*schedule:/m);
+    expect(code.toLowerCase()).not.toContain("cron");
+    expect(code).not.toMatch(/^\s*(push|pull_request|deployment|repository_dispatch):/m);
+    expect(code).toMatch(/^\s*workflow_dispatch:/m);
   });
 });
 
@@ -1697,5 +1704,125 @@ describe("Backoffice entry point (2026-08-25)", () => {
     expect(link).toMatch(/--fg-dim/);
     expect(link).toMatch(/text-\[0\.8rem\]/);
     expect(link).not.toMatch(/accent-fill|display/);
+  });
+});
+
+describe("GitHub Actions manual execution (2026-08-25)", () => {
+  const WF = resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026", ".github/workflows/data-refresh.yml");
+  const raw = readFileSync(WF, "utf8");
+  /* The workflow's comments discuss scheduling and the protected host in order
+     to rule them out, so every guard reads configuration with comments
+     stripped. A raw-text assertion would pass on prose and fail on config. */
+  const code = raw.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+  it("is manual only — no schedule, cron, push or deployment trigger", () => {
+    expect(code).not.toMatch(/^\s*schedule:/m);
+    expect(code.toLowerCase()).not.toContain("cron");
+    expect(code).not.toMatch(/^\s*(push|pull_request|deployment|repository_dispatch):/m);
+    expect(code).toMatch(/^\s*workflow_dispatch:/m);
+  });
+
+  it("takes the portal's run id as a required input", () => {
+    expect(code).toMatch(/refresh_run_id:\s*\n\s*description:[^\n]*\n\s*required:\s*true/);
+  });
+
+  it("has a validation mode that writes nothing, defaulted to", () => {
+    expect(code).toMatch(/default:\s*validation/);
+    expect(code).toMatch(/options:\s*\n\s*-\s*validation\s*\n\s*-\s*refresh/);
+  });
+
+  it("runs the existing script rather than restating the stages", () => {
+    expect(code).toContain("ops/refresh-cloud.sh");
+    for (const stage of REFRESH_STAGES) {
+      // the stage list must live in the script, never in YAML
+      expect(code).not.toContain(`pnpm etl:${stage.id}`);
+    }
+  });
+
+  it("cannot mark a failed refresh green", () => {
+    expect(code).toContain("set -o pipefail");
+    expect(code).not.toContain("|| true");
+    expect(code).not.toMatch(/continue-on-error:\s*true/);
+  });
+
+  it("always finalises the operational row", () => {
+    expect(code).toMatch(/always\(\)/);
+  });
+
+  it("never lets a second click kill a running refresh", () => {
+    expect(code).toMatch(/cancel-in-progress:\s*false/);
+  });
+
+  it("never writes to the protected AG service", () => {
+    expect(code).not.toContain("fly.dev");
+  });
+
+  it("never dumps the environment into a public log", () => {
+    expect(code).not.toMatch(/^\s*(-\s*)?run:\s*(env|printenv)\s*$/m);
+  });
+
+  it("passes the dispatch input through the environment, not into a shell string", () => {
+    expect(code).toMatch(/REFRESH_RUN_ID:\s*\$\{\{\s*inputs\.refresh_run_id\s*\}\}/);
+    expect(code).toMatch(/--run "\$REFRESH_RUN_ID"/);
+  });
+});
+
+describe("executor precedence (2026-08-25)", () => {
+  const load = (env: Record<string, string | undefined>) => {
+    const prev = { ...process.env };
+    for (const [k, v] of Object.entries(env)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return detectExecutor();
+    } finally {
+      process.env = prev;
+    }
+  };
+  const GH = {
+    BACKOFFICE_GITHUB_OWNER: "owner",
+    BACKOFFICE_GITHUB_REPO: "repo",
+    BACKOFFICE_GITHUB_TOKEN: "t0ken",
+  };
+  const AG_DIR = resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026");
+
+  it("prefers the operator's own machine when the repo is present", () => {
+    const info = load({ ...GH, BACKOFFICE_REFRESH_DIR: AG_DIR, BACKOFFICE_RUNNER_URL: undefined });
+    expect(info.reason).toBe("local-execution");
+    expect(info.canRun).toBe(true);
+  });
+
+  it("uses GitHub Actions when deployed", () => {
+    const info = load({ ...GH, BACKOFFICE_REFRESH_DIR: undefined, BACKOFFICE_RUNNER_URL: undefined });
+    expect(info.mode).toBe("github-actions");
+    expect(info.canRun).toBe(true);
+    expect(info.location).toBe("owner/repo");
+    expect(info.detail).toMatch(/Nothing is scheduled/i);
+  });
+
+  it("does not require a paid runner — Fly is never needed to execute", () => {
+    const info = load({ ...GH, BACKOFFICE_REFRESH_DIR: undefined, BACKOFFICE_RUNNER_URL: undefined });
+    expect(info.mode).not.toBe("remote-runner");
+    const src = readFileSync(resolve(__dirname, "../lib/backoffice/executor.ts"), "utf8");
+    expect(src).not.toMatch(/fly\.io|fly\.dev/i);
+  });
+
+  it("falls back to the honest local-manual surface when nothing is configured", () => {
+    const info = load({
+      BACKOFFICE_GITHUB_OWNER: undefined,
+      BACKOFFICE_GITHUB_REPO: undefined,
+      BACKOFFICE_GITHUB_TOKEN: undefined,
+      BACKOFFICE_REFRESH_DIR: undefined,
+      BACKOFFICE_RUNNER_URL: undefined,
+    });
+    expect(info.mode).toBe("local-manual");
+    expect(info.canRun).toBe(false);
+    expect(info.healthy).toBe(true);
+  });
+
+  it("never exposes the token through the status surface", () => {
+    const info = load({ ...GH, BACKOFFICE_REFRESH_DIR: undefined });
+    expect(JSON.stringify(info)).not.toContain("t0ken");
   });
 });

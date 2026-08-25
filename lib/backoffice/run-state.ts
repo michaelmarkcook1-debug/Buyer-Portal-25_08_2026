@@ -37,6 +37,8 @@ export interface RefreshRun {
   stages: StageResult[];
   errorSummary: string | null;
   runner: string;
+  /** External execution reference — e.g. the GitHub Actions run id. */
+  runnerRef: string | null;
 }
 
 let ensured = false;
@@ -54,9 +56,12 @@ async function ensureTable(): Promise<void> {
       current_stage text,
       stages        jsonb NOT NULL DEFAULT '[]'::jsonb,
       error_summary text,
-      runner        text NOT NULL DEFAULT 'unknown'
+      runner        text NOT NULL DEFAULT 'unknown',
+      runner_ref    text
     )
   `);
+  // Existing installations predate runner_ref; adding it is idempotent.
+  await q(`ALTER TABLE portal_refresh_run ADD COLUMN IF NOT EXISTS runner_ref text`);
   ensured = true;
 }
 
@@ -88,6 +93,7 @@ function toRun(r: Record<string, unknown>): RefreshRun {
     stages: (r.stages as StageResult[]) ?? [],
     errorSummary: r.error_summary ? String(r.error_summary) : null,
     runner: String(r.runner ?? "unknown"),
+    runnerRef: r.runner_ref ? String(r.runner_ref) : null,
   };
 }
 

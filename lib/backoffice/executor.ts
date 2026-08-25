@@ -22,7 +22,37 @@ import { join } from "node:path";
  *                  testing model requires it and none is deployed.
  */
 
-export type ExecutorMode = "local-manual" | "remote-runner";
+export type ExecutorMode = "local-manual" | "github-actions" | "remote-runner";
+
+export interface GithubConfig {
+  owner: string;
+  repo: string;
+  workflow: string;
+  ref: string;
+  token: string;
+}
+
+/**
+ * GitHub Actions as manual compute for the existing pipeline.
+ *
+ * Configured entirely through the environment, so no credential reaches the
+ * source tree and the executor can be switched off by removing the variables —
+ * which is also the rollback: the deployed Backoffice simply returns to the
+ * local-manual status surface and the local script is unaffected.
+ */
+export function githubConfig(): GithubConfig | null {
+  const owner = process.env.BACKOFFICE_GITHUB_OWNER;
+  const repo = process.env.BACKOFFICE_GITHUB_REPO;
+  const token = process.env.BACKOFFICE_GITHUB_TOKEN;
+  if (!owner || !repo || !token) return null;
+  return {
+    owner,
+    repo,
+    token,
+    workflow: process.env.BACKOFFICE_GITHUB_WORKFLOW ?? "data-refresh.yml",
+    ref: process.env.BACKOFFICE_GITHUB_REF ?? "main",
+  };
+}
 
 export interface ExecutorInfo {
   mode: ExecutorMode;
@@ -31,7 +61,7 @@ export interface ExecutorInfo {
   /** True whenever the portal is working as intended — including when it cannot execute. */
   healthy: boolean;
   /** Machine-readable cause, so the UI never has to infer intent from a missing value. */
-  reason: "local-execution" | "local-testing-mode" | "remote-runner";
+  reason: "local-execution" | "local-testing-mode" | "github-actions" | "remote-runner";
   /** Operator-facing explanation of what happens, or where it happens instead. */
   detail: string;
   /** Where the stages actually execute. */
@@ -55,6 +85,36 @@ export function remoteRunnerUrl(): string | null {
 }
 
 export function detectExecutor(): ExecutorInfo {
+  /* Local first: on the AG machine the operator's own repo is the most direct
+     path, and dispatching a cloud job from there would be indirection for its
+     own sake. */
+  const local = localScriptConfig();
+  if (local) {
+    return {
+      mode: "local-manual",
+      canRun: true,
+      healthy: true,
+      reason: "local-execution",
+      location: local.dir,
+      runner: "local-script",
+      detail: `Stages execute on this machine via ${local.script} in the AG Sourcing Tool repository — the same command an operator would run in a terminal.`,
+    };
+  }
+
+  const gh = githubConfig();
+  if (gh) {
+    return {
+      mode: "github-actions",
+      canRun: true,
+      healthy: true,
+      reason: "github-actions",
+      location: `${gh.owner}/${gh.repo}`,
+      runner: "github-actions",
+      detail:
+        "Refresh runs manually using the AnalystGenius data pipeline in GitHub Actions. Nothing is scheduled: pressing the button dispatches one workflow, which runs the same stages as the local script and writes progress here as it goes.",
+    };
+  }
+
   const remote = remoteRunnerUrl();
   if (remote) {
     return {
@@ -66,19 +126,6 @@ export function detectExecutor(): ExecutorInfo {
       runner: "remote-runner",
       detail:
         "A refresh runner is configured, so stages execute there against the canonical spine. This is optional — the testing model runs refreshes locally.",
-    };
-  }
-
-  const local = localScriptConfig();
-  if (local) {
-    return {
-      mode: "local-manual",
-      canRun: true,
-      healthy: true,
-      reason: "local-execution",
-      location: local.dir,
-      runner: "local-script",
-      detail: `Stages execute on this machine via ${local.script} in the AG Sourcing Tool repository — the same command an operator would run in a terminal.`,
     };
   }
 

@@ -37,12 +37,19 @@ export default async function BackofficePage() {
         Manual data refresh
       </h1>
       <p className="mt-3 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-        {executor.canRun ? (
+        {executor.reason === "local-execution" ? (
           <>
             Refresh is manual until further notice: run → validate results → review the portal →
             continue testing. This button invokes the AG repo&rsquo;s single sanctioned entry point
             (<span className="code">ops/refresh-manual.sh</span>) — identical to running it in a
             terminal.
+          </>
+        ) : executor.reason === "github-actions" ? (
+          <>
+            Refresh is manual until further notice. This button dispatches one run of the
+            AnalystGenius data pipeline in GitHub Actions — the same stages as the local script,
+            on a temporary runner. Nothing is scheduled, and progress below is read from the
+            canonical spine as the run reports it.
           </>
         ) : (
           <>
@@ -65,7 +72,11 @@ export default async function BackofficePage() {
             Execution
           </div>
           <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
-            {executor.canRun ? "This machine" : "Local AG environment"}
+            {executor.reason === "local-execution"
+              ? "This machine"
+              : executor.reason === "github-actions"
+                ? "GitHub Actions"
+                : "Local AG environment"}
           </div>
         </div>
         <div>
