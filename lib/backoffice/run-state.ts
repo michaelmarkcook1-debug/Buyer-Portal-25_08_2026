@@ -68,7 +68,10 @@ export function scrubSecrets(text: string): string {
   return text
     .replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, "postgres://[redacted]")
     .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, "[redacted-key]")
-    .replace(/\b[A-Za-z0-9_-]{0,8}(?:API_KEY|SECRET|TOKEN|PASSWORD)[A-Za-z0-9_-]*\s*[=:]\s*\S+/gi, "$&".replace(/[=:]\s*\S+$/, "=[redacted]"))
+    .replace(
+      /\b([A-Za-z0-9_.-]*(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL)[A-Za-z0-9_.-]*)(\s*[=:]\s*)(\S+)/gi,
+      (_m, name: string, sep: string) => `${name}${sep}[redacted]`,
+    )
     .replace(/\bBearer\s+[A-Za-z0-9._-]{8,}/gi, "Bearer [redacted]")
     .replace(/\b[a-z0-9._-]+:[^@\s/]{6,}@/gi, "[redacted]@")
     .slice(0, 4000);
@@ -150,24 +153,39 @@ export async function setStage(
   message?: string | null,
 ): Promise<void> {
   await ensureTable();
-  const rows = await q<Record<string, unknown>>(`SELECT * FROM portal_refresh_run WHERE id = $1`, [runId]);
-  if (!rows[0]) return;
-  const run = toRun(rows[0]);
   const now = new Date().toISOString();
-  const stages = run.stages.map((s) =>
-    s.id === stageId
-      ? {
-          ...s,
-          status,
-          startedAt: status === "running" ? now : s.startedAt,
-          finishedAt: status === "running" ? null : now,
-          message: message == null ? s.message : scrubSecrets(message),
-        }
-      : s,
-  );
+  /* Only the fields this transition actually changes. startedAt survives a
+     later success/failure, so durations stay real. */
+  const patch: Record<string, unknown> = { status };
+  if (status === "running") {
+    patch.startedAt = now;
+    patch.finishedAt = null;
+  } else {
+    patch.finishedAt = now;
+  }
+  if (message != null) patch.message = scrubSecrets(message);
+
+  /* One statement, so two transitions cannot read the same array and write
+     back over each other. A read-modify-write here loses stage results
+     whenever transitions land close together. */
   await q(
-    `UPDATE portal_refresh_run SET stages = $2::jsonb, current_stage = $3 WHERE id = $1`,
-    [runId, JSON.stringify(stages), status === "running" ? stageId : run.currentStage],
+    `WITH target AS (
+       SELECT e.ord
+         FROM portal_refresh_run p,
+              LATERAL jsonb_array_elements(p.stages) WITH ORDINALITY AS e(val, ord)
+        WHERE p.id = $1 AND e.val->>'id' = $2
+        LIMIT 1
+     )
+     UPDATE portal_refresh_run r
+        SET stages = jsonb_set(
+              r.stages,
+              ARRAY[(t.ord - 1)::text],
+              (r.stages -> (t.ord - 1)::int) || $4::jsonb
+            ),
+            current_stage = CASE WHEN $3 = 'running' THEN $2 ELSE r.current_stage END
+       FROM target t
+      WHERE r.id = $1`,
+    [runId, stageId, status, JSON.stringify(patch)],
   );
 }
 

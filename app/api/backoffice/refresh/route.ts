@@ -108,13 +108,20 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  /* Serialised so transitions cannot overwrite each other, and so the run is
+     not closed before its last stage result is durable. */
+  let writes: Promise<unknown> = Promise.resolve();
+  const record = (fn: () => Promise<void>) => {
+    writes = writes.then(fn, fn);
+  };
+
   const onLine = (line: string) => {
     const start = /stage:\s+(\S+)/.exec(line);
     const ok = /stage OK:\s+(\S+)/.exec(line);
     const fail = /stage FAILED:\s+(\S+)/.exec(line);
-    if (ok) void setStage(run.id, ok[1], "success");
-    else if (fail) void setStage(run.id, fail[1], "failed", line.trim());
-    else if (start) void setStage(run.id, start[1], "running");
+    if (ok) record(() => setStage(run.id, ok[1]!, "success"));
+    else if (fail) record(() => setStage(run.id, fail[1]!, "failed", line.trim()));
+    else if (start) record(() => setStage(run.id, start[1]!, "running"));
   };
 
   let buf = "";
@@ -127,7 +134,7 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
   child.stdout?.on("data", consume);
   child.stderr?.on("data", consume);
   child.on("close", (code) => {
-    void finishRun(run.id, code === 0 ? null : `Refresh script exited with code ${code}.`);
+    void writes.then(() => finishRun(run.id, code === 0 ? null : `Refresh script exited with code ${code}.`));
   });
   child.on("error", (e) => {
     void finishRun(run.id, scrubSecrets(e.message));

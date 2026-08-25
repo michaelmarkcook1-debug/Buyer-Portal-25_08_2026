@@ -1565,6 +1565,16 @@ describe("backoffice manual refresh (2026-08-25)", () => {
     expect(clean).toMatch(/redacted/);
   });
 
+  it("redacts a key whose variable name is long, not only short-prefixed ones", () => {
+    // Regression: the earlier rule capped the name prefix at eight characters,
+    // so ANALYSTGENIUS_API_KEY=... passed through intact when the value itself
+    // carried no recognisable key shape.
+    const clean = scrubSecrets("stage failed: ANALYSTGENIUS_API_KEY=abc123plainvalue was rejected");
+    expect(clean).not.toMatch(/abc123plainvalue/);
+    expect(clean).toMatch(/ANALYSTGENIUS_API_KEY=\[redacted\]/);
+    expect(clean).toMatch(/was rejected/);
+  });
+
   it("keeps ordinary operator errors readable", () => {
     // scrubbing must not destroy a message that carries no secret
     expect(scrubSecrets("SEC events failed: connection timed out after 30s")).toBe(
