@@ -36,17 +36,76 @@ export const dynamic = "force-dynamic";
  * it.
  */
 
+/**
+ * Recent executions of the refresh workflow, read with the server-side token.
+ *
+ * The Backoffice needs this to link an operator to the real logs, and a
+ * validation dispatch is otherwise invisible from outside GitHub. Only the
+ * identity, state and URL of each run are returned — never the token.
+ */
+async function recentWorkflowRuns(): Promise<
+  { id: number; status: string; conclusion: string | null; url: string; created: string; event: string }[]
+> {
+  const gh = githubConfig();
+  if (!gh) return [];
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/workflows/${gh.workflow}/runs?per_page=5`,
+      {
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${gh.token}`,
+          "x-github-api-version": "2022-11-28",
+        },
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return [];
+    const body = (await res.json()) as { workflow_runs?: Record<string, unknown>[] };
+    return (body.workflow_runs ?? []).map((r) => ({
+      id: Number(r.id),
+      status: String(r.status),
+      conclusion: r.conclusion ? String(r.conclusion) : null,
+      url: String(r.html_url),
+      created: String(r.created_at),
+      event: String(r.event),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Dispatch one workflow run. Returns null on success, a scrubbed reason otherwise. */
+async function dispatchWorkflow(runId: string, mode: "validation" | "refresh"): Promise<string | null> {
+  const gh = githubConfig()!;
+  const res = await fetch(
+    `https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/workflows/${gh.workflow}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${gh.token}`,
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28",
+      },
+      body: JSON.stringify({ ref: gh.ref, inputs: { refresh_run_id: runId, mode } }),
+    },
+  );
+  if (res.ok) return null;
+  return scrubSecrets(`HTTP ${res.status}. ${(await res.text()).slice(0, 300)}`);
+}
+
 /** GET — status for the Backoffice UI. Safe to poll while a run is active. */
 export async function GET(): Promise<NextResponse> {
   const executor = detectExecutor();
   try {
     await reapStaleRuns();
-    const [run, history] = await Promise.all([latestRun(), recentRuns(10)]);
-    return NextResponse.json({
-      executor,
-      run,
-      history,
-    });
+    const [run, history, workflowRuns] = await Promise.all([
+      latestRun(),
+      recentRuns(10),
+      executor.mode === "github-actions" ? recentWorkflowRuns() : Promise.resolve([]),
+    ]);
+    return NextResponse.json({ executor, run, history, workflowRuns });
   } catch (e) {
     return NextResponse.json(
       {
@@ -61,8 +120,24 @@ export async function GET(): Promise<NextResponse> {
 }
 
 /** POST — start one manual refresh. */
-export async function POST(_req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const executor = detectExecutor();
+
+  /* Validation dispatch: infrastructure check only. It claims no run and
+     touches no operational row, because a check must never leave a trace that
+     looks like a completed refresh. */
+  const mode = new URL(req.url).searchParams.get("mode");
+  if (mode === "validation") {
+    if (executor.mode !== "github-actions") {
+      return NextResponse.json(
+        { started: false, detail: "Validation runs on the GitHub Actions executor only." },
+        { status: 409 },
+      );
+    }
+    const failure = await dispatchWorkflow("validation", "validation");
+    if (failure) return NextResponse.json({ started: false, error: failure }, { status: 502 });
+    return NextResponse.json({ started: true, mode: "validation", note: "VALIDATION ONLY — NO DATA WRITTEN." });
+  }
 
   if (!executor.canRun) {
     /* Refuse rather than claim a run nothing will execute — but this is the
@@ -89,26 +164,11 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     /* Dispatch and return. The workflow claims the run for its own execution
        id and reports progress into the shared operational row, which the
        Backoffice polls — the HTTP request never waits for the pipeline. */
-    const gh = githubConfig()!;
     try {
-      const res = await fetch(
-        `https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/workflows/${gh.workflow}/dispatches`,
-        {
-          method: "POST",
-          headers: {
-            accept: "application/vnd.github+json",
-            authorization: `Bearer ${gh.token}`,
-            "content-type": "application/json",
-            "x-github-api-version": "2022-11-28",
-          },
-          body: JSON.stringify({ ref: gh.ref, inputs: { refresh_run_id: run.id, mode: "refresh" } }),
-        },
-      );
-      if (!res.ok) {
-        /* Release the slot rather than leaving a run nothing is executing.
-           The body can echo configuration, so it is scrubbed before storage. */
-        const body = scrubSecrets((await res.text()).slice(0, 300));
-        await finishRun(run.id, `GitHub did not accept the workflow dispatch (HTTP ${res.status}). ${body}`);
+      const failure = await dispatchWorkflow(run.id, "refresh");
+      if (failure) {
+        /* Release the slot rather than leaving a run nothing is executing. */
+        await finishRun(run.id, `GitHub did not accept the workflow dispatch. ${failure}`);
         return NextResponse.json({ started: false, error: "GitHub did not accept the workflow dispatch." }, { status: 502 });
       }
     } catch (e) {
