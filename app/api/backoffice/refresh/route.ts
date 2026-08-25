@@ -62,14 +62,75 @@ async function recentWorkflowRuns(): Promise<
     );
     if (!res.ok) return [];
     const body = (await res.json()) as { workflow_runs?: Record<string, unknown>[] };
-    return (body.workflow_runs ?? []).map((r) => ({
+    const runs = (body.workflow_runs ?? []).map((r) => ({
       id: Number(r.id),
       status: String(r.status),
       conclusion: r.conclusion ? String(r.conclusion) : null,
       url: String(r.html_url),
       created: String(r.created_at),
       event: String(r.event),
+      failedSteps: [] as string[],
+      logTail: "" as string,
     }));
+
+    /* For the newest run only, name the steps that failed. Without this a
+       failed workflow is opaque from the product: the operator sees "failure"
+       and has to leave to find out what broke. */
+    const newest = runs[0];
+    if (newest && newest.conclusion && newest.conclusion !== "success") {
+      try {
+        const jr = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/runs/${newest.id}/jobs`, {
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${gh.token}`,
+            "x-github-api-version": "2022-11-28",
+          },
+          cache: "no-store",
+        });
+        if (jr.ok) {
+          const jb = (await jr.json()) as {
+            jobs?: { id: number; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[];
+          };
+          let failedJobId: number | null = null;
+          for (const job of jb.jobs ?? []) {
+            for (const st of job.steps ?? []) {
+              if (st.conclusion && st.conclusion !== "success" && st.conclusion !== "skipped") {
+                newest.failedSteps.push(`${st.name} (${st.conclusion})`);
+                failedJobId = job.id;
+              }
+            }
+          }
+          /* The tail of the failing job, so the reason is visible in the
+             product instead of only inside GitHub. Bounded and scrubbed —
+             GitHub masks its own secrets, and this never trusts that alone. */
+          if (failedJobId) {
+            const lr = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/actions/jobs/${failedJobId}/logs`, {
+              headers: {
+                accept: "application/vnd.github+json",
+                authorization: `Bearer ${gh.token}`,
+                "x-github-api-version": "2022-11-28",
+              },
+              cache: "no-store",
+            });
+            if (lr.ok) {
+              const text = await lr.text();
+              /* Blind-tailing a job log returns post-job cleanup, which says
+                 nothing. Prefer the lines that actually diagnose. */
+              const lines = text.split("\n").map((l) => l.replace(/^\S+Z\s/, "")).filter((l) => l.trim());
+              const signal = lines.filter((l) =>
+                /VALIDATION|MISSING|problems:|Error|error:|failed|refus|unreachable|REJECTED|stages discovered|write target|reachable|readable|credential/i.test(
+                  l,
+                ),
+              );
+              newest.logTail = scrubSecrets((signal.length ? signal : lines.slice(-40)).slice(-45).join("\n").slice(-4000));
+            }
+          }
+        }
+      } catch {
+        /* diagnostics only — never fail the status read */
+      }
+    }
+    return runs;
   } catch {
     return [];
   }
