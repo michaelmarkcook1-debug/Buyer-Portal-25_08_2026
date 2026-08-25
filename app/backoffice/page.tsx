@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BackofficeRefresh } from "@/components/BackofficeRefresh";
 import { Hairline, Panel, SectionHeader } from "@/components/ui";
+import { detectExecutor } from "@/lib/backoffice/executor";
 import { getFreshness, getSpineAnchor } from "@/lib/data/facts";
 import { isDbConfigured } from "@/lib/db";
 import { count, shortDate } from "@/lib/format";
@@ -10,11 +11,18 @@ export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robot
 
 /**
  * BACKOFFICE — operator area, testing phase. Outside product navigation.
- * Two purposes: manually initiate the sanctioned data refresh where a runner
- * exists, and show what the canonical spine currently holds.
+ *
+ * During testing refreshes are run by hand from the AG development machine and
+ * write to the shared canonical spine. This page therefore does two things,
+ * and which one depends only on where it is running: on the AG machine it can
+ * start that refresh; everywhere else it reports what the spine holds and what
+ * the last run did. Both are complete states — the deployed page is not a
+ * degraded copy of the local one.
+ *
  * REFRESH IS MANUAL UNTIL FURTHER NOTICE — there is no scheduler.
  */
 export default async function BackofficePage() {
+  const executor = detectExecutor();
   const ready = isDbConfigured();
   const [freshness, spine] = ready
     ? await Promise.all([getFreshness(), getSpineAnchor()])
@@ -29,16 +37,59 @@ export default async function BackofficePage() {
         Manual data refresh
       </h1>
       <p className="mt-3 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
-        Refresh is manual until further notice: run → validate results → review the portal → continue
-        testing. This button invokes the AG repo&rsquo;s single sanctioned entry point
-        (<span className="code">ops/refresh-manual.sh</span>) — identical to running it in a terminal.
-        Every stage is idempotent, every truth/quality gate applies, and evidence dates are preserved —
-        a refresh can never manufacture freshness.
+        {executor.canRun ? (
+          <>
+            Refresh is manual until further notice: run → validate results → review the portal →
+            continue testing. This button invokes the AG repo&rsquo;s single sanctioned entry point
+            (<span className="code">ops/refresh-manual.sh</span>) — identical to running it in a
+            terminal.
+          </>
+        ) : (
+          <>
+            Refreshes are run manually from the AnalystGenius development environment while the
+            product is in testing, and write to the shared canonical spine. This portal reads that
+            same spine, so it reflects those updates automatically — nothing here needs redeploying
+            when data lands.
+          </>
+        )}{" "}
+        Every stage is idempotent, every truth and quality gate applies, and evidence dates are
+        preserved — a refresh can never manufacture freshness.
       </p>
+
+      {/* The two dates that are most often confused, side by side and labelled.
+          A refresh moves the ingestion date; only newer evidence moves the
+          evidence date, so they are shown as separate facts. */}
+      <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3">
+        <div>
+          <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
+            Execution
+          </div>
+          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+            {executor.canRun ? "This machine" : "Local AG environment"}
+          </div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
+            Latest evidence
+          </div>
+          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+            {spine.dataAsOf ? shortDate(spine.dataAsOf) : "—"}
+            {spine.dataAgeDays == null ? "" : ` · ${spine.dataAgeDays} days old`}
+          </div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
+            Last ingestion
+          </div>
+          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+            {spine.lastIngest ? shortDate(spine.lastIngest) : "—"}
+          </div>
+        </div>
+      </div>
 
       <section className="mt-8">
         <Panel className="px-6 py-6">
-          <BackofficeRefresh />
+          <BackofficeRefresh initial={executor} />
         </Panel>
       </section>
 

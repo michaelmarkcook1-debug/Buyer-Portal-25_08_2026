@@ -24,6 +24,11 @@ export const dynamic = "force-dynamic";
  * A run is started ONLY by an explicit POST from the Backoffice button. There
  * is no schedule, no cron, no auto-run on deploy and no auto-run on page load.
  *
+ * During testing, execution is local by design: the refresh runs on the AG
+ * machine and writes its progress to the shared operational table, which the
+ * deployed portal reads. A deployed instance therefore reports status rather
+ * than executing, and that is a healthy state, not a missing runner.
+ *
  * Run state lives in the canonical Neon spine rather than in this process, so
  * status survives the request that started it and is visible from any Vercel
  * instance. A run is never reported as running unless a runner genuinely has
@@ -37,14 +42,14 @@ export async function GET(): Promise<NextResponse> {
     await reapStaleRuns();
     const [run, history] = await Promise.all([latestRun(), recentRuns(10)]);
     return NextResponse.json({
-      executor: { kind: executor.kind, canRun: executor.canRun, detail: executor.detail, location: executor.location },
+      executor,
       run,
       history,
     });
   } catch (e) {
     return NextResponse.json(
       {
-        executor: { kind: executor.kind, canRun: executor.canRun, detail: executor.detail, location: executor.location },
+        executor,
         run: null,
         history: [],
         error: scrubSecrets(e instanceof Error ? e.message : String(e)),
@@ -59,9 +64,10 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
   const executor = detectExecutor();
 
   if (!executor.canRun) {
-    // Never claim a run that nothing can execute (§17).
+    /* Refuse rather than claim a run nothing will execute — but this is the
+       intended operating mode, so it is stated plainly rather than as a fault. */
     return NextResponse.json(
-      { error: "No refresh runner is available in this environment.", detail: executor.detail, executor: executor.kind },
+      { started: false, mode: executor.mode, reason: executor.reason, detail: executor.detail },
       { status: 409 },
     );
   }
@@ -72,13 +78,13 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "REFRESH ALREADY RUNNING", run: already }, { status: 409 });
   }
 
-  const run = await claimRun(executor.kind);
+  const run = await claimRun(executor.runner);
   if (!run) {
     // Another instance claimed the slot between the check and the insert.
     return NextResponse.json({ error: "REFRESH ALREADY RUNNING", run: await activeRun() }, { status: 409 });
   }
 
-  if (executor.kind === "remote-runner") {
+  if (executor.mode === "remote-runner") {
     const url = remoteRunnerUrl()!;
     try {
       const res = await fetch(`${url.replace(/\/$/, "")}/run`, {

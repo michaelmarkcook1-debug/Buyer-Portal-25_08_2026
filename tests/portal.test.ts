@@ -25,6 +25,7 @@ import { shiftLevel, type MetricState } from "@/lib/metrics/types";
 import { levelInk, stateInk } from "@/components/charts/Charts";
 import { EXCLUDED_STAGES, REFRESH_STAGES } from "@/lib/backoffice/stages";
 import { scrubSecrets } from "@/lib/backoffice/run-state";
+import { detectExecutor } from "@/lib/backoffice/executor";
 import { EFFECT_INK } from "@/components/ui";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
@@ -1584,5 +1585,92 @@ describe("backoffice manual refresh (2026-08-25)", () => {
 
   it("caps stored messages so a runaway log cannot fill the operational row", () => {
     expect(scrubSecrets("x".repeat(9000)).length).toBeLessThanOrEqual(4000);
+  });
+});
+
+describe("local-manual operating mode (2026-08-25)", () => {
+  /* During testing, refreshes run on the AG machine and write to the shared
+     spine; the deployed portal reads it. The deployed instance therefore
+     cannot execute — which is the intended mode, not a fault. */
+
+  /* detectExecutor reads the environment when called, so the env is simply set
+     around the call — no module juggling. */
+  const load = async (env: Record<string, string | undefined>) => {
+    const prev = { ...process.env };
+    for (const [k, v] of Object.entries(env)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    try {
+      return detectExecutor();
+    } finally {
+      process.env = prev;
+    }
+  };
+
+  it("can run on the AG machine, where the repo and its script exist", async () => {
+    const info = await load({
+      BACKOFFICE_RUNNER_URL: undefined,
+      BACKOFFICE_REFRESH_DIR: resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026"),
+      BACKOFFICE_REFRESH_SCRIPT: undefined,
+    });
+    expect(info.mode).toBe("local-manual");
+    expect(info.canRun).toBe(true);
+    expect(info.reason).toBe("local-execution");
+    expect(info.detail).toMatch(/ops\/refresh-manual\.sh/);
+  });
+
+  it("cannot run when deployed, and reports that as healthy rather than an error", async () => {
+    const info = await load({
+      BACKOFFICE_RUNNER_URL: undefined,
+      BACKOFFICE_REFRESH_DIR: undefined,
+      BACKOFFICE_REFRESH_SCRIPT: undefined,
+    });
+    expect(info.mode).toBe("local-manual");
+    expect(info.canRun).toBe(false);
+    expect(info.healthy).toBe(true);
+    expect(info.reason).toBe("local-testing-mode");
+  });
+
+  it("explains where refreshes do run, without alarm words", async () => {
+    const info = await load({ BACKOFFICE_RUNNER_URL: undefined, BACKOFFICE_REFRESH_DIR: undefined });
+    expect(info.detail).toMatch(/intentionally local/i);
+    expect(info.detail).toMatch(/AG development environment/i);
+    // never framed as breakage
+    expect(info.detail).not.toMatch(/error|failed|missing|misconfigur|not available|unavailable/i);
+  });
+
+  it("keeps the remote runner dormant — configured only if a URL is set", async () => {
+    const off = await load({ BACKOFFICE_RUNNER_URL: undefined, BACKOFFICE_REFRESH_DIR: undefined });
+    expect(off.mode).toBe("local-manual");
+    const on = await load({ BACKOFFICE_RUNNER_URL: "https://runner.example.com", BACKOFFICE_REFRESH_DIR: undefined });
+    expect(on.mode).toBe("remote-runner");
+    expect(on.canRun).toBe(true);
+  });
+
+  it("does not require a remote runner anywhere in the operator copy", () => {
+    const page = readFileSync(resolve(__dirname, "../app/backoffice/page.tsx"), "utf8");
+    const ui = readFileSync(resolve(__dirname, "../components/BackofficeRefresh.tsx"), "utf8");
+    for (const src of [page, ui]) {
+      expect(src).not.toMatch(/No runner in this environment/i);
+      expect(src).not.toMatch(/fly\.io|Fly\.io|Railway/i);
+    }
+  });
+
+  it("shows no executable control where a refresh cannot be started", () => {
+    const ui = readFileSync(resolve(__dirname, "../components/BackofficeRefresh.tsx"), "utf8");
+    // the button is rendered only in the capable branch
+    expect(ui).toMatch(/canRun \? \(\s*<button/);
+    expect(ui).toMatch(/Run from the local AG environment/);
+  });
+
+  it("never paints the deployed mode in a warning colour", () => {
+    const ui = readFileSync(resolve(__dirname, "../components/BackofficeRefresh.tsx"), "utf8");
+    const start = ui.indexOf("The operating mode");
+    expect(start).toBeGreaterThan(-1);
+    // scope to the banner element itself, not the rest of the file
+    const banner = ui.slice(start, ui.indexOf("</div>", start));
+    expect(banner).not.toMatch(/data-watch-ink|data-risk-ink/);
+    expect(banner).toMatch(/MODE_LABEL/);
   });
 });

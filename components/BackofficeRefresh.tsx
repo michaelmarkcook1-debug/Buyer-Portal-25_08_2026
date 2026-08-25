@@ -10,6 +10,11 @@ import { REFRESH_STAGES, type StageStatus } from "@/lib/backoffice/stages";
  * run when the operator presses the button and polls status while one is
  * genuinely active. It never starts anything on mount, never polls when idle,
  * and stops the moment a run reaches a terminal state.
+ *
+ * Where a refresh cannot be started from — the deployed portal, during the
+ * local testing model — it shows no button at all rather than a dead one, and
+ * says where refreshes do run. Everything else on the page stays live, because
+ * status is read from the shared spine either way.
  */
 
 interface StageResult {
@@ -31,14 +36,29 @@ interface Run {
   runner: string;
 }
 
+interface Executor {
+  mode: "local-manual" | "remote-runner";
+  canRun: boolean;
+  healthy: boolean;
+  reason: "local-execution" | "local-testing-mode" | "remote-runner";
+  detail: string;
+  location: string;
+}
+
 interface Status {
-  executor: { kind: string; canRun: boolean; detail: string; location: string };
+  executor: Executor;
   run: Run | null;
   history: Run[];
   error?: string;
 }
 
 const POLL_MS = 4000;
+
+const MODE_LABEL: Record<Status["executor"]["reason"], string> = {
+  "local-execution": "Manual mode — runs on this machine",
+  "local-testing-mode": "Local manual mode",
+  "remote-runner": "Remote runner configured",
+};
 
 const TONE: Record<StageStatus, { ink: string; label: string }> = {
   pending: { ink: "var(--fg-dim)", label: "Pending" },
@@ -60,8 +80,11 @@ function duration(a: string | null, b: string | null): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-export function BackofficeRefresh() {
-  const [status, setStatus] = useState<Status | null>(null);
+export function BackofficeRefresh({ initial }: { initial: Executor }) {
+  /* Seeded from the server's own detection so the first paint states the real
+     mode. Without it the page briefly claims it cannot run while the status
+     request is still in flight. */
+  const [status, setStatus] = useState<Status | null>({ executor: initial, run: null, history: [] });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,41 +130,53 @@ export function BackofficeRefresh() {
 
   const run = status?.run ?? null;
   const running = run?.status === "running";
-  const canRun = status?.executor.canRun ?? false;
+  const canRun = status?.executor.canRun ?? initial.canRun;
   const stages = run?.stages ?? REFRESH_STAGES.map((s) => ({ id: s.id, status: "pending" as StageStatus, startedAt: null, finishedAt: null, message: null }));
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Where a refresh can actually run — stated before the button. */}
+      {/* The operating mode, stated before anything else. A deployed portal
+          that cannot execute is working as intended, so this is written in the
+          ordinary voice of the page — never in a warning colour. */}
       <div
         className="rounded-[var(--radius-sm)] px-4 py-3 text-[0.94rem] leading-relaxed"
         style={{
           background: "var(--bg-elev-2)",
-          color: canRun ? "var(--fg-muted)" : "var(--data-watch-ink)",
+          color: "var(--fg-muted)",
           border: "1px solid var(--surface-line)",
         }}
       >
-        <span className="eyebrow" style={{ color: canRun ? "var(--accent-ink)" : "var(--data-watch-ink)" }}>
-          {canRun ? "Runner available" : "No runner in this environment"}
+        <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
+          {MODE_LABEL[(status ?? { executor: initial }).executor.reason]}
         </span>{" "}
-        {status?.executor.detail ?? "Checking…"}
+        {(status ?? { executor: initial }).executor.detail}
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <button
-          type="button"
-          onClick={start}
-          disabled={!canRun || running || busy}
-          className="tap rounded-[var(--radius-sm)] px-5 py-2.5 text-[0.95rem] font-medium transition-colors"
-          style={{
-            background: !canRun || running || busy ? "var(--bg-elev-2)" : "var(--accent-fill)",
-            color: !canRun || running || busy ? "var(--fg-dim)" : "var(--on-accent, #0b1220)",
-            border: "1px solid var(--surface-line)",
-            cursor: !canRun || running || busy ? "not-allowed" : "pointer",
-          }}
-        >
-          {running ? "Refresh already running" : busy ? "Starting…" : "Run manual refresh"}
-        </button>
+        {canRun ? (
+          <button
+            type="button"
+            onClick={start}
+            disabled={running || busy}
+            className="tap rounded-[var(--radius-sm)] px-5 py-2.5 text-[0.95rem] font-medium transition-colors"
+            style={{
+              background: running || busy ? "var(--bg-elev-2)" : "var(--accent-fill)",
+              color: running || busy ? "var(--fg-dim)" : "var(--on-accent, #0b1220)",
+              border: "1px solid var(--surface-line)",
+              cursor: running || busy ? "not-allowed" : "pointer",
+            }}
+          >
+            {running ? "Refresh already running" : busy ? "Starting…" : "Run manual refresh"}
+          </button>
+        ) : (
+          /* No dead button: the honest statement is where it runs instead. */
+          <span
+            className="rounded-[var(--radius-sm)] px-4 py-2.5 text-[0.95rem]"
+            style={{ background: "var(--bg-elev-2)", border: "1px solid var(--surface-line)", color: "var(--fg-muted)" }}
+          >
+            Run from the local AG environment
+          </span>
+        )}
         {run ? (
           <span className="code text-[0.86rem]" style={{ color: "var(--fg-muted)" }}>
             {run.status === "running" ? "RUNNING" : run.status === "success" ? "SUCCESS" : "FAILED"} · started{" "}
@@ -150,7 +185,7 @@ export function BackofficeRefresh() {
           </span>
         ) : (
           <span className="code text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
-            IDLE — no run recorded
+            {canRun ? "IDLE — no run recorded" : "LOCAL EXECUTION ONLY — no run recorded yet"}
           </span>
         )}
       </div>
