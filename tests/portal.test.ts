@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { allowedNumbers, validateInsight } from "@/lib/insight/validate";
+import { allowedNumbers, proprietaryScoreOffences, validateInsight } from "@/lib/insight/validate";
 import { baselineFrom, parseCookieValue, scopedTickers, tickersFromParam } from "@/lib/scope-core";
 import {
   aiCapabilityChange,
@@ -1467,5 +1467,54 @@ describe("Phase 3 consolidation invariants (2026-08-24)", () => {
     expect(css).toMatch(/main table th\.eyebrow/);
     // 0.22em uppercase at 12.5px was the scanning cost
     expect(css).toMatch(/letter-spacing:\s*0\.09em/);
+  });
+});
+
+describe("proprietary scoring firewall (pilot gate, 2026-08-25)", () => {
+  it("blocks an AI-readiness score", () => {
+    const o = proprietaryScoreOffences("TCS shows AG AI-readiness of 87/100 across the market.");
+    expect(o.length).toBeGreaterThan(0);
+    expect(o.join(" ")).toMatch(/87\/100/);
+  });
+
+  it("blocks an internal risk score", () => {
+    expect(proprietaryScoreOffences("AG risk score 75/100 on the current record.").length).toBeGreaterThan(0);
+    expect(proprietaryScoreOffences("Its risk score of 75 is elevated.").length).toBeGreaterThan(0);
+  });
+
+  it("blocks an internal confidence value and a bare score", () => {
+    expect(proprietaryScoreOffences("held at confidence 0.82").length).toBeGreaterThan(0);
+    expect(proprietaryScoreOffences("a score of 61 on the readiness axis").length).toBeGreaterThan(0);
+    expect(proprietaryScoreOffences("an internal rating of 78").length).toBeGreaterThan(0);
+    expect(proprietaryScoreOffences("43 out of 100 on capability").length).toBeGreaterThan(0);
+  });
+
+  it("leaves legitimate public evidence alone", () => {
+    // these are real, sourced, buyer-relevant figures and must stay legal
+    for (const legal of [
+      "Revenue growth 6.7% YoY.",
+      "Operating margin 16.1% for the period ending 31 Mar 2026.",
+      "Public awards fell to 3 from 9 in the trailing 90 days.",
+      "38 observed agreements reach end-of-term within 12 months, carrying $7.2bn.",
+      "consumption/outcome pricing remains at 0% of observed agreements",
+      "INR weakened 9.0% against USD; US ECI +3.1% YoY.",
+      "net talent outflow of -3,947 on a 606,000 headcount base",
+    ]) {
+      expect(proprietaryScoreOffences(legal), legal).toEqual([]);
+    }
+  });
+
+  it("the full validator blocks a briefing that quotes a score", () => {
+    const ctx = "AI capability: favourable. Revenue growth 6.7% YoY.";
+    const bad = validateInsight("Capability is strongest at TCS, with AG AI-readiness of 87/100.", ctx);
+    expect(bad.ok).toBe(false);
+    expect(bad.blocked.join(" ")).toMatch(/internal scoring/i);
+  });
+
+  it("the corrective message tells the model what to do instead", () => {
+    const bad = validateInsight("AG AI-readiness of 87/100 leads the market.", "x");
+    // this string is fed straight back to the model as the retry instruction
+    expect(bad.blocked.join(" ")).toMatch(/qualitative reading/i);
+    expect(bad.blocked.join(" ")).toMatch(/never the internal score/i);
   });
 });

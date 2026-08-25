@@ -71,6 +71,12 @@ Make a clear analytical judgement when evidence supports one.
 When evidence conflicts, explain the tension rather than forcing certainty.
 
 Never invent facts, figures, capabilities, contracts or commercial outcomes.
+NEVER state an internal AnalystGenius score, rating out of 100, model score,
+similarity value, internal confidence value, weighting or threshold, even if
+one appears in the context. State the qualitative reading and the evidence
+behind it instead. Public financial and contract figures — percentages,
+currency amounts, counts, growth rates, dates — remain legitimate and should
+be used.
 
 Never state a number that does not appear in the structured context.
 
@@ -173,6 +179,31 @@ Target 120–160 words; hard maximum 180. Sharper is better than longer.`;
 
 /* ── context assembly — compact, canonical-only ── */
 
+/* ── Upstream proprietary-score control ────────────────────────────────
+   Basis text is canonical and is rendered as evidence elsewhere, so it is not
+   rewritten at source. What changes is what the MODEL is given: an internal
+   score adds nothing it needs — the metric's own state, movement and headline
+   already carry the qualitative reading on the same line — while being the one
+   thing it must never repeat. Stripping it here means the model cannot quote
+   what it was never shown, and the validator downstream is a second net rather
+   than the only one. */
+function buyerSafeBasis(text: string): string {
+  return text
+    // "AG AI-readiness 87/100." — the state above already says High/Medium/Low
+    .replace(/\bAG AI-readiness\s+\d+(?:\.\d+)?\/100\.?\s*/gi, "AG AI-readiness is held for this vendor. ")
+    // "AG risk score 75/100 (upstream marks this analysis stale)." — keep the staleness, drop the number
+    .replace(
+      /\bAG risk score\s+\d+(?:\.\d+)?\/100\s*(\([^)]*\))?\.?\s*/gi,
+      (_m, paren) => (paren ? `Issue analysis is held ${paren}. ` : "Issue analysis is held for this vendor. "),
+    )
+    // "Sentiment 64/100 across tracked audiences; 3 trending up, 2 down."
+    .replace(/\bSentiment\s+\d+(?:\.\d+)?\/100\s*/gi, "Sentiment is tracked ")
+    // catch-all: any remaining out-of-100 rating
+    .replace(/\b\d+(?:\.\d+)?\s*\/\s*100\b/g, "a withheld internal rating")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function metricLine(m: { label: string; state: string; movement: string; confidence: string; headline: string | null; basis: Array<{ text: string; ownership: string }>; modelled?: string }): string {
   const parts = [
     `${m.label}: ${m.state}` +
@@ -181,7 +212,7 @@ function metricLine(m: { label: string; state: string; movement: string; confide
   ];
   if (m.headline) parts.push(m.headline);
   for (const b of m.basis.slice(0, 2)) {
-    parts.push(`[${b.ownership === "buyer" ? "buyer-owned" : "market observation"}] ${b.text}`);
+    parts.push(`[${b.ownership === "buyer" ? "buyer-owned" : "market observation"}] ${buyerSafeBasis(b.text)}`);
   }
   if (m.modelled) parts.push(`[${m.modelled}]`);
   return parts.join(" — ");
@@ -201,7 +232,7 @@ function vendorBlock(v: VendorIntel, detail: boolean): string {
     lines.push("  " + metricLine(m));
   }
   if (v.claimsVsDelivery?.headline) {
-    lines.push(`  AG claims-vs-delivery (${v.claimsVsDelivery.direction ?? "—"}, as of ${v.claimsVsDelivery.asOf ?? "—"}): ${v.claimsVsDelivery.headline}`);
+    lines.push(`  AG claims-vs-delivery (${v.claimsVsDelivery.direction ?? "—"}, as of ${v.claimsVsDelivery.asOf ?? "—"}): ${buyerSafeBasis(v.claimsVsDelivery.headline)}`);
   }
   return lines.join("\n");
 }
@@ -215,7 +246,7 @@ export function buildContext(
   const insufficiencies: string[] = [];
   for (const v of intel.vendors) {
     for (const m of Object.values(v.metrics)) {
-      if (m.state === "insufficient" && m.headline) insufficiencies.push(`${v.name}: ${m.label} — ${m.headline}`);
+      if (m.state === "insufficient" && m.headline) insufficiencies.push(`${v.name}: ${m.label} — ${buyerSafeBasis(m.headline)}`);
     }
   }
 
@@ -238,10 +269,10 @@ export function buildContext(
     `Buyer economics overall: ${intel.buyerEconomics.state}.`,
     "",
     "TWELVE-MONTH CHANGE (per dimension, honest to held history):",
-    ...intel.changes.map((c) => `${c.dimension}: ${c.state}, ${c.movement.replace(/-/g, " ")} (confidence: ${c.confidence}) — ${c.detail}`),
+    ...intel.changes.map((c) => `${c.dimension}: ${c.state}, ${c.movement.replace(/-/g, " ")} (confidence: ${c.confidence}) — ${buyerSafeBasis(c.detail)}`),
     "",
     "SIGNALS:",
-    ...intel.watch.map((w) => `${w.classification} — ${w.headline}. ${w.implication}${w.change ? ` (${w.change})` : ""}`),
+    ...intel.watch.map((w) => `${w.classification} — ${buyerSafeBasis(w.headline)}. ${buyerSafeBasis(w.implication)}${w.change ? ` (${w.change})` : ""}`),
     "",
     focal ? `FOCAL VENDOR:\n${vendorBlock(focal, true)}\n\nCOMPARED WITH THE REST OF THE SELECTED MARKET:` : "VENDORS (ranked by overall buyer opportunity):",
     ...intel.vendors.filter((v) => v.ticker !== opts.focalTicker).map((v) => vendorBlock(v, tab === "vendors" || tab === "opportunities")),

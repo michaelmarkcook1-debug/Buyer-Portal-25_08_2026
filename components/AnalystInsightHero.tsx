@@ -166,7 +166,13 @@ export async function AnalystInsightHero(props: {
         fallback={
           <div aria-live="polite">
             <p className="display m-0 text-[1.28rem]" style={{ color: "var(--fg-muted)" }}>
-              Preparing Analyst Insight…
+              Preparing this market briefing…
+            </p>
+            {/* The briefing streams in on its own — no refresh, no client JS.
+                Say so, so a reader does not sit waiting or reload the page. */}
+            <p className="m-0 mt-2 text-[0.94rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+              Prepared from the evidence for your selected market. It will appear here when ready —
+              the intelligence below is complete and usable now.
             </p>
             <div className="skeleton mt-4 h-4 w-[86%]" />
             <div className="skeleton mt-2 h-4 w-[74%]" />

@@ -15,7 +15,7 @@
  * validated by an older ruleset can never be served again (sprint 3 fix 1).
  * Bump on EVERY rule change.
  */
-export const VALIDATOR_VERSION = 3;
+export const VALIDATOR_VERSION = 4;
 
 export interface InsightValidation {
   ok: boolean;
@@ -211,6 +211,37 @@ export function validateOwnership(text: string): { blocked: string[]; warnings: 
   return { blocked, warnings };
 }
 
+/* ── Proprietary scoring firewall ──────────────────────────────────────
+   Internal AnalystGenius scores may drive internal logic; they must never
+   reach a buyer. The Phase 4 pilot audit found the model quoting them out of
+   basis text it had been given — "AG AI-readiness of 87/100", "43/100",
+   "78/100" — on Home, Vendors and Opportunities. The deterministic cards
+   never exposed them; only the generated prose did.
+
+   Two rules keep genuine evidence legal while blocking the scores:
+     - an out-of-N rating (x/100, x out of 100) is proprietary;
+     - a named internal score or a 0–1 confidence value is proprietary;
+   while public financial and contract figures — percentages, currency,
+   counts, growth rates — remain untouched. */
+const PROPRIETARY_SCORE: { pattern: RegExp; why: string }[] = [
+  { pattern: /\b\d+(?:\.\d+)?\s*\/\s*100\b/g, why: "an out-of-100 rating" },
+  { pattern: /\b\d+(?:\.\d+)?\s+out of\s+100\b/gi, why: "an out-of-100 rating" },
+  { pattern: /\bAG\s+[a-z-]*\s*score\b/gi, why: "a named internal score" },
+  { pattern: /\b(?:AI[- ]readiness|risk|sentiment|similarity|model)\s+score\s+(?:of\s+)?\d/gi, why: "a named internal score" },
+  { pattern: /\bscore\s+of\s+\d+(?:\.\d+)?\b/gi, why: "a bare score value" },
+  { pattern: /\bconfidence\s+(?:of\s+)?0?\.\d+\b/gi, why: "an internal confidence value" },
+  { pattern: /\binternal\s+rating\b/gi, why: "an internal rating" },
+];
+
+/** Proprietary-score offences in buyer-facing prose. Empty when clean. */
+export function proprietaryScoreOffences(text: string): string[] {
+  const found: string[] = [];
+  for (const { pattern, why } of PROPRIETARY_SCORE) {
+    for (const m of text.matchAll(pattern)) found.push(`“${m[0].trim()}” (${why})`);
+  }
+  return [...new Set(found)];
+}
+
 const WORD_CAP = 180;
 
 export function validateInsight(text: string, contextJson: string): InsightValidation {
@@ -243,6 +274,15 @@ export function validateInsight(text: string, contextJson: string): InsightValid
   const lower = out.toLowerCase();
   for (const p of BANNED_PHRASES) {
     if (lower.includes(p)) warnings.push(`Contains a proscribed generic phrase: “${p}”.`);
+  }
+
+  /* Proprietary scoring firewall — internal scores never reach a buyer. */
+  const scores = proprietaryScoreOffences(out);
+  if (scores.length > 0) {
+    blocked.push(
+      `Generated insight exposes internal scoring: ${scores.join(", ")}. ` +
+        "State the qualitative reading and the evidence behind it; never the internal score.",
+    );
   }
 
   /* Ownership firewall — market evidence must never become buyer-owned language. */
