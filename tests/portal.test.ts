@@ -23,6 +23,8 @@ import {
 } from "@/lib/metrics/rules";
 import { shiftLevel, type MetricState } from "@/lib/metrics/types";
 import { levelInk, stateInk } from "@/components/charts/Charts";
+import { EXCLUDED_STAGES, REFRESH_STAGES } from "@/lib/backoffice/stages";
+import { scrubSecrets } from "@/lib/backoffice/run-state";
 import { EFFECT_INK } from "@/components/ui";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
@@ -1516,5 +1518,61 @@ describe("proprietary scoring firewall (pilot gate, 2026-08-25)", () => {
     // this string is fed straight back to the model as the retry instruction
     expect(bad.blocked.join(" ")).toMatch(/qualitative reading/i);
     expect(bad.blocked.join(" ")).toMatch(/never the internal score/i);
+  });
+});
+
+describe("backoffice manual refresh (2026-08-25)", () => {
+  it("mirrors the approved stage list exactly — no invented data families", () => {
+    // source of truth: ops/refresh-cloud.sh in the AG Sourcing Tool repo
+    expect(REFRESH_STAGES.map((s) => s.id)).toEqual([
+      "analystgenius",
+      "ai-enterprise",
+      "capability-events",
+      "fred-macro",
+      "sec-events",
+      "promote",
+      "snapshot-primitives",
+      "snapshot-edgar",
+    ]);
+  });
+
+  it("states what the refresh deliberately excludes", () => {
+    const text = EXCLUDED_STAGES.map((e) => `${e.label} ${e.why}`).join(" ").toLowerCase();
+    expect(text).toMatch(/contract tracker/);
+    expect(text).toMatch(/frozen/);
+    expect(text).toMatch(/read-only/);
+    // no scheduling, stated as an exclusion rather than merely absent
+    expect(text).toMatch(/no cron|scheduling/);
+  });
+
+  it("no stage writes to the protected production service", () => {
+    const all = REFRESH_STAGES.map((s) => `${s.command} ${s.what}`).join(" ");
+    expect(all).not.toMatch(/fly\.dev/);
+    // the single AG touchpoint is explicitly a read
+    expect(REFRESH_STAGES.find((s) => s.id === "analystgenius")!.what).toMatch(/GET-only|never writes/i);
+  });
+
+  it("scrubs secrets out of anything stored for the operator to read", () => {
+    const dirty = [
+      "connect failed postgres://user:hunter2@ep-icy.neon.tech/neondb?sslmode=require",
+      "auth error: Bearer eyJhbGciOiJIUzI1NiJ9abcdefgh",
+      "ANTHROPIC_API_KEY=sk-ant-secret-value-1234567890",
+    ].join(" | ");
+    const clean = scrubSecrets(dirty);
+    expect(clean).not.toMatch(/hunter2/);
+    expect(clean).not.toMatch(/eyJhbGciOiJIUzI1NiJ9abcdefgh/);
+    expect(clean).not.toMatch(/sk-ant-secret-value/);
+    expect(clean).toMatch(/redacted/);
+  });
+
+  it("keeps ordinary operator errors readable", () => {
+    // scrubbing must not destroy a message that carries no secret
+    expect(scrubSecrets("SEC events failed: connection timed out after 30s")).toBe(
+      "SEC events failed: connection timed out after 30s",
+    );
+  });
+
+  it("caps stored messages so a runaway log cannot fill the operational row", () => {
+    expect(scrubSecrets("x".repeat(9000)).length).toBeLessThanOrEqual(4000);
   });
 });

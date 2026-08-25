@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import { BackofficeRefresh } from "@/components/BackofficeRefresh";
 import { Hairline, Panel, SectionHeader } from "@/components/ui";
+import { getFreshness, getSpineAnchor } from "@/lib/data/facts";
+import { isDbConfigured } from "@/lib/db";
+import { count, shortDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robots: { index: false, follow: false } };
 
 /**
- * BACKOFFICE — operator area, testing phase. Not linked from product
- * navigation; localhost-only. One purpose: manually initiate the sanctioned
- * data refresh and see what it did. REFRESH IS MANUAL UNTIL FURTHER NOTICE.
+ * BACKOFFICE — operator area, testing phase. Outside product navigation.
+ * Two purposes: manually initiate the sanctioned data refresh where a runner
+ * exists, and show what the canonical spine currently holds.
+ * REFRESH IS MANUAL UNTIL FURTHER NOTICE — there is no scheduler.
  */
-export default function BackofficePage() {
+export default async function BackofficePage() {
+  const ready = isDbConfigured();
+  const [freshness, spine] = ready
+    ? await Promise.all([getFreshness(), getSpineAnchor()])
+    : [[], { lastIngest: "", daysStale: 0, dataAsOf: null, dataAgeDays: null }];
+  const tracker = freshness.find((f) => /Contract Tracker curated store/i.test(f.source)) ?? null;
   return (
     <main className="mx-auto w-full max-w-[880px] px-5 pb-16 pt-10 sm:px-8">
       <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
@@ -31,6 +40,96 @@ export default function BackofficePage() {
         <Panel className="px-6 py-6">
           <BackofficeRefresh />
         </Panel>
+      </section>
+
+      {/* DATA FRESHNESS — evidence date and ingestion date are different facts
+          and are shown as different columns. A refresh moves the ingestion
+          date; only new evidence moves the evidence date. */}
+      <section className="mt-10">
+        <SectionHeader
+          eyebrow="Freshness"
+          title="Evidence by family"
+          aside="Evidence date is what the data is about; ingestion is when we last landed it"
+        />
+        <div className="mt-5">
+          <Panel className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[0.95rem]" style={{ minWidth: 620 }}>
+                <thead>
+                  <tr>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence family</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Feeds</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Last ingestion</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Days since</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Rows</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {freshness.map((f) => (
+                    <tr key={f.source} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
+                      <td className="px-4 py-3" style={{ color: "var(--fg)" }}>{f.source}</td>
+                      <td className="px-4 py-3" style={{ color: "var(--fg-muted)" }}>{f.feeds}</td>
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>{f.lastSeen ?? "—"}</td>
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>
+                        {f.daysSince == null ? "—" : `${f.daysSince}d`}
+                      </td>
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>{count(f.rows)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+          <p className="mt-3 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            The portal&apos;s commercial evidence anchor is{" "}
+            <strong style={{ color: "var(--fg)" }}>{spine.dataAsOf ? shortDate(spine.dataAsOf) : "not established"}</strong>
+            {spine.dataAgeDays != null ? ` (${count(spine.dataAgeDays)} days old)` : ""} — derived from the newest
+            evidence itself, never from the clock at the last refresh. A refresh that lands no newer evidence moves
+            the ingestion dates above and leaves this anchor exactly where it is.
+          </p>
+        </div>
+      </section>
+
+      {/* CONTRACT TRACKER — separated, and explicitly not part of this refresh. */}
+      <section className="mt-10">
+        <SectionHeader eyebrow="Separate workstream" title="Contract Tracker" aside="Not run by the manual refresh" />
+        <div className="mt-5">
+          <Panel className="px-6 py-5">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+              <div>
+                <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Included in manual refresh</div>
+                <div className="mt-1 text-[1.02rem]" style={{ color: "var(--data-watch-ink)" }}>
+                  No — discovery, import and confirmation are all excluded
+                </div>
+              </div>
+              <div>
+                <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>State</div>
+                <div className="mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>
+                  Frozen at its confirmed 16 Apr 2026 state
+                </div>
+              </div>
+              {tracker ? (
+                <>
+                  <div>
+                    <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Curated store — last ingestion</div>
+                    <div className="tabular mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>
+                      {tracker.lastSeen ?? "—"}
+                      {tracker.daysSince != null ? ` · ${count(tracker.daysSince)}d ago` : ""}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Rows on the market record</div>
+                    <div className="tabular mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>{count(tracker.rows)}</div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <p className="mt-4 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+              Reopening this workstream is a separate, explicit decision. Nothing in the manual refresh confirms a
+              held record, promotes an unreviewed one, or runs tracker discovery.
+            </p>
+          </Panel>
+        </div>
       </section>
 
       <section className="mt-10">
