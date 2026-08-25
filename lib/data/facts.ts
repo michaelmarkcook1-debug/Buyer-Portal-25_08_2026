@@ -38,29 +38,81 @@ export interface SourceFreshness {
   firstSeen: string | null;
   lastSeen: string | null;
   daysSince: number | null;
+  /** What the newest evidence is ABOUT — never the ingestion date. */
+  evidenceDate: string | null;
+  evidenceDaysSince: number | null;
 }
 
+/**
+ * Each family reports TWO dates, because they answer different questions and
+ * are routinely confused: `evidence` is what the data is ABOUT, `ingested_at`
+ * is when we last landed it. A family can be ingested today and still be
+ * describing months-old evidence — that is the normal case here, not a fault,
+ * and the table says so per row rather than leaving the reader to reconcile a
+ * "0d" against a 98-day-old headline.
+ *
+ * `evidence` is the SQL expression that yields that family's newest genuine
+ * evidence date, or null where the source carries no such date. It is never
+ * substituted with the ingestion date.
+ */
 const FRESHNESS_SOURCES = [
-  { table: "stg_curated_deal", source: "Curated contract tracker", feeds: "contract spine — awards, renewals, values" },
-  { table: "stg_contract_store", source: "Contract Tracker curated store", feeds: "validated discovered contracts, renewal intelligence" },
-  { table: "stg_procurement_contract", source: "Public procurement record", feeds: "award flow across 6 jurisdictions — market evidence" },
-  { table: "stg_analystgenius_signal", source: "AnalystGenius signals", feeds: "talent, reputation, top issues, claims vs delivery" },
-  { table: "stg_analystgenius_provider", source: "AnalystGenius vendor catalog", feeds: "revenue, growth, AI readiness" },
-  { table: "stg_sec_event", source: "SEC 8-K filings", feeds: "corporate events, US-listed vendors" },
+  {
+    table: "stg_curated_deal",
+    source: "Curated contract tracker",
+    feeds: "contract spine — awards, renewals, values",
+    // Excel serial day -> date
+    evidence: `to_char(to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400), 'YYYY-MM-DD')`,
+  },
+  {
+    table: "stg_contract_store",
+    source: "Contract Tracker curated store",
+    feeds: "validated discovered contracts, renewal intelligence",
+    evidence: `max(left(announcement_date_raw, 10)) FILTER (WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
+  },
+  {
+    table: "stg_procurement_contract",
+    source: "Public procurement record",
+    feeds: "award flow across 6 jurisdictions — market evidence",
+    evidence: `max(left(start_date_raw, 10)) FILTER (WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
+  },
+  {
+    table: "stg_analystgenius_signal",
+    source: "AnalystGenius signals",
+    feeds: "talent, reputation, top issues, claims vs delivery",
+    // as_of_date is stored as text, so it is compared and trimmed as text
+    evidence: `max(left(as_of_date, 10)) FILTER (WHERE left(as_of_date, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
+  },
+  {
+    table: "stg_analystgenius_provider",
+    source: "AnalystGenius vendor catalog",
+    feeds: "revenue, growth, AI readiness",
+    // The catalog is a current-state snapshot and carries no evidence date of
+    // its own. Reported as absent rather than filled with the ingestion date.
+    evidence: null,
+  },
+  {
+    table: "stg_sec_event",
+    source: "SEC 8-K filings",
+    feeds: "corporate events, US-listed vendors",
+    evidence: `to_char(max(filed_at), 'YYYY-MM-DD')`,
+  },
 ] as const;
 
 export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
-  return Promise.all(
-    FRESHNESS_SOURCES.map(async ({ table, source, feeds }) => {
-      // Table names come from the const list above, never from user input.
+  const rows = await Promise.all(
+    FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence }) => {
+      // Table names and expressions come from the const list above, never from user input.
       const [r] = await q<{
-        rows: string; snapshots: string; first_seen: string | null; last_seen: string | null; days_since: string | null;
+        rows: string; snapshots: string; first_seen: string | null; last_seen: string | null;
+        days_since: string | null; evidence_date: string | null; evidence_days: string | null;
       }>(
         `SELECT count(*) AS rows,
                 count(DISTINCT ingested_at::date) AS snapshots,
                 to_char(min(ingested_at), 'YYYY-MM-DD') AS first_seen,
                 to_char(max(ingested_at), 'YYYY-MM-DD') AS last_seen,
-                (current_date - max(ingested_at)::date) AS days_since
+                (current_date - max(ingested_at)::date) AS days_since,
+                ${evidence ?? "NULL"} AS evidence_date,
+                ${evidence ? `(current_date - (${evidence})::date)` : "NULL"} AS evidence_days
            FROM ${table}`,
       );
       return {
@@ -71,9 +123,13 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
         firstSeen: r?.first_seen ?? null,
         lastSeen: r?.last_seen ?? null,
         daysSince: r?.days_since == null ? null : Number(r.days_since),
+        evidenceDate: r?.evidence_date ?? null,
+        evidenceDaysSince: r?.evidence_days == null ? null : Number(r.evidence_days),
       };
     }),
   );
+  // Most recently updated first; a family that has never landed sorts last.
+  return rows.sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
 });
 
 export interface SpineAnchor {

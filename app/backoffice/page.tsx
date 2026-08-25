@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BackofficeRefresh } from "@/components/BackofficeRefresh";
 import { Hairline, Panel, SectionHeader } from "@/components/ui";
 import { detectExecutor } from "@/lib/backoffice/executor";
@@ -30,8 +31,19 @@ export default async function BackofficePage() {
   const tracker = freshness.find((f) => /Contract Tracker curated store/i.test(f.source)) ?? null;
   return (
     <main className="mx-auto w-full max-w-[880px] px-5 pb-16 pt-10 sm:px-8">
-      <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
-        Backoffice · Operator · Testing phase
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
+          Backoffice · Operator · Testing phase
+        </div>
+        {/* Way back into the product: the Backoffice sits outside the five-tab
+            shell, so without this the only exit is the browser's back button. */}
+        <Link
+          href="/"
+          className="tap-link code text-[0.86rem] underline-offset-4 hover:underline"
+          style={{ color: "var(--fg-muted)" }}
+        >
+          ← Back to portal
+        </Link>
       </div>
       <h1 className="display mt-2 text-[1.9rem] leading-tight" style={{ color: "var(--fg)" }}>
         Manual data refresh
@@ -121,8 +133,8 @@ export default async function BackofficePage() {
                   <tr>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence family</th>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Feeds</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence date</th>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Last ingestion</th>
-                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Days since</th>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Rows</th>
                   </tr>
                 </thead>
@@ -131,9 +143,21 @@ export default async function BackofficePage() {
                     <tr key={f.source} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                       <td className="px-4 py-3" style={{ color: "var(--fg)" }}>{f.source}</td>
                       <td className="px-4 py-3" style={{ color: "var(--fg-muted)" }}>{f.feeds}</td>
-                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>{f.lastSeen ?? "—"}</td>
+                      {/* What the data is ABOUT. The catalog carries no evidence
+                          date of its own and says so rather than borrowing the
+                          ingestion date. */}
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg)" }}>
+                        {f.evidenceDate ? shortDate(f.evidenceDate) : "not dated"}
+                        {f.evidenceDaysSince == null ? "" : (
+                          <span style={{ color: "var(--fg-dim)" }}> · {f.evidenceDaysSince}d old</span>
+                        )}
+                      </td>
+                      {/* When we last LANDED it. */}
                       <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>
-                        {f.daysSince == null ? "—" : `${f.daysSince}d`}
+                        {f.lastSeen ? shortDate(f.lastSeen) : "—"}
+                        {f.daysSince == null ? "" : (
+                          <span style={{ color: "var(--fg-dim)" }}> · {f.daysSince}d ago</span>
+                        )}
                       </td>
                       <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>{count(f.rows)}</td>
                     </tr>
