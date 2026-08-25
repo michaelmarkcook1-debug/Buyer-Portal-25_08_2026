@@ -1826,3 +1826,72 @@ describe("executor precedence (2026-08-25)", () => {
     expect(JSON.stringify(info)).not.toContain("t0ken");
   });
 });
+
+describe("date provenance and the evidence anchor (2026-08-25)", () => {
+  const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+  const AG = resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026");
+  const extractor = readFileSync(resolve(AG, "packages/etl/src/extract/contract-store.ts"), "utf8");
+
+  /** The getSpineAnchor query body. */
+  const anchorSql = facts.slice(facts.indexOf("export const getSpineAnchor"), facts.indexOf("return {", facts.indexOf("export const getSpineAnchor")));
+  /** Only the contract-store side; procurement legitimately uses its own start dates. */
+  const storeSide = anchorSql.slice(anchorSql.indexOf("), store AS ("));
+
+  it("1. derives freshness from the announcement date", () => {
+    expect(storeSide).toContain("announcement_date_raw");
+  });
+
+  it("2. never lets the store's start date determine freshness", () => {
+    expect(storeSide).not.toMatch(/max\(left\(start_date_raw/);
+  });
+
+  it("3. does not copy one date into the other on ingest", () => {
+    // the two fields are read from two distinct source fields
+    expect(extractor).toMatch(/announcementDateRaw:\s*str\(c\.announcementDate\)/);
+    expect(extractor).toMatch(/startDateRaw:\s*str\(c\.contractStartDate\)/);
+    expect(extractor).not.toMatch(/startDateRaw:\s*str\(c\.announcementDate\)/);
+    expect(extractor).not.toMatch(/announcementDateRaw:\s*str\(c\.contractStartDate\)/);
+  });
+
+  it("4. accepts a record with a publication date and no start date", () => {
+    // the gate keys on the publication date alone
+    expect(extractor).toMatch(/day\(c\.announcementDate\)/);
+    expect(extractor).not.toMatch(/day\(c\.contractStartDate\)\s*!==\s*null\s*&&/);
+  });
+
+  it("5. carries the upstream estimate label rather than flattening it", () => {
+    expect(extractor).toContain("startDateProvenance: provKind(c, \"contractStartDate\")");
+    expect(extractor).toContain("announcementDateProvenance: provKind(c, \"announcementDate\")");
+    // reuses the store's own vocabulary, does not invent a second taxonomy
+    expect(extractor).toMatch(/fieldProvenance/);
+  });
+
+  it("6. cannot turn createdAt into either date", () => {
+    expect(extractor).not.toMatch(/createdAt/);
+  });
+
+  it("7. cannot turn ingestion time into either date", () => {
+    expect(extractor).not.toMatch(/(announcementDateRaw|startDateRaw):\s*[^,\n]*(ingested|Date\.now|new Date\(\))/);
+  });
+
+  it("8. refuses a future publication date, so it cannot advance freshness", () => {
+    expect(extractor).toMatch(/publication date in the future/);
+    expect(extractor).toMatch(/d !== null && d > today/);
+    // and the anchor filters the future independently
+    expect(storeSide).toMatch(/<= to_char\(current_date/);
+  });
+
+  it("9. preserves historical estimated values rather than upgrading them", () => {
+    // the backfill writes provenance and the date, never rewrites the start value
+    expect(extractor).toMatch(/SET announcement_date_raw = v\.d/);
+    expect(extractor).not.toMatch(/SET start_date_raw/);
+    expect(extractor).not.toMatch(/start_date_raw\s*=\s*v\./);
+  });
+
+  it("10. leaves the procurement award calculations untouched", () => {
+    // public procurement start dates are sourced from award notices and must
+    // keep driving award-flow windows
+    expect(facts).toMatch(/p\.start_date_raw/);
+    expect(facts).toMatch(/FROM stg_procurement_contract p/);
+  });
+});

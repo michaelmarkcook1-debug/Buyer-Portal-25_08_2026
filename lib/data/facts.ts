@@ -151,9 +151,14 @@ export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
        SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date AS d
          FROM stg_curated_deal
      ), store AS (
-       SELECT max(left(start_date_raw, 10))::date AS d
+       /* announcement_date_raw, NOT start_date_raw. The start date in this
+          feed is overwhelmingly an upstream rational_estimate — an
+          "announcement-date proxy; verify effective date" — while the
+          announcement date is the sourced fact. Freshness must rest on
+          evidence, not on an estimate derived from it. */
+       SELECT max(left(announcement_date_raw, 10))::date AS d
          FROM stg_contract_store
-        WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')
+        WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')
      )
      SELECT to_char(max(sd.ingested_at), 'YYYY-MM-DD') AS last,
             (current_date - max(sd.ingested_at)::date) AS days,
@@ -267,8 +272,8 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
           close here so every surface inherits one timeline. */
        SELECT GREATEST(
                 (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
-                (SELECT max(left(start_date_raw, 10))::date FROM stg_contract_store
-                  WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
+                (SELECT max(left(announcement_date_raw, 10))::date FROM stg_contract_store
+                  WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
               ) AS d
      ),
        xr AS (SELECT external_id AS ticker, ag_provider_id FROM xref_identity WHERE system='ticker'
@@ -1154,8 +1159,8 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
           close here so every surface inherits one timeline. */
        SELECT GREATEST(
                 (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
-                (SELECT max(left(start_date_raw, 10))::date FROM stg_contract_store
-                  WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
+                (SELECT max(left(announcement_date_raw, 10))::date FROM stg_contract_store
+                  WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
               ) AS d
      ),
      xr AS (SELECT external_id AS ticker, ag_provider_id FROM xref_identity
