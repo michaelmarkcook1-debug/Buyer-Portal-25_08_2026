@@ -1692,11 +1692,13 @@ describe("Backoffice entry point (2026-08-25)", () => {
     expect(footer).toMatch(/href="\/backoffice"/);
   });
 
-  it("is not a sixth primary tab", () => {
-    // the five-tab IA is fixed; the operator area must stay outside it
+  it("is not a primary tab", () => {
+    /* The operator area stays outside the buyer IA. The tab COUNT is not the
+       invariant — Reputation was added deliberately — the invariant is that the
+       Backoffice is never one of them. */
     expect(masthead).not.toMatch(/backoffice/i);
     const nav = masthead.slice(masthead.indexOf("const NAV"), masthead.indexOf("export type NavId"));
-    expect(nav.match(/id:/g) ?? []).toHaveLength(5);
+    expect(nav).not.toMatch(/\/backoffice/);
   });
 
   it("stays visually subordinate — dim ink, footer type size", () => {
@@ -1893,5 +1895,52 @@ describe("date provenance and the evidence anchor (2026-08-25)", () => {
     // keep driving award-flow windows
     expect(facts).toMatch(/p\.start_date_raw/);
     expect(facts).toMatch(/FROM stg_procurement_contract p/);
+  });
+});
+
+describe("Reputation tab (2026-08-25)", () => {
+  const page = readFileSync(resolve(__dirname, "../app/reputation/page.tsx"), "utf8");
+  const masthead = readFileSync(resolve(__dirname, "../components/Masthead.tsx"), "utf8");
+  const objectives = readFileSync(resolve(__dirname, "../lib/insight/objectives.ts"), "utf8");
+
+  it("is a primary buyer tab", () => {
+    expect(masthead).toMatch(/href: "\/reputation".*id: "reputation"/);
+  });
+
+  it("carries an Analyst Insight hero on its own objective", () => {
+    expect(page).toMatch(/<AnalystInsightHero[^>]*tab="reputation"/);
+    expect(objectives).toMatch(/^\s*reputation:/m);
+    expect(objectives).toMatch(/TOP_LEVEL_TABS[^\n]*"reputation"/);
+  });
+
+  it("asks a question no other tab asks", () => {
+    const mine = objectives.slice(objectives.indexOf("reputation:"));
+    const answer = mine.slice(0, mine.indexOf('",') + 1);
+    expect(answer).toMatch(/perception/i);
+    // distinct from the market tab's commercial-condition question
+    expect(answer).not.toMatch(/commercial position/i);
+  });
+
+  it("presents exactly three core findings", () => {
+    expect(page).toMatch(/Core findings/);
+    const fn = page.slice(page.indexOf("function buildFindings"), page.indexOf("export default"));
+    expect(fn).toMatch(/return \[marketFinding, divergenceFinding, claimsFinding\]/);
+  });
+
+  it("never exposes the proprietary sentiment, risk or gap scores", () => {
+    expect(page).not.toMatch(/sentimentScore|riskScore|gapScore/);
+    expect(page).not.toMatch(/\/100/);
+    // readings render through the dictionary, as states
+    expect(page).toMatch(/StateText|displayState/);
+  });
+
+  it("frames reputation as a watch signal, not a delivery verdict", () => {
+    expect(page).toMatch(/not a verdict on how a vendor performs on your own account/i);
+  });
+
+  it("says so honestly when evidence does not support a finding", () => {
+    const fn = page.slice(page.indexOf("function buildFindings"), page.indexOf("export default"));
+    expect(fn).toMatch(/insufficient/);
+    expect(fn).toMatch(/cannot be assessed|No reputation reading is held/);
   });
 });

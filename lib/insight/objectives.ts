@@ -26,10 +26,11 @@ export type InsightTab =
   | "vendor-detail"
   | "opportunities"
   | "opportunity-detail"
-  | "scenarios";
+  | "scenarios"
+  | "reputation";
 
 /** Tabs whose hero interprets the market, not one subject. */
-export const TOP_LEVEL_TABS: InsightTab[] = ["home", "market", "vendors", "opportunities", "scenarios"];
+export const TOP_LEVEL_TABS: InsightTab[] = ["home", "market", "vendors", "opportunities", "scenarios", "reputation"];
 
 export const OBJECTIVES: Record<InsightTab, string> = {
   home:
@@ -44,6 +45,8 @@ export const OBJECTIVES: Record<InsightTab, string> = {
     "Answer: where is buyer value changing ACROSS THE SELECTED MARKET, and what is the strongest commercial lever right now? Open with the market-level judgement: which opportunity family dominates across these vendors, whether it is broad-based or concentrated in one or two, and what changed over the period. Only then name the vendor presenting the clearest example, and say how the others differ. Do not open with a vendor.",
   "opportunity-detail":
     "Answer: for this specific vendor and opportunity type, what changed in the evidence, how strong is the case now, and what exactly should the buyer investigate or challenge in a commercial discussion? Stay on this opportunity — do not survey the vendor generally. This is a focal-subject page: you may lead with this vendor and opportunity.",
+  reputation:
+    "Answer: what is the reputation and delivery-perception picture across the SELECTED MARKET, and where does it diverge from what vendors claim? Open with the market-level read — is perception broadly holding, improving or eroding across these vendors, and what is driving it. Then name where the vendors DIVERGE, and identify any vendor whose stated positioning runs ahead of the delivery evidence. End with what the buyer should verify in a review or renewal conversation. Reputation is a WATCH signal about market perception, never a finding about delivery quality on the buyer's own account — say so where a reader might over-read it.",
   scenarios:
     "Answer: what does this MODELLED scenario do to the selected market, and which assumption matters most to the buyer's position? Lead with the scenario's market-level effect — what shifts across these vendors collectively and whether the shift is broad or narrow. Then say which selected vendor is most affected, which opportunity family moves most, and what the buyer would do differently. Never merely that a number moved; never open with the most-affected vendor before establishing the market effect. Modelled values are modelled; say so where it bears on the judgement.",
 };

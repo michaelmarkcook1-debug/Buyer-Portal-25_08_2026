@@ -11,6 +11,7 @@ const NAV = [
   { href: "/vendors", label: "Vendors", id: "vendors" },
   { href: "/opportunities", label: "Opportunities", id: "opportunities" },
   { href: "/scenarios", label: "Scenarios", id: "scenarios" },
+  { href: "/reputation", label: "Reputation", id: "reputation" },
 ] as const;
 
 export type NavId = (typeof NAV)[number]["id"];

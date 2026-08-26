@@ -21,6 +21,7 @@ const TAB_LABEL: Record<InsightTab, string> = {
   "vendor-detail": "Vendor",
   opportunities: "Opportunities",
   scenarios: "Scenario",
+  reputation: "Reputation",
   "opportunity-detail": "Opportunity briefing",
 };
 
