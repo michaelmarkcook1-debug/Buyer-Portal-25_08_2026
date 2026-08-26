@@ -1944,3 +1944,35 @@ describe("Reputation tab (2026-08-25)", () => {
     expect(fn).toMatch(/cannot be assessed|No reputation reading is held/);
   });
 });
+
+describe("promotion safety and date provenance (2026-08-25)", () => {
+  const AG = resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026");
+  const promoter = readFileSync(resolve(AG, "packages/etl/src/promote/store.ts"), "utf8");
+  const extractor = readFileSync(resolve(AG, "packages/etl/src/extract/contract-store.ts"), "utf8");
+  const schema = readFileSync(resolve(AG, "packages/db/prisma/schema.prisma"), "utf8");
+
+  it("promotes only rows explicitly cleared for it", () => {
+    expect(promoter).toMatch(/where:\s*\{\s*promotionReady:\s*true\s*\}/);
+  });
+
+  it("defaults staged rows to promotable, so the normal pipeline is untouched", () => {
+    expect(schema).toMatch(/promotionReady\s+Boolean\s+@default\(true\)/);
+  });
+
+  it("carries start-date provenance into canonical rather than flattening it", () => {
+    expect(promoter).toMatch(/startDateProvenance: r\.startDateProvenance/);
+    expect(schema).toMatch(/startDateProvenance\s+String\?\s+@map\("start_date_provenance"\)/);
+  });
+
+  it("keeps value provenance and date provenance as separate facts", () => {
+    // one is about TCV, the other about commencement; conflating them would
+    // let an estimated date inherit a disclosed value's credibility
+    expect(promoter).toMatch(/valueProvenance:/);
+    expect(promoter).toMatch(/startDateProvenance:/);
+  });
+
+  it("still refuses undated and future-dated records at the gate", () => {
+    expect(extractor).toMatch(/held \(no usable publication date\)/);
+    expect(extractor).toMatch(/held \(publication date in the future/);
+  });
+});
