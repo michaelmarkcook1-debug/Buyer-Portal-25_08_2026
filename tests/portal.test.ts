@@ -2186,3 +2186,72 @@ describe("market visual communication pass (2026-08-29)", () => {
     expect(vendorsPage).toMatch(/signingsT12/);
   });
 });
+
+describe("Analyst Insight headline (2026-08-29)", () => {
+  const hero = readFileSync(resolve(__dirname, "../components/AnalystInsightHero.tsx"), "utf8");
+
+  it("opens EVERY state with the same bold headline component", () => {
+    // delivered, waiting, unconfigured, withheld and no-scope all route
+    // through one treatment, so no state can quietly render without a headline
+    expect(hero).toMatch(/function InsightHeadline/);
+    // one per state + the delivered case
+    expect(hero.match(/<InsightHeadline/g)?.length).toBeGreaterThanOrEqual(5);
+    for (const state of ["no-scope", "not-configured", "blocked"]) {
+      const branch = hero.slice(hero.indexOf(`result.status === "${state}"`));
+      expect(branch.slice(0, 700), `${state} has no headline`).toMatch(/<InsightHeadline/);
+    }
+    // the streamed waiting state too
+    expect(hero.slice(hero.indexOf("fallback={"))).toMatch(/<InsightHeadline tight muted>Preparing/);
+  });
+
+  it("sets the headline bold at display scale, as a real heading", () => {
+    const cmp = hero.slice(hero.indexOf("function InsightHeadline"), hero.indexOf("function Frame"));
+    expect(cmp).toMatch(/<h2/);
+    expect(cmp).toMatch(/fontWeight: 700/);
+    expect(cmp).toMatch(/className=\{`display /);
+    // both size steps present: full, and a step down for a long headline
+    expect(cmp).toMatch(/text-\[1\.55rem\].*sm:text-\[1\.72rem\]/);
+    expect(cmp).toMatch(/text-\[1\.3rem\].*sm:text-\[1\.42rem\]/);
+  });
+
+  it("never renders a delivered briefing without a headline", () => {
+    // the previous lede was conditional — a briefing whose first sentence ran
+    // past 230 characters (the Vendors tab) opened on body prose instead
+    expect(hero).not.toMatch(/\{lede \?/);
+    expect(hero).not.toMatch(/const lede =/);
+    expect(hero).toMatch(/<InsightHeadline tight=\{longHeadline\}>\{headline\}<\/InsightHeadline>/);
+    // a long headline steps down rather than being dropped
+    expect(hero).toMatch(/const longHeadline = headline\.length > 230/);
+  });
+
+  it("cuts the headline only at a sentence or colon, never mid-sentence", () => {
+    // "X is not Y, but Z" truncated at the comma asserts the opposite of the
+    // briefing — clause cutting must never enter this heuristic
+    const start = hero.indexOf("const text = result.text.trim()");
+    const block = hero.slice(start, hero.indexOf("return (", start));
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).toMatch(/text\.search\(\/\(\?<=\[\.!\?\]\)/);
+    expect(block).toMatch(/text\.indexOf\(": "\)/);
+    expect(block).not.toMatch(/indexOf\(","\)|indexOf\("; "\)|indexOf\(" — "\)|lastIndexOf\(","\)/);
+    // the headline is always a verbatim prefix of the briefing, never rewritten
+    expect(block).toMatch(/text\.slice\(0, cut\)\.trim\(\)/);
+  });
+
+  it("falls back through break preferences rather than collapsing the text", () => {
+    // comfortable range, then any break past the floor, then the first break —
+    // a briefing opening on a short sentence must still split
+    expect(hero).toMatch(
+      /breaks\.find\(\(c\) => c > 40 && c < 230\) \?\? breaks\.find\(\(c\) => c > 40\) \?\? breaks\[0\] \?\? -1/,
+    );
+    // and a single-sentence briefing is the headline, with no empty body tag
+    expect(hero).toMatch(/const body = cut > 0 \? text\.slice\(cut\)\.trim\(\) : ""/);
+    expect(hero).toMatch(/\{body \? \(/);
+  });
+
+  it("keeps the tab kicker above the headline rather than replacing it", () => {
+    // "Analyst Insight · Market" still identifies the section; the headline
+    // carries the finding, not the label
+    expect(hero).toMatch(/Analyst Insight · \{TAB_LABEL\[tab\]\}/);
+    expect(hero).toMatch(/className="eyebrow"/);
+  });
+});
