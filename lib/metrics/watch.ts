@@ -50,6 +50,39 @@ export const SEC_MEANING: Record<string, { headline: string; implication: string
   },
 };
 
+
+/**
+ * A headline that carries no event.
+ *
+ * Capability events inherit their headline from the source record, and some
+ * sources supply only the filing's own title — "TTEC 8-K (2.02,9.01) — FORM
+ * 8-K", or "Wipro 6-K (no items) — FORM 6-K". Both reached ACT with high
+ * confidence and a confident implication attached. A buyer reading either
+ * learns nothing: there is no stated change, so there is nothing to say why it
+ * matters, and nothing to challenge in a supplier meeting.
+ *
+ * Evidence like this is still evidence and is untouched underneath; it simply
+ * must not occupy a buyer finding. Where the filing's item codes are present
+ * the event is re-expressed through SEC_MEANING instead, which also restores
+ * the correct class — a 2.02 results filing is KNOW, not an ACT-grade pricing
+ * signal.
+ */
+export function isContentlessHeadline(headline: string): boolean {
+  const h = headline.replace(/\s+/g, " ").trim();
+  if (!h) return true;
+  /* "(no items)" is the filing telling us it reported nothing. */
+  if (/\(\s*no items\s*\)/i.test(h)) return true;
+  /* Nothing but a company, a form number and optional item codes. */
+  return /^.{0,60}?\b\d{1,2}-K(?:\/A)?\b\s*(?:\([\d.,\s]*\))?\s*(?:[—–-]\s*FORM\s+\d{1,2}-K(?:\/A)?)?\s*$/i.test(h);
+}
+
+/** Item codes named in a filing-style headline, e.g. "8-K (2.02,9.01)". */
+export function itemCodesFromHeadline(headline: string): string[] {
+  const m = headline.match(/\(([\d.,\s]+)\)/);
+  if (!m) return [];
+  return m[1].split(",").map((x) => x.trim()).filter((x) => /^\d{1,2}\.\d{2}$/.test(x));
+}
+
 const CLASS_RANK = { ACT: 0, WATCH: 1, KNOW: 2 } as const;
 
 export async function buildWatchSignals(intel: MarketIntel, tickersKey: string): Promise<WatchSignal[]> {
@@ -193,12 +226,27 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
       .filter((e) => e.materiality >= 3 && COMMERCIAL_CLS[e.eventType] && e.date >= cutoff45)
       .sort((a, b) => b.materiality - a.materiality || (a.date < b.date ? 1 : -1))[0];
     if (!strongest) continue;
+    /* A form number is not a finding. Where the filing names item codes we can
+       say what it reported, at that item's own class; otherwise the event stays
+       in the evidence layer and out of the buyer's attention. */
+    let cls: "ACT" | "WATCH" | "KNOW" = COMMERCIAL_CLS[strongest.eventType]!;
+    let headline = strongest.headline.slice(0, 140);
+    let implication = IMPLICATION[strongest.eventType]!;
+    if (isContentlessHeadline(strongest.headline)) {
+      const meaning = itemCodesFromHeadline(strongest.headline)
+        .map((code) => SEC_MEANING[code])
+        .find(Boolean);
+      if (!meaning) continue;
+      cls = meaning.cls;
+      headline = meaning.headline;
+      implication = meaning.implication;
+    }
     signals.push({
-      classification: COMMERCIAL_CLS[strongest.eventType]!,
+      classification: cls,
       tickers: [ticker],
       vendors: [name],
-      headline: `${name}: ${strongest.headline.slice(0, 140)}`,
-      implication: IMPLICATION[strongest.eventType]!,
+      headline: `${name}: ${headline}`,
+      implication,
       opportunityType: strongest.eventType === "pricing_model_change" ? "gain-sharing" : null,
       change: `Observed ${shortDate(strongest.date)} · material AI capability change`,
       confidence: strongest.materiality >= 5 ? "high" : "medium",

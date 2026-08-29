@@ -1376,6 +1376,44 @@ function buildMacroInputs(map: Map<string, MacroSeriesReading>): {
 
 /* ───────────────────── the resolver ───────────────────── */
 
+
+/**
+ * Does a narrative-reality record agree with itself?
+ *
+ * The AG narrative-reality signal carries both a `direction` label and a
+ * headline explaining it, and on some records they say opposite things.
+ * Accenture is labelled "over-hyped" while its headline reads "narrative and
+ * reality are close — matching recognized revenue conversion within one
+ * quarter" (gap score 15). Cognizant is labelled "aligned" while its headline
+ * calls it "the most under-recognized provider in AG's tracking set". Wipro is
+ * "aligned" while its headline says the narrative is "running hotter than the
+ * reality signals". Four records across three of the largest providers a buyer
+ * is likely to be managing.
+ *
+ * The right label is not recoverable here — on Accenture the gap score agrees
+ * with the headline, on Wipro it agrees with the direction — so this does not
+ * guess. It withholds the record from buyer-facing synthesis and leaves the
+ * source untouched for upstream repair. A contradictory judgement about a
+ * provider is worse than no judgement: the buyer cannot tell which half to act
+ * on, and one visible contradiction discredits the rest.
+ */
+const NRG_OVER = /running hotter|ahead of (?:its|the) (?:reality|delivery)|narrative outpaces|over-?claim|louder than/i;
+const NRG_UNDER = /under-?recognis|under-?recogniz|under-?distribut|under-?stated|under-?appreciat|executing above/i;
+const NRG_ALIGNED = /broadly aligned|are close|aligns with|matching|consistent with|in line with/i;
+
+export function narrativeRecordIsSelfConsistent(direction: string | null, headline: string | null): boolean {
+  if (!direction || !headline) return false;
+  const implied = [
+    NRG_OVER.test(headline) ? "over-hyped" : null,
+    NRG_UNDER.test(headline) ? "under-recognized" : null,
+    NRG_ALIGNED.test(headline) ? "aligned" : null,
+  ].filter(Boolean);
+  /* Silent or genuinely ambiguous headlines are left alone; only a headline
+     that clearly states one thing while the label states another is withheld. */
+  if (implied.length !== 1) return true;
+  return implied[0] === direction;
+}
+
 export const resolveIntelligence = cache(async (scopeJson: string): Promise<MarketIntel> => {
   const scope = JSON.parse(scopeJson) as MarketScope;
   const universe = await getUniverse();
@@ -1478,9 +1516,10 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       metrics,
       opportunities,
       overall: overallFrom(opportunities, metrics, d?.awardsT12 ?? 0),
-      claimsVsDelivery: nrg
-        ? { direction: nrg.direction, headline: nrg.headline, asOf: nrg.generatedAt ?? nrg.sourcedAt }
-        : null,
+      claimsVsDelivery:
+        nrg && narrativeRecordIsSelfConsistent(nrg.direction, nrg.headline)
+          ? { direction: nrg.direction, headline: nrg.headline, asOf: nrg.generatedAt ?? nrg.sourcedAt }
+          : null,
       lastUpdated: asOfs.sort().at(-1) ?? anchor.lastIngest,
     };
   });
