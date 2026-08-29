@@ -62,8 +62,16 @@ function findingInk(state: MetricState): string {
  * held readings and says only what those readings support. Where the evidence
  * does not carry a finding, the finding says that rather than reaching.
  */
+/** What Reputation reads: canonical states plus the AG perception narrative. */
+type VendorRow = {
+  ticker: string;
+  name: string;
+  metrics: Record<string, Metric>;
+  perception?: { summary: string | null; earlyWarnings: string[]; asOf: string | null } | null;
+};
+
 function buildFindings(
-  vendors: { ticker: string; name: string; metrics: Record<string, Metric> }[],
+  vendors: VendorRow[],
 ): Finding[] {
   const rep = vendors.map((v) => ({ v, m: v.metrics.reputationMovement })).filter((x) => x.m);
   const assessed = rep.filter((x) => x.m.state !== "insufficient");
@@ -151,6 +159,24 @@ function buildFindings(
     state: gaps.length > 0 ? "unfavourable" : pressure.length > 0 ? "mixed" : "stable",
   };
 
+  /* §21/§22 — AG stakeholder tracking is held for every vendor and was
+     extracted but never read. It says what is actually being said about a
+     provider, which is more use to a buyer than a movement state alone. The
+     upstream numeric index stays internal; only the narrative and its named
+     early warnings surface, and only as something to verify. */
+  const warned = vendors
+    .filter((v) => (v.perception?.earlyWarnings ?? []).length > 0)
+    .slice(0, 3);
+  if (warned.length > 0) {
+    const named = warned.map((v) => `${v.name} (${v.perception!.earlyWarnings[0]})`).join("; ");
+    divergenceFinding.body =
+      `${divergenceFinding.body} AG stakeholder tracking currently flags: ${named}.`;
+    divergenceFinding.action =
+      "Put the flagged themes to the provider directly and ask what has changed since — a perception signal is a prompt to verify, not a finding about your own account.";
+    divergenceFinding.evidence =
+      `${divergenceFinding.evidence} AnalystGenius stakeholder tracking${warned[0]?.perception?.asOf ? `, to ${warned[0].perception!.asOf.slice(0, 10)}` : ""}.`;
+  }
+
   return [marketFinding, divergenceFinding, claimsFinding];
 }
 
@@ -168,7 +194,7 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
   }
 
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
-  const vendors = intel.vendors as unknown as { ticker: string; name: string; metrics: Record<string, Metric> }[];
+  const vendors = intel.vendors as unknown as VendorRow[];
   const findings = buildFindings(vendors);
 
   const rows = vendors

@@ -673,7 +673,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     const score = issues.riskScore;
     const state: MetricState = score >= 70 || cyber > 0 ? "unfavourable" : score >= 55 ? "mixed" : "stable";
     const basis: Basis[] = [
-      { text: `AG risk score ${score}/100${issues.isStale ? " (upstream marks this analysis stale)" : ""}.`, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt },
+      { text: `AG rates the external risk of this provider ${bandAgainstTrackedSet(100 - score, 60, 30)}${issues.isStale ? " (upstream marks this analysis stale)" : ""}.`, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt },
     ];
     for (const t of issues.issueTitles.slice(0, 2)) {
       basis.push({ text: t, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt });
@@ -708,7 +708,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       rep.trendsUp > rep.trendsDown ? "improving" : rep.trendsDown > rep.trendsUp ? "deteriorating" : "stable";
     const basis: Basis[] = [
       {
-        text: `Sentiment ${rep.sentimentScore}/100 across tracked audiences; ${rep.trendsUp} trending up, ${rep.trendsDown} down.`,
+        text: `Across tracked audiences, ${rep.trendsUp} sentiment series are trending up and ${rep.trendsDown} down.`,
         source: "AnalystGenius reputation tracker", ownership: "market",
         asOf: rep.sourcedAt,
       },
@@ -758,7 +758,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
           ? "stable"
           : "mixed";
     const basis: Basis[] = [];
-    if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+    if (ai != null) basis.push({ text: `AG places the AI delivery readiness of this provider ${bandAgainstTrackedSet(ai, 70, 40)}.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
     if (eventCountBasis) basis.push(eventCountBasis);
     basis.push(...eventBasis);
     aiProductivityOpportunity = metric(
@@ -792,7 +792,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       );
     } else {
       const basis: Basis[] = [];
-      if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+      if (ai != null) basis.push({ text: `AG places the AI delivery readiness of this provider ${bandAgainstTrackedSet(ai, 70, 40)}.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
       if (talent?.totalHeadcount != null) {
         basis.push({
           text: `Delivery headcount ${count(talent.totalHeadcount)} (${talent.headcountTrend ?? "trend not stated"}) — the labour base automation would displace.`,
@@ -836,7 +836,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
           ? "stable"
           : "mixed";
     const basis: Basis[] = [];
-    if (ai != null) basis.push({ text: `AG AI-readiness ${ai.toFixed(0)}/100.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
+    if (ai != null) basis.push({ text: `AG places the AI delivery readiness of this provider ${bandAgainstTrackedSet(ai, 70, 40)}.`, source: "AnalystGenius vendor catalog", ownership: "market", asOf: cat?.sourcedAt ?? null });
     if (talent?.netFlow != null)
       basis.push({ text: `Net talent flow ${signed(talent.netFlow)} with headcount ${talent.headcountTrend ?? "trend not stated"}.`, source: "AnalystGenius talent signals", ownership: "market", asOf: talent.sourcedAt });
     if (commercialModelEvent)
@@ -1194,27 +1194,85 @@ function vendorDiscriminator(m: VendorMetrics, lever: OpportunityType): string |
   return tail ? `${lead}, and ${tail}.` : `${lead}.`;
 }
 
-/** Every secondary clause this vendor genuinely supports, in priority order —
- *  the fall-through pool a peer-aware pass draws from (§4). */
-function discriminatorCandidates(m: VendorMetrics, lever: OpportunityType): string[] {
-  const strong = (x: Metric): boolean => x.movement === "materially-improving" || x.movement === "materially-deteriorating";
-  return ([
-    [m.aiProductivityOpportunity.state === "favourable" && strong(m.aiProductivityOpportunity), "their AI delivery capability has moved materially, so productivity assumptions set earlier deserve challenge"],
-    [m.automationOpportunity.state === "favourable" && strong(m.automationOpportunity) && lever !== "automation", "their automation capability is advancing faster than their delivery model has repriced"],
-    [m.talentPressure.state === "unfavourable", "their delivery workforce is contracting, which is a capacity question on multi-year commitments"],
-    [m.dealMarketHeat.movement === "materially-deteriorating", "their observed win pace has cooled, shifting demand pressure toward the buyer"],
-    [m.providerMomentum.movement === "materially-deteriorating", "their commercial momentum is deteriorating on the latest readings"],
-    [m.financialHeadroom.state === "favourable", "their margin position leaves observed room for commercial flexibility"],
-    [m.operationalRisk.state === "unfavourable", "their operational risk reading is unfavourable, which belongs in any continuity discussion"],
-    [m.financialResilience.state === "favourable", "their financial position is expanding on the latest reading"],
-    [m.reputationMovement.movement === "materially-deteriorating", "their reputation reading is deteriorating materially"],
-  ] as Array<[boolean, string]>).filter(([hit]) => hit).map(([, text]) => text);
+/** A reading this vendor genuinely supports: a stable key, and how it reads. */
+interface Discriminator {
+  key: string;
+  /** Used when this reading sets the vendor apart from the market. */
+  distinct: string;
+  /** Used when the market shares it — named, but not claimed as distinguishing. */
+  shared: string;
 }
 
 /**
- * §4: when several vendors would receive the SAME distinguishing clause, fall
- * through to the next reading each genuinely supports. Where nothing separates
- * them, say so rather than manufacturing uniqueness.
+ * Every reading this vendor genuinely supports.
+ *
+ * Commercial exposure is included because §11 names it as a legitimate
+ * distinction and it was the missing half of several: IBM carries substantial
+ * renewal exposure alongside deteriorating momentum, a combination held by 8
+ * vendors in 66, and neither reading alone said anything a peer did not.
+ */
+function discriminatorCandidates(m: VendorMetrics, lever: OpportunityType, coverage: VendorIntel["coverage"]): Discriminator[] {
+  const strong = (x: Metric): boolean => x.movement === "materially-improving" || x.movement === "materially-deteriorating";
+  return ([
+    [m.aiProductivityOpportunity.state === "favourable" && strong(m.aiProductivityOpportunity), "ai",
+      "their AI delivery capability has moved materially, so productivity assumptions set earlier deserve challenge",
+      "AI delivery capability on the move"],
+    [m.automationOpportunity.state === "favourable" && strong(m.automationOpportunity) && lever !== "automation", "automation",
+      "their automation capability is advancing faster than their delivery model has repriced",
+      "automation capability advancing"],
+    [m.talentPressure.state === "unfavourable", "talent",
+      "their delivery workforce is contracting, which is a capacity question on multi-year commitments",
+      "a contracting delivery workforce"],
+    [(coverage?.inPlay12 ?? 0) >= 5, "exposure",
+      "an unusual share of their observed agreements reach end-of-term inside twelve months",
+      "several agreements reaching end-of-term inside twelve months"],
+    [m.dealMarketHeat.movement === "materially-deteriorating", "winPace",
+      "their observed win pace has cooled, shifting demand pressure toward the buyer",
+      "a cooling win pace"],
+    [m.providerMomentum.movement === "materially-deteriorating", "momentum",
+      "their commercial momentum is deteriorating on the latest readings",
+      "deteriorating commercial momentum"],
+    [m.financialHeadroom.state === "favourable", "margin",
+      "their margin position leaves observed room for commercial flexibility",
+      "margin room for commercial flexibility"],
+    [m.operationalRisk.state === "unfavourable", "opRisk",
+      "their operational risk reading is unfavourable, which belongs in any continuity discussion",
+      "an unfavourable operational risk reading"],
+    [m.financialResilience.state === "favourable", "finExpanding",
+      "their financial position is expanding on the latest reading",
+      "an expanding financial position"],
+    [m.reputationMovement.movement === "materially-deteriorating", "reputation",
+      "their reputation reading is deteriorating materially",
+      "a deteriorating reputation reading"],
+  ] as Array<[boolean, string, string, string]>)
+    .filter(([hit]) => hit)
+    .map(([, key, distinct, shared]) => ({ key, distinct, shared }));
+}
+
+/** A reading held by at most this share of the market is distinctive. */
+const DISTINCT_SINGLE_SHARE = 0.2;
+/** A pairing held by at most this share is distinctive even when each half is common. */
+const DISTINCT_PAIR_SHARE = 0.125;
+
+/**
+ * Say what actually separates each provider — or say honestly that nothing does.
+ *
+ * The previous pass claimed each clause exclusively for the first vendor that
+ * supported it. With nine clauses and 66 vendors that capped distinctiveness at
+ * nine by construction, and which vendors got one was decided by iteration
+ * order rather than by evidence. 48 of 66 fell through to "Its readings are
+ * similar to others in this market" — a sentence that answers the one question
+ * Vendor Detail exists to answer with nothing at all. IBM sat in that group
+ * while carrying nine agreements in play worth $2.1bn against deteriorating
+ * momentum.
+ *
+ * Distinctiveness is a property of the market, not of who was processed first,
+ * so it is measured: a reading held by a fifth of the market says little, while
+ * a pairing held by an eighth says a great deal even when each half is common.
+ * Where nothing separates a provider the readings it does hold are still named,
+ * with the question they leave open — and where there are no readings at all,
+ * that thinness is itself the finding. No vendor is forced to sound unique, and
+ * none is left with filler.
  */
 function differentiateReasons(vendors: VendorIntel[]): void {
   if (vendors.length < 2) return;
@@ -1222,20 +1280,71 @@ function differentiateReasons(vendors: VendorIntel[]): void {
     pricing: "pricing", automation: "automation", "gain-sharing": "gain-sharing",
     "commercial-leverage": "commercial leverage", "market-test": "market-test",
   };
-  const taken = new Set<string>();
+
+  const profile = new Map<string, Discriminator[]>();
   for (const v of vendors) {
     const defined = Object.values(v.opportunities).filter((o) => o.level !== "insufficient");
     const top = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level))[0];
+    profile.set(v.ticker, top ? discriminatorCandidates(v.metrics, top.type, v.coverage) : []);
+  }
+
+  const singleCount = new Map<string, number>();
+  const pairCount = new Map<string, number>();
+  for (const list of profile.values()) {
+    const keys = list.map((d) => d.key).sort();
+    for (const k of keys) singleCount.set(k, (singleCount.get(k) ?? 0) + 1);
+    for (let a = 0; a < keys.length; a += 1)
+      for (let b = a + 1; b < keys.length; b += 1) {
+        const p = `${keys[a]}|${keys[b]}`;
+        pairCount.set(p, (pairCount.get(p) ?? 0) + 1);
+      }
+  }
+  const n = vendors.length;
+  const singleCap = Math.max(1, Math.floor(n * DISTINCT_SINGLE_SHARE));
+  const pairCap = Math.max(1, Math.floor(n * DISTINCT_PAIR_SHARE));
+
+  for (const v of vendors) {
+    const list = profile.get(v.ticker) ?? [];
+    const defined = Object.values(v.opportunities).filter((o) => o.level !== "insufficient");
+    const top = [...defined].sort((a, b) => levelScore(b.level) - levelScore(a.level))[0];
     if (!top) continue;
-    const pool = discriminatorCandidates(v.metrics, top.type);
-    const unique = pool.find((c) => !taken.has(c));
     const head = `Strongest lever: ${FAMILY_WORD[top.type]}.`;
-    if (unique) {
-      taken.add(unique);
-      v.overall.reason = `${head} ${unique.charAt(0).toUpperCase()}${unique.slice(1)}.`;
-    } else if (pool.length > 0) {
-      // everything this vendor supports is already claimed by a peer
-      v.overall.reason = `${head} Its readings are similar to others in this market on the available evidence.`;
+
+    if (list.length === 0) {
+      /* §16 — thin evidence is a finding in its own right, not a gap to paper over. */
+      v.overall.reason =
+        `${head} No market reading currently separates this provider from the selected peer set, and published evidence is thinner here than for peers — the immediate task is verification rather than commercial inference.`;
+      continue;
+    }
+
+    const rarestSingle = list.reduce((best, d) =>
+      (singleCount.get(d.key) ?? n) < (singleCount.get(best.key) ?? n) ? d : best, list[0]!);
+    let rarestPair: { a: Discriminator; b: Discriminator; count: number } | null = null;
+    for (let a = 0; a < list.length; a += 1)
+      for (let b = a + 1; b < list.length; b += 1) {
+        const key = [list[a]!.key, list[b]!.key].sort().join("|");
+        const c = pairCount.get(key) ?? n;
+        if (!rarestPair || c < rarestPair.count) rarestPair = { a: list[a]!, b: list[b]!, count: c };
+      }
+
+    const singleIsDistinct = (singleCount.get(rarestSingle.key) ?? n) <= singleCap;
+    const pairIsDistinct = rarestPair !== null && rarestPair.count <= pairCap;
+
+    if (pairIsDistinct && (!singleIsDistinct || rarestPair!.count < (singleCount.get(rarestSingle.key) ?? n))) {
+      /* §13 — the combination carries what neither half does. Stated as
+         co-occurrence, never as cause. */
+      /* Both halves read as noun phrases so the pair joins cleanly; the
+         `distinct` wording is a full clause and only works on its own. */
+      v.overall.reason =
+        `${head} Unlike most of this market, it combines ${rarestPair!.a.shared} with ${rarestPair!.b.shared} — a pairing worth taking into any commercial discussion.`;
+    } else if (singleIsDistinct) {
+      const t = rarestSingle.distinct;
+      v.overall.reason = `${head} Unlike most of this market, ${t}.`;
+    } else {
+      /* §15 — market-typical readings, named, with the question they leave. */
+      const named = list.slice(0, 2).map((d) => d.shared);
+      v.overall.reason =
+        `${head} Its readings — ${named.join(" and ")} — are shared across much of this market, so nothing here separates this provider commercially; the useful question is whether that shared position is reflected in the terms currently on offer.`;
     }
   }
 }
@@ -1414,6 +1523,24 @@ export function narrativeRecordIsSelfConsistent(direction: string | null, headli
   return implied[0] === direction;
 }
 
+
+/**
+ * AG's proprietary indices are analytical inputs, not buyer-facing readings.
+ *
+ * Five basis lines were publishing them verbatim -- "AG AI-readiness 53/100",
+ * "AG risk score 74/100", "Sentiment 65/100". A number on an undisclosed scale
+ * tells a buyer nothing they can verify, act on, or take to a supplier, and
+ * inviting them to reason about it exposes methodology the product does not
+ * sell. The scores keep driving states, opportunities and rankings exactly as
+ * before; only their rendering changes, to the qualitative reading the score
+ * already stands for.
+ */
+function bandAgainstTrackedSet(score: number, high: number, low: number): string {
+  if (score >= high) return "among the stronger of the tracked set";
+  if (score <= low) return "among the weaker of the tracked set";
+  return "in the middle of the tracked set";
+}
+
 export const resolveIntelligence = cache(async (scopeJson: string): Promise<MarketIntel> => {
   const scope = JSON.parse(scopeJson) as MarketScope;
   const universe = await getUniverse();
@@ -1516,6 +1643,11 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       metrics,
       opportunities,
       overall: overallFrom(opportunities, metrics, d?.awardsT12 ?? 0),
+      perception: (() => {
+        const sent = signals.get(ticker)?.sentiment;
+        if (!sent || (!sent.summary && (sent.earlyWarnings ?? []).length === 0)) return null;
+        return { summary: sent.summary ?? null, earlyWarnings: sent.earlyWarnings ?? [], asOf: sent.sourcedAt ?? null };
+      })(),
       claimsVsDelivery:
         nrg && narrativeRecordIsSelfConsistent(nrg.direction, nrg.headline)
           ? { direction: nrg.direction, headline: nrg.headline, asOf: nrg.generatedAt ?? nrg.sourcedAt }

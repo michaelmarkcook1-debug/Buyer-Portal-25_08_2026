@@ -174,6 +174,16 @@ export interface VendorIntel {
   overall: Opportunity;
   /** AG claims-vs-delivery read, surfaced as interpretation (never recomputed). */
   differentiation?: VendorDifferentiation;
+  /**
+   * What AG's stakeholder tracking is actually saying about this provider.
+   * Narrative only -- the upstream numeric index stays an internal input and is
+   * never carried here, so it cannot reach a buyer by accident.
+   */
+  perception?: {
+    summary: string | null;
+    earlyWarnings: string[];
+    asOf: string | null;
+  } | null;
   claimsVsDelivery: {
     direction: string | null;
     headline: string | null;

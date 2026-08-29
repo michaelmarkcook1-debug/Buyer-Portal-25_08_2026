@@ -1976,3 +1976,46 @@ describe("promotion safety and date provenance (2026-08-25)", () => {
     expect(extractor).toMatch(/held \(publication date in the future/);
   });
 });
+
+/* ── B3: AG proprietary indices must not reach a buyer ─────────────────────
+   Five basis lines published them verbatim ("AG AI-readiness 53/100",
+   "AG risk score 74/100", "Sentiment 65/100"). The scores still drive states
+   and rankings; only their rendering changed. These guard the rendering. */
+describe("proprietary AG scores stay internal", () => {
+  const buyerFacing = [
+    "lib/metrics/resolve.ts",
+    "lib/metrics/rules.ts",
+    "lib/metrics/watch.ts",
+    "lib/metrics/challenge.ts",
+    "app/reputation/page.tsx",
+  ];
+
+  it("emits no /100 score into buyer-facing basis text", () => {
+    for (const rel of buyerFacing) {
+      const src = readFileSync(resolve(process.cwd(), rel), "utf8");
+      const emissions = src
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//"))
+        .filter((line) => /`[^`]*\$\{[^}]*\}\s*\/\s*100/.test(line));
+      expect(emissions, `${rel} renders a proprietary score`).toEqual([]);
+    }
+  });
+
+  it("names no internal index in buyer-facing prose", () => {
+    for (const rel of buyerFacing) {
+      const src = readFileSync(resolve(process.cwd(), rel), "utf8");
+      const prose = src
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//"));
+      for (const banned of [/AG risk score \$\{/, /Sentiment \$\{[^}]*Score\}/, /AI-readiness \$\{/]) {
+        expect(prose.some((l) => banned.test(l)), `${rel} exposes ${banned}`).toBe(false);
+      }
+    }
+  });
+
+  it("still bands the score qualitatively so the evidence is not lost", () => {
+    const src = readFileSync(resolve(process.cwd(), "lib/metrics/resolve.ts"), "utf8");
+    expect(src).toMatch(/function bandAgainstTrackedSet/);
+    expect(src).toMatch(/among the stronger of the tracked set/);
+  });
+});
