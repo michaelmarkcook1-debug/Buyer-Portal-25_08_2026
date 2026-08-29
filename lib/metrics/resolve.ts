@@ -1241,8 +1241,14 @@ function discriminatorCandidates(m: VendorMetrics, lever: OpportunityType, cover
     [m.financialResilience.state === "favourable", "finExpanding",
       "their financial position is expanding on the latest reading",
       "an expanding financial position"],
-    [m.reputationMovement.movement === "materially-deteriorating", "reputation",
-      "their reputation reading is deteriorating materially",
+    /* This clause fired for nobody: it tested for "materially-deteriorating",
+       a movement the reputation metric never emits — its values are
+       deteriorating / stable / improving. Nineteen vendors were carrying a
+       deteriorating reputation reading that no differentiation could see. The
+       20% cap still keeps it out of single-clause distinctions; it earns its
+       place only in a pairing. */
+    [m.reputationMovement.movement === "deteriorating", "reputation",
+      "their reputation reading is deteriorating",
       "a deteriorating reputation reading"],
   ] as Array<[boolean, string, string, string]>)
     .filter(([hit]) => hit)

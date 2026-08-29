@@ -159,22 +159,24 @@ function buildFindings(
     state: gaps.length > 0 ? "unfavourable" : pressure.length > 0 ? "mixed" : "stable",
   };
 
-  /* §21/§22 — AG stakeholder tracking is held for every vendor and was
-     extracted but never read. It says what is actually being said about a
-     provider, which is more use to a buyer than a movement state alone. The
-     upstream numeric index stays internal; only the narrative and its named
-     early warnings surface, and only as something to verify. */
-  const warned = vendors
-    .filter((v) => (v.perception?.earlyWarnings ?? []).length > 0)
-    .slice(0, 3);
-  if (warned.length > 0) {
-    const named = warned.map((v) => `${v.name} (${v.perception!.earlyWarnings[0]})`).join("; ");
+  /* AG stakeholder tracking is held for all 66 vendors, and the previous pass
+     named each provider's early-warning signal as though it distinguished
+     them. It does not: 22 of the 38 shared-position providers carry an
+     attrition warning and 19 name competitor poaching, so the signal describes
+     the market rather than any provider in it. Naming them individually
+     implied a specificity the evidence does not carry.
+
+     The prevalence is worth saying plainly, because a concern shared by most
+     of the market is a market condition — and a buyer should not accept it as
+     a provider-specific explanation when it is put to them as one. */
+  const warned = vendors.filter((v) => (v.perception?.earlyWarnings ?? []).length > 0);
+  if (warned.length >= Math.max(3, Math.floor(vendors.length * 0.4))) {
     divergenceFinding.body =
-      `${divergenceFinding.body} AG stakeholder tracking currently flags: ${named}.`;
+      `${divergenceFinding.body} Separately, AG stakeholder tracking carries an early-warning signal for ${warned.length} of the ${vendors.length} providers in this selection — predominantly talent attrition and competitor poaching. That breadth makes it a market condition rather than a mark against any one provider.`;
     divergenceFinding.action =
-      "Put the flagged themes to the provider directly and ask what has changed since — a perception signal is a prompt to verify, not a finding about your own account.";
+      "Where a provider cites market-wide talent conditions to explain delivery or pricing, ask what is specific to their account teams — the concern is shared across most of this market, so it does not by itself explain provider-specific outcomes.";
     divergenceFinding.evidence =
-      `${divergenceFinding.evidence} AnalystGenius stakeholder tracking${warned[0]?.perception?.asOf ? `, to ${warned[0].perception!.asOf.slice(0, 10)}` : ""}.`;
+      `${divergenceFinding.evidence} AnalystGenius stakeholder tracking across ${warned.length} providers${warned[0]?.perception?.asOf ? `, to ${warned[0].perception!.asOf.slice(0, 10)}` : ""}.`;
   }
 
   return [marketFinding, divergenceFinding, claimsFinding];
