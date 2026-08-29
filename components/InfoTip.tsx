@@ -35,8 +35,7 @@ export function InfoTip({ content }: { content: InfoContent }) {
     <>
       <button
         type="button"
-        // @ts-expect-error popoverTarget is a valid DOM attribute
-        popovertarget={id}
+        popoverTarget={id}
         aria-label={`About ${content.name}`}
         title={`${content.name}: ${content.definition}`}
         className="hit-target inline-flex h-[15px] w-[15px] shrink-0 cursor-pointer items-center justify-center rounded-full align-middle text-[10px] leading-none transition-colors"
