@@ -33,6 +33,29 @@ function groupByImplication(signals: WatchSignal[]): WatchSignal[][] {
 }
 
 /** Cards actually rendered after renewal and implication grouping. */
+
+/**
+ * Say plainly that these signals do not share one clock.
+ *
+ * The signals list mixes evidence that moves in days with evidence that moves
+ * in months: a filed SEC termination sits beside renewal concentration read
+ * off a commercial record whose newest deal predates it by a quarter. Both are
+ * decision-useful, and neither is improved by pretending they were observed
+ * together. One line, so a reader knows which clock each is on without a
+ * timestamp on every row.
+ */
+function cadenceNote(intel: { watch: WatchSignal[]; spine: { dataAsOf: string | null } }): string {
+  const eventDates = intel.watch.map((s) => s.date).filter((d): d is string => Boolean(d)).sort();
+  const newestEvent = eventDates.at(-1);
+  const commercial = intel.spine.dataAsOf;
+  if (!newestEvent && !commercial) return "";
+  const parts = [
+    newestEvent ? `filings to ${shortDate(newestEvent)}` : null,
+    commercial ? `commercial record to ${shortDate(commercial)}` : null,
+  ].filter(Boolean);
+  return ` · ${parts.join(", ")}`;
+}
+
 function renderedSignalTotal(watch: WatchSignal[]): number {
   const isRenewal = (h: string) => h.includes("observed renewal activity concentrating");
   const renewal = watch.filter((s) => isRenewal(s.headline));
@@ -105,7 +128,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
               <InfoTip content={{ ...SIGNAL_CLASS_HELP, colour: COLOUR_KEY }} />
             </span>
           ) as unknown as string}
-          aside={renderedSignalCount > 0 ? `${renderedSignalCount} development${renderedSignalCount === 1 ? "" : "s"} worth attention` : undefined}
+          aside={renderedSignalCount > 0 ? `${renderedSignalCount} development${renderedSignalCount === 1 ? "" : "s"} worth attention${cadenceNote(intel)}` : undefined}
         />
         <div className="mt-5 space-y-3">
           {intel.watch.length > 0 ? (
@@ -168,7 +191,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
                         ))}
                       </ul>
                       <div className="code mt-3 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
-                        Market record — their defensive exposure, never the reader's contracts.
+                        Market record{intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} — their defensive exposure, never the reader's contracts. End-of-term dates move slowly, so this reading stays useful between commercial loads.
                       </div>
                     </Panel>
                   ) : (
