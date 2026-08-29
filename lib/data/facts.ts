@@ -445,6 +445,8 @@ export interface TopIssuesFacts {
   monitoringPriorities: string[];
   isStale: boolean;
   sourcedAt: string;
+  /** Trusted named issues; empty when the provider's record is withheld. */
+  namedIssues: NamedIssue[];
 }
 
 export interface ReputationFacts {
@@ -485,6 +487,80 @@ export interface VendorSignals {
 type Raw = Record<string, unknown>;
 const asNum = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const asStr = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+
+/* ── AG Top Issues: schema repair and trust gates ─────────────────────────
+   1,663 named issues reached no surface because `strList(raw.topIssues)` read
+   `x.title` expecting a string. `title` is an object, and the real title lives
+   at `title.issue_name` alongside urgency, likelihood, time_horizon and a
+   financial impact estimate. Reading it is the easy half.
+
+   The hard half is that the narrative cannot be trusted wholesale. Four
+   providers carry issues describing an entirely different company, because the
+   upstream generator resolved a ticker to the wrong listed entity: ORA to the
+   geothermal operator rather than Orange Business, CSSC to a shipbuilder
+   rather than CSS Corp, STEF to a cold-chain logistics group rather than
+   Stefanini, ATO to a gas utility rather than Atos. Repairing extraction alone
+   would have converted 61 hidden bad records into buyer-facing misinformation.
+
+   So the gates are structural rather than a list of tickers, which would not
+   survive the next collision: an issue written in the vocabulary of a utility,
+   shipbuilder or logistics operator cannot be describing an IT-services
+   provider, and once a provider shows that contamination at all its remaining
+   issues are withheld too — a mis-resolved identity is a property of the
+   provider's record, not of one issue. Narrative carrying a proprietary index
+   is dropped rather than rewritten, because sanitising a number out of a
+   sentence changes what the sentence claims. */
+
+/** Vocabulary that cannot describe an IT, BPO or consulting provider. */
+const NOT_AN_IT_PROVIDER =
+  /\b(geothermal|power plants?|grid integration|natural gas|gas utilit\w*|electrification|decarboni[sz]ation|\bLNG\b|turbines?|wellhead|maritime|shipbuild\w*|cold[- ]chain)\b/i;
+
+/** Proprietary indices AG sometimes writes into its own prose. */
+const EMBEDDED_INDEX =
+  /\b\d{1,3}\s*\/\s*100\b|\b(?:risk|readiness|sentiment|confidence)\s+score\b|\bscore:?\s*\d{1,3}\b/i;
+
+export interface NamedIssue {
+  name: string;
+  description: string;
+  category: string | null;
+  severity: string | null;
+  urgency: number | null;
+  timeHorizon: string | null;
+  likelihood: string | null;
+}
+
+/**
+ * Named issues for one provider, or an empty list when the provider's record
+ * cannot be trusted. Withholding is the intended outcome, not a failure.
+ */
+function namedIssuesFrom(raw: Raw): NamedIssue[] {
+  const items = asArr(raw.topIssues);
+  const read = items.map((x) => {
+    const o = x as Raw | null;
+    const t = (o?.title ?? null) as Raw | null;
+    if (!o || !t || typeof t !== "object") return null;
+    const name = asStr(t.issue_name);
+    const description = asStr(o.description) ?? asStr(t.description);
+    if (!name || !description) return null;
+    return {
+      name,
+      description,
+      category: asStr(o.category),
+      severity: asStr(o.severity),
+      urgency: asNum(t.urgency),
+      timeHorizon: asStr(t.time_horizon),
+      likelihood: asStr(t.likelihood),
+    };
+  }).filter((x): x is NamedIssue => x !== null);
+
+  /* One mis-resolved issue means the provider's identity is in doubt, so the
+     whole record is withheld rather than the offending rows alone. */
+  const contaminated = read.some((i) => NOT_AN_IT_PROVIDER.test(`${i.name} ${i.description}`));
+  if (contaminated) return [];
+
+  return read.filter((i) => !EMBEDDED_INDEX.test(`${i.name} ${i.description}`));
+}
+
 const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const strList = (v: unknown, max: number): string[] =>
   asArr(v).map((x) => (typeof x === "string" ? x : asStr((x as Raw)?.title) ?? asStr((x as Raw)?.label))).filter((s): s is string => Boolean(s)).slice(0, max);
@@ -523,6 +599,7 @@ export const getVendorSignals = cache(async (tickersKey: string): Promise<Map<st
         riskScore: asNum(raw.riskScore),
         summary: asStr(raw.summary),
         issueTitles: strList(raw.topIssues, 3),
+        namedIssues: namedIssuesFrom(raw),
         monitoringPriorities: strList(raw.monitoringPriorities, 3),
         isStale: raw.isStale === true,
         sourcedAt: r.sourced_at,

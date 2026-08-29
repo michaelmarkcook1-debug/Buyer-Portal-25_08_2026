@@ -2019,3 +2019,49 @@ describe("proprietary AG scores stay internal", () => {
     expect(src).toMatch(/among the stronger of the tracked set/);
   });
 });
+
+/* ── Phase 5: AG Top Issues trust gates ────────────────────────────────────
+   1,663 named issues were lost because the parser read `title` as a string
+   when it is an object holding `issue_name`. Repairing that alone would have
+   published 61 records describing the wrong company: four providers carry
+   issues generated against a ticker that resolves to a different listed
+   entity. These pin the gates, not the tickers. */
+describe("AG top-issue trust gates", () => {
+  const facts = readFileSync(resolve(process.cwd(), "lib/data/facts.ts"), "utf8");
+
+  it("reads the real title out of the nested object", () => {
+    expect(facts).toMatch(/issue_name/);
+    expect(facts, "must not go back to reading title as a string").not.toMatch(
+      /asStr\(\(x as Raw\)\?\.title\)[\s\S]{0,80}namedIssues/,
+    );
+  });
+
+  it("withholds a provider whose issues describe another kind of business", () => {
+    expect(facts).toMatch(/NOT_AN_IT_PROVIDER/);
+    const guard = facts.match(/const NOT_AN_IT_PROVIDER =[\s\S]*?;/)![0];
+    /* Literal substrings — the guard stores these as regex source text. */
+    for (const term of ["geothermal", "shipbuild", "cold[- ]chain", "gas utilit", "decarboni"]) {
+      expect(guard, `identity guard lost "${term}"`).toContain(term);
+    }
+    /* Structural, not a ticker list — the next collision will have a new one. */
+    for (const ticker of ["ORA", "CSSC", "STEF", '"ATO"']) {
+      expect(facts, `guard hardcodes ${ticker}`).not.toMatch(new RegExp(`["']${ticker}["']`));
+    }
+  });
+
+  it("withholds the whole provider once any issue is contaminated", () => {
+    expect(facts).toMatch(/const contaminated = read\.some\(/);
+    expect(facts).toMatch(/if \(contaminated\) return \[\];/);
+  });
+
+  it("drops narrative carrying a proprietary index rather than rewriting it", () => {
+    expect(facts).toMatch(/EMBEDDED_INDEX/);
+    expect(facts).toMatch(/filter\(\(i\) => !EMBEDDED_INDEX\.test/);
+  });
+
+  it("presents tracked themes as questions, never as findings", () => {
+    const page = readFileSync(resolve(process.cwd(), "app/reputation/page.tsx"), "utf8");
+    expect(page).toMatch(/themes AG is monitoring rather than established findings/);
+    expect(page).toMatch(/AG holds no primary source for them/);
+  });
+});

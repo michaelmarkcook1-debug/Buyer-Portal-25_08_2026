@@ -67,7 +67,7 @@ type VendorRow = {
   ticker: string;
   name: string;
   metrics: Record<string, Metric>;
-  perception?: { summary: string | null; earlyWarnings: string[]; asOf: string | null } | null;
+  perception?: { summary: string | null; earlyWarnings: string[]; asOf: string | null; topIssue?: { name: string; category: string | null; timeHorizon: string | null } | null } | null;
 };
 
 function buildFindings(
@@ -177,6 +177,26 @@ function buildFindings(
       "Where a provider cites market-wide talent conditions to explain delivery or pricing, ask what is specific to their account teams — the concern is shared across most of this market, so it does not by itself explain provider-specific outcomes.";
     divergenceFinding.evidence =
       `${divergenceFinding.evidence} AnalystGenius stakeholder tracking across ${warned.length} providers${warned[0]?.perception?.asOf ? `, to ${warned[0].perception!.asOf.slice(0, 10)}` : ""}.`;
+  }
+
+  /* AG issue tracking, as supporting evidence only.
+     These are specific and current where the market-wide attrition warnings
+     are not -- an ongoing investigation, a restructuring, a named security
+     exposure. But AG supplies no source URL or publication date for any of the
+     1,663 it holds, so none of them can settle a question; they can only raise
+     one. They are named as themes AG is tracking, never asserted as fact, and
+     the action is verification. Providers whose issue record failed the
+     identity check carry none and are simply absent here. */
+  const withIssue = vendors.filter((v) => v.perception?.topIssue?.name);
+  if (withIssue.length > 0) {
+    const named = withIssue
+      .slice(0, 3)
+      .map((v) => `${v.name} — ${v.perception!.topIssue!.name.toLowerCase()}`)
+      .join("; ");
+    claimsFinding.body =
+      `${claimsFinding.body} AG issue tracking is separately carrying near-term risk themes for ${withIssue.length} of these providers, including ${named}. These are themes AG is monitoring rather than established findings, and AG holds no primary source for them.`;
+    claimsFinding.action =
+      "Raise the tracked theme with the provider and ask for their own account of it, with evidence — treat their answer, not the theme, as the finding.";
   }
 
   return [marketFinding, divergenceFinding, claimsFinding];

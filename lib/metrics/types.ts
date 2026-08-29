@@ -183,6 +183,12 @@ export interface VendorIntel {
     summary: string | null;
     earlyWarnings: string[];
     asOf: string | null;
+    /**
+     * The most material trusted issue AG tracking holds for this provider.
+     * Supporting evidence only: AG supplies no source URL or publication date
+     * for these, so they can prompt a question but never settle one.
+     */
+    topIssue?: { name: string; category: string | null; timeHorizon: string | null } | null;
   } | null;
   claimsVsDelivery: {
     direction: string | null;

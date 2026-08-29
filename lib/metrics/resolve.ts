@@ -1652,7 +1652,18 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       perception: (() => {
         const sent = signals.get(ticker)?.sentiment;
         if (!sent || (!sent.summary && (sent.earlyWarnings ?? []).length === 0)) return null;
-        return { summary: sent.summary ?? null, earlyWarnings: sent.earlyWarnings ?? [], asOf: sent.sourcedAt ?? null };
+        /* Highest urgency wins; ties break toward the nearer horizon. Only
+           trusted issues reach here -- withheld providers carry none. */
+        const issues = [...(signals.get(ticker)?.topIssues?.namedIssues ?? [])].sort(
+          (a, b) => (b.urgency ?? 0) - (a.urgency ?? 0) || (a.timeHorizon === "near-term" ? -1 : 1),
+        );
+        const top = issues[0];
+        return {
+          summary: sent.summary ?? null,
+          earlyWarnings: sent.earlyWarnings ?? [],
+          asOf: sent.sourcedAt ?? null,
+          topIssue: top ? { name: top.name, category: top.category, timeHorizon: top.timeHorizon } : null,
+        };
       })(),
       claimsVsDelivery:
         nrg && narrativeRecordIsSelfConsistent(nrg.direction, nrg.headline)
