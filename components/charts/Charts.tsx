@@ -325,6 +325,119 @@ export function DistributionChart({
   );
 }
 
+/* ══════════════ 4. Observed deal flow — prior window against current ════
+   Buyer question: how much new work is actually entering this market?
+
+   Paired bars, one pair per series. Each series keeps its OWN scale and its
+   OWN window: public procurement runs on 90 days and commercial signings on
+   12 months, from separate evidence families. Putting them on one axis would
+   assert a comparison the record does not support.
+
+   Deliberately NEUTRAL — no green-up / red-down. Fewer awards is neither a
+   loss nor a win; it is softer demand, and what that means for a buyer is
+   written underneath in words rather than encoded in a hue. WEIGHT, not
+   colour, separates the two windows, and every value is printed beside its
+   own bar so the graphic is never the only carrier.                        */
+
+export interface FlowSeries {
+  /** Canonical name of the series — never abbreviated into a new term. */
+  label: string;
+  /** Count observed in the prior comparison window. */
+  prior: number;
+  /** Count observed in the current window. */
+  current: number;
+  /** Window labels, written out so the reader never has to infer them. */
+  priorWindow: string;
+  currentWindow: string;
+  /** Evidence anchor the comparison is taken to. Null where none is held. */
+  asOf: string | null;
+  /** Plural noun for the counted thing, e.g. "awards" / "signings". */
+  unit: string;
+}
+
+export function FlowComparisonChart({
+  series,
+  interpretation,
+  footnote,
+}: {
+  series: FlowSeries[];
+  /** Omitted where the surrounding unit already carries the interpretation. */
+  interpretation?: string;
+  footnote?: string;
+}) {
+  const describe = (s: FlowSeries) =>
+    `${s.label}: ${s.prior} ${s.unit} in the ${s.priorWindow.toLowerCase()}, ` +
+    `${s.current} in the ${s.currentWindow.toLowerCase()}${s.asOf ? `, to ${s.asOf}` : ""}`;
+
+  return (
+    <Figure
+      title="Observed deal flow, current window against prior"
+      desc={`${series.map(describe).join(". ")}.`}
+      interpretation={interpretation}
+      footnote={footnote}
+    >
+      <div className="flex flex-col gap-6">
+        {series.map((s) => {
+          /* Scale is PER SERIES: the two windows of one measure share an axis;
+             two different measures never do. */
+          const max = Math.max(1, s.prior, s.current);
+          const rows = [
+            { window: s.priorWindow, value: s.prior, weight: 0.3 },
+            { window: s.currentWindow, value: s.current, weight: 0.85 },
+          ];
+          return (
+            <div key={s.label} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <span className="text-[0.95rem] font-medium" style={{ color: "var(--fg)" }}>
+                  {s.label}
+                </span>
+                {s.asOf ? (
+                  <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+                    to {s.asOf}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-1.5" role="img" aria-label={describe(s)}>
+                {rows.map((r) => (
+                  <div key={r.window} className="flex items-center gap-2 sm:gap-3">
+                    <span
+                      className="w-[6.6rem] shrink-0 text-[0.86rem] leading-tight sm:w-[8.5rem]"
+                      style={{ color: "var(--fg-muted)" }}
+                    >
+                      {r.window}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        aria-hidden="true"
+                        className="block h-[14px] rounded-[2px]"
+                        style={{
+                          width: `${Math.max(1.5, (r.value / max) * 100)}%`,
+                          background: "var(--fg-muted)",
+                          opacity: r.weight,
+                        }}
+                      />
+                    </span>
+                    <span
+                      className="tabular w-[3.2rem] shrink-0 text-right text-[0.94rem] font-medium"
+                      style={{ color: "var(--fg)" }}
+                    >
+                      {r.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+        Lighter bar = prior window · solid bar = current window · each measure is scaled against
+        itself, never against the other
+      </div>
+    </Figure>
+  );
+}
+
 /** Semantic ink for an opportunity level, reusing the locked mapping. */
 export function levelInk(level: OpportunityLevel): string {
   if (level === "insufficient") return "var(--fg-dim)";

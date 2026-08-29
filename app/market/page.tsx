@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
-import { DistributionChart, ExposureConcentrationChart, stateInk } from "@/components/charts/Charts";
+import {
+  DistributionChart,
+  ExposureConcentrationChart,
+  FlowComparisonChart,
+  stateInk,
+} from "@/components/charts/Charts";
 import { InfoTip, fromSemantics } from "@/components/InfoTip";
 import { MarketStateBand, MetricCard } from "@/components/MetricCard";
 import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import {
   BasisList,
+  CONFIDENCE_LABEL,
   EmptyEvidence,
   MovementText,
   Panel,
@@ -18,10 +24,41 @@ import { count, money, shortDate } from "@/lib/format";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import { METRIC_DICTIONARY, displayState } from "@/lib/metrics/dictionary";
 import type { RawSearchParams } from "@/lib/market-scope";
+import type { FlowWindow } from "@/lib/metrics/types";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * One buyer reading for the observed flow pair.
+ *
+ * DERIVED, never asserted: a narrower scope can genuinely show flow rising,
+ * and the sentence has to say so rather than repeat a market-wide storyline.
+ * The bars are deliberately neutral, so the buyer consequence is carried here
+ * in words — less new work reaching providers is a market condition that
+ * tends to favour buyers, which stock-market colouring would state backwards.
+ */
+function flowReading(series: FlowWindow[]): string {
+  if (series.length === 0) return "";
+  const dir = (w: FlowWindow) => (w.current < w.prior ? "down" : w.current > w.prior ? "up" : "flat");
+  const dirs = new Set(series.map(dir));
+  const both = series.length > 1;
+
+  if (dirs.size > 1) {
+    return "The two series diverge. They run on different windows and different evidence families, so each is read on its own clock rather than as one trend.";
+  }
+  if (dirs.has("down")) {
+    return (
+      (both ? "Both series moved the same way on different clocks: less" : "Less") +
+      " new work is reaching these providers than in the comparison period. Providers competing for materially less new work is a market condition that tends to favour buyers — it is market evidence, not evidence about any individual agreement."
+    );
+  }
+  if (dirs.has("up")) {
+    return "More new work is reaching these providers than in the comparison period. Rising demand tends to reduce a provider's need to concede, so market conditions are the weaker part of a buyer's case here.";
+  }
+  return "Observed flow is level against the comparison period; market conditions are neither strengthening nor weakening the buyer's backdrop.";
+}
 
 /** MARKET — how services economics are changing across the selected vendors. */
 export default async function MarketPage({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
@@ -64,6 +101,31 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
     getDevelopments(tickersKey, 20),
   ]);
   const topAwards = developments.filter((d) => d.kind === "award" && d.tcvUsd != null).slice(0, 4);
+
+  /* The two strongest movements in the product were three paragraphs of raw
+     numbers spread across the page. They keep their canonical values here and
+     gain a shape; the retrospective rows that restated them are merged out
+     below, so this section gains a chart without the page gaining prose. */
+  const flowSeries = [
+    intel.dealFlow.procurement
+      ? { ...intel.dealFlow.procurement, label: "Public procurement awards", unit: "awards" }
+      : null,
+    intel.dealFlow.commercial
+      ? { ...intel.dealFlow.commercial, label: "Commercial signings", unit: "signings" }
+      : null,
+  ].filter((x): x is NonNullable<typeof x> => x != null);
+  /* Two clocks, so the heading names both rather than labelling the pair with
+     the window of only one of them. */
+  const dealWindowLabel =
+    intel.dealFlow.procurement?.asOf && intel.dealFlow.commercial?.asOf
+      ? `Public awards to ${intel.dealFlow.procurement.asOf} · commercial record to ${intel.dealFlow.commercial.asOf}`
+      : commercialWindowLabel(intel.spine.dataAsOf, shortDate).replace(/^r/, "R");
+  /* Rows whose entire content is now drawn above. Merged, not dropped: the
+     chart carries their figures, windows, source and confidence. */
+  const MERGED_INTO_FLOW_CHART = new Set(["Deal flow (commercial)", "Deal flow (public procurement)"]);
+  const retrospective = flowSeries.length > 0
+    ? intel.changes.filter((c) => !MERGED_INTO_FLOW_CHART.has(c.dimension))
+    : intel.changes;
 
   return (
     <PortalShell active="market" ctx={ctx} returnTo="/market">
@@ -228,9 +290,27 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           eyebrow="Deal market"
           title="Deal flow in your market"
           /* canonical commercial anchor — the evidence date, never ingestion time */
-          aside={commercialWindowLabel(intel.spine.dataAsOf, shortDate).replace(/^r/, "R")}
+          aside={dealWindowLabel}
         />
-        <div className="mt-5">
+        {flowSeries.length > 0 ? (
+          <div className="mt-5">
+            <Panel className="px-6 py-5">
+              <div className="eyebrow">Observed flow, current window against prior</div>
+              <div className="mt-3">
+                <FlowComparisonChart
+                  series={flowSeries}
+                  interpretation={flowReading(flowSeries)}
+                  footnote={`${[...new Set(flowSeries.map((f) => f.source))].join(" · ")} · ${
+                    flowSeries.every((f) => f.confidence === flowSeries[0]!.confidence)
+                      ? `confidence ${CONFIDENCE_LABEL[flowSeries[0]!.confidence]}`
+                      : flowSeries.map((f) => `${f.label.toLowerCase()} ${CONFIDENCE_LABEL[f.confidence]}`).join(" · ")
+                  }`}
+                />
+              </div>
+            </Panel>
+          </div>
+        ) : null}
+        <div className={flowSeries.length > 0 ? "mt-3" : "mt-5"}>
           <Panel className="px-5 py-4">
             <div className="eyebrow">Notable signed agreements</div>
             {topAwards.length > 0 ? (
@@ -326,7 +406,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           aside={`Baseline ${shortDate(intel.baselineStart)}`}
         />
         <div className="mt-5">
-          <TwelveMonthChange changes={intel.changes} />
+          <TwelveMonthChange changes={retrospective} />
         </div>
       </section>
     </PortalShell>

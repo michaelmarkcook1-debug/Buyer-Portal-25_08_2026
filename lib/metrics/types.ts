@@ -207,6 +207,27 @@ export interface TwelveMonthDimension {
   source: string;
 }
 
+/**
+ * One canonical flow series as NUMBERS — prior window against current.
+ *
+ * Exists so a chart can draw the same magnitudes the retrospective rows
+ * describe in prose, without recomputing anything from the source tables.
+ * Both figures are the identical expressions those rows are built from; a
+ * bar can therefore never disagree with the sentence beside it.
+ */
+export interface FlowWindow {
+  prior: number;
+  current: number;
+  /** Window labels, so the reader never has to infer which period is which. */
+  priorWindow: string;
+  currentWindow: string;
+  /** The evidence anchor the comparison is taken to. */
+  asOf: string | null;
+  /** Provenance, carried so a visual can replace the row without losing it. */
+  source: string;
+  confidence: Confidence;
+}
+
 export type WatchClass = "ACT" | "WATCH" | "KNOW";
 
 export interface WatchSignal {
@@ -254,6 +275,16 @@ export interface MarketIntel {
   };
   vendors: VendorIntel[];
   changes: TwelveMonthDimension[];
+  /**
+   * The two canonical deal-flow series as numbers, for presentation only.
+   * Public procurement and commercial signings run on DIFFERENT windows from
+   * different evidence families, so they are carried separately and are never
+   * blended into a single figure.
+   */
+  dealFlow: {
+    commercial: FlowWindow | null;
+    procurement: FlowWindow | null;
+  };
   watch: WatchSignal[];
   /** Tracking window for AG signal deltas (first snapshot date). */
   signalTrackingSince: string | null;

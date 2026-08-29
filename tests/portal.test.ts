@@ -2065,3 +2065,124 @@ describe("AG top-issue trust gates", () => {
     expect(page).toMatch(/AG holds no primary source for them/);
   });
 });
+
+describe("market visual communication pass (2026-08-29)", () => {
+  const chartSrc = readFileSync(resolve(__dirname, "../components/charts/Charts.tsx"), "utf8");
+  const marketPage = readFileSync(resolve(__dirname, "../app/market/page.tsx"), "utf8");
+  const resolveSrc = readFileSync(resolve(__dirname, "../lib/metrics/resolve.ts"), "utf8");
+  /* the new chart only — bounded so assertions cannot pass on a neighbour */
+  const flowChart = chartSrc.slice(
+    chartSrc.indexOf("export interface FlowSeries"),
+    chartSrc.indexOf("/** Semantic ink for an opportunity level"),
+  );
+
+  it("isolates the flow chart source for these assertions", () => {
+    expect(flowChart).toMatch(/export function FlowComparisonChart/);
+    expect(flowChart).not.toMatch(/DistributionChart|ExposureConcentrationChart/);
+  });
+
+  it("plots canonical resolved values and never recomputes them", () => {
+    // the page hands the chart the resolved object; it must not re-derive flow
+    // from the per-vendor coverage or reach for the source aggregates itself
+    expect(marketPage).toMatch(/intel\.dealFlow\.procurement/);
+    expect(marketPage).toMatch(/intel\.dealFlow\.commercial/);
+    expect(marketPage).not.toMatch(/signingsT12|signingsPrior12|awardsT90|awardsT12|awardsPrior12/);
+    expect(marketPage).not.toMatch(/getProcurementFlow|getScopeAggregates/);
+    // and the chart itself still derives no figure of its own
+    expect(flowChart).not.toMatch(/awardsT12|totalT90|getProcurementFlow|resolveIntelligence/);
+  });
+
+  it("builds the chart values from the SAME expressions as the retrospective rows", () => {
+    // procurement 12 vs 146 and signings 206 vs 270 must come from one place,
+    // or a bar could silently disagree with the sentence that describes it
+    expect(resolveSrc).toMatch(/const recent = agg\.awardsT12;\s*\n\s*const prior = agg\.awardsPrior12;/);
+    expect(resolveSrc).toMatch(/flowCommercial = \{\s*\n\s*prior,\s*\n\s*current: recent,/);
+    expect(resolveSrc).toMatch(/flowProcurement = \{\s*\n\s*prior: proc\.totalPrior90,\s*\n\s*current: proc\.totalT90,/);
+    // gated identically to the rows: procurement needs the same volume floor
+    expect(resolveSrc).toMatch(/if \(proc\.totalT90 \+ proc\.totalPrior90 >= 5\)/);
+  });
+
+  it("keeps the two series on their own clocks and their own scales", () => {
+    // 90 days of public awards and 12 months of commercial signings are
+    // different evidence families; one shared axis would invent a comparison
+    expect(flowChart).toMatch(/const max = Math\.max\(1, s\.prior, s\.current\)/);
+    expect(flowChart).not.toMatch(/series\.flatMap|Math\.max\(\.\.\.series|series\.reduce/);
+    expect(flowChart).toMatch(/priorWindow/);
+    expect(flowChart).toMatch(/currentWindow/);
+    expect(resolveSrc).toMatch(/priorWindow: "Prior 90 days"/);
+    expect(resolveSrc).toMatch(/priorWindow: "Prior 12 months"/);
+  });
+
+  it("keeps the evidence anchor visible and never implies today's data", () => {
+    expect(flowChart).toMatch(/asOf/);
+    expect(resolveSrc).toMatch(/asOf: anchor\.dataAsOf \? shortDate\(anchor\.dataAsOf\) : null/);
+    expect(resolveSrc).toMatch(/asOf: proc\.lastIngest \? shortDate\(proc\.lastIngest\) : null/);
+    // the section heading names BOTH clocks rather than labelling the pair
+    // with the window of only one of them
+    expect(marketPage).toMatch(/Public awards to \$\{intel\.dealFlow\.procurement\.asOf\}/);
+    expect(marketPage).toMatch(/commercial record to \$\{intel\.dealFlow\.commercial\.asOf\}/);
+  });
+
+  it("stays neutral — a fall in supplier demand is never coloured as a loss", () => {
+    // softer demand can favour a buyer, so the bars carry no buyer semantics
+    // at all; weight separates the windows and the meaning is written in words
+    expect(flowChart).not.toMatch(/EFFECT_INK|stateInk|levelInk/);
+    expect(flowChart).not.toMatch(/data-positive-ink|data-risk-ink|data-watch-ink/);
+    expect(flowChart).toMatch(/background: "var\(--fg-muted\)"/);
+    expect(flowChart).toMatch(/weight: 0\.3/);
+    expect(flowChart).toMatch(/weight: 0\.85/);
+  });
+
+  it("prints every plotted value and labels the graphic for a screen reader", () => {
+    expect(flowChart).toMatch(/role="img"/);
+    expect(flowChart).toMatch(/aria-label=\{describe\(s\)\}/);
+    // the same numbers the aria-label reads are printed beside the bars
+    expect(flowChart).toMatch(/\{r\.value\}/);
+    expect(flowChart).toMatch(/\$\{s\.prior\} \$\{s\.unit\}/);
+    expect(flowChart).toMatch(/\$\{s\.current\}/);
+    // and the bar itself is decorative — the label carries it
+    expect(flowChart).toMatch(/aria-hidden="true"/);
+  });
+
+  it("reflows on a phone rather than pinning a scroll floor", () => {
+    // the SVG charts scroll inside a 420px floor; a two-bar comparison must
+    // simply reflow, so 390px shows no horizontal overflow
+    expect(flowChart).not.toMatch(/minWidth|viewBox|overflow-x-auto/);
+    expect(flowChart).toMatch(/w-\[6\.6rem\] shrink-0 .*sm:w-\[8\.5rem\]/);
+    // a value at 8% of its comparison still draws something visible
+    expect(flowChart).toMatch(/Math\.max\(1\.5, \(r\.value \/ max\) \* 100\)/);
+  });
+
+  it("merges the rows the visual replaces instead of restating them", () => {
+    expect(marketPage).toMatch(/MERGED_INTO_FLOW_CHART/);
+    expect(marketPage).toMatch(/"Deal flow \(commercial\)", "Deal flow \(public procurement\)"/);
+    expect(marketPage).toMatch(/<TwelveMonthChange changes=\{retrospective\} \/>/);
+    // nothing is lost in the merge: the rows' provenance travels with the chart
+    expect(marketPage).toMatch(/f\.source/);
+    expect(marketPage).toMatch(/CONFIDENCE_LABEL\[/);
+  });
+
+  it("derives the reading from the numbers rather than asserting a storyline", () => {
+    // a narrower scope can genuinely show flow RISING; the sentence has to say
+    // so, and must never hardcode today's whole-market figures
+    expect(marketPage).toMatch(/w\.current < w\.prior \? "down" : w\.current > w\.prior \? "up" : "flat"/);
+    expect(marketPage).toMatch(/More new work is reaching these providers/);
+    expect(marketPage).toMatch(/The two series diverge/);
+    expect(marketPage).not.toMatch(/\b146\b|\b270\b|\b206\b/);
+  });
+
+  it("keeps the ownership firewall on the new reading", () => {
+    const reading = marketPage.slice(marketPage.indexOf("function flowReading"), marketPage.indexOf("export default"));
+    expect(reading).not.toMatch(/your (contract|spend|rate|saving|renewal|agreement)/i);
+    expect(reading).toMatch(/market evidence, not evidence about any individual agreement/);
+  });
+
+  it("leaves the existing charts intact", () => {
+    for (const fn of ["ExposureConcentrationChart", "SigningsSlopeChart", "DistributionChart", "levelInk", "stateInk"]) {
+      expect(chartSrc).toMatch(new RegExp(`export function ${fn}`));
+    }
+    // the vendor slope chart still reads signings, never procurement awards
+    const vendorsPage = readFileSync(resolve(__dirname, "../app/vendors/page.tsx"), "utf8");
+    expect(vendorsPage).toMatch(/signingsT12/);
+  });
+});

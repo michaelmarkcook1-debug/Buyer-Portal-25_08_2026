@@ -54,6 +54,7 @@ import { formatValueMix, inferredDominates, money, count, signed, shortDate } fr
 import {
   type Basis,
   type Confidence,
+  type FlowWindow,
   type MarketIntel,
   type Metric,
   type MetricAnalysis,
@@ -2237,6 +2238,12 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     series.points.slice(fromIdx, toIdx).reduce((a, p) => a + (p.value ?? 0), 0);
 
   const changes: TwelveMonthDimension[] = [];
+  /* The SAME two movements as numbers, for the Market page's deal-flow
+     visual. Assigned inside the identical blocks and from the identical
+     expressions as the rows below, so the chart and the prose can never
+     drift apart. Nothing here recomputes anything. */
+  let flowCommercial: FlowWindow | null = null;
+  let flowProcurement: FlowWindow | null = null;
 
   {
     /* CANONICAL commercial deal flow (metric registry: commercialDealFlow).
@@ -2255,6 +2262,15 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         confidence: "medium",
         source: "Contract market record",
       });
+      flowCommercial = {
+        prior,
+        current: recent,
+        priorWindow: "Prior 12 months",
+        currentWindow: "Current 12 months",
+        asOf: anchor.dataAsOf ? shortDate(anchor.dataAsOf) : null,
+        source: "Contract market record",
+        confidence: "medium",
+      };
     }
   }
 
@@ -2269,6 +2285,15 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         confidence: "medium",
         source: procMonthly.source,
       });
+      flowProcurement = {
+        prior: proc.totalPrior90,
+        current: proc.totalT90,
+        priorWindow: "Prior 90 days",
+        currentWindow: "Trailing 90 days",
+        asOf: proc.lastIngest ? shortDate(proc.lastIngest) : null,
+        source: procMonthly.source,
+        confidence: "medium",
+      };
     }
   }
 
@@ -2433,6 +2458,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     buyerEconomics,
     vendors,
     changes,
+    dealFlow: { commercial: flowCommercial, procurement: flowProcurement },
     watch: [],
     signalTrackingSince: trackedSince,
   };
