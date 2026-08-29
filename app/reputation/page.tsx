@@ -37,6 +37,68 @@ interface Finding {
   evidence: string;
   action: string;
   state: MetricState;
+  /** Counts behind a distribution finding, drawn rather than only described. */
+  spread?: { improving: number; holding: number; eroding: number } | null;
+}
+
+/**
+ * The reputation spread, drawn.
+ *
+ * The market-perception finding is a statement about a distribution -- "that
+ * distribution, not any single vendor, is what characterises the market" --
+ * and it was rendered as three numbers in a sentence. A reader had to hold
+ * 26 / 33 / 7 in their head to see the shape the sentence is describing. The
+ * proportions are the point, so they are shown as proportions.
+ *
+ * No score, no axis, no legend beyond the counts already stated in the prose:
+ * this qualifies the finding above it rather than becoming a chart to read.
+ */
+function ReputationSpread({ improving, holding, eroding }: { improving: number; holding: number; eroding: number }) {
+  const total = improving + holding + eroding;
+  if (total === 0) return null;
+  /* Ink runs through the same dictionary the rest of the page uses, so colour
+     follows BUYER EFFECT rather than how positive the word sounds — an eroding
+     provider reputation is not automatically bad news for a buyer. */
+  /* Ink runs through the same dictionary the rest of the page uses, so colour
+     follows BUYER EFFECT rather than how positive the word sounds. That makes
+     improving and holding share an ink deliberately: for a buyer, neither
+     creates leverage, and only erosion is a live signal. They are separated by
+     weight rather than by hue so the split stays readable without implying a
+     buyer consequence the dictionary does not carry. */
+  const seg = [
+    { n: improving, label: "improving", ink: findingInk("favourable"), alpha: 1 },
+    { n: holding, label: "holding", ink: findingInk("stable"), alpha: 0.42 },
+    { n: eroding, label: "eroding", ink: findingInk("unfavourable"), alpha: 1 },
+  ].filter((x) => x.n > 0);
+  return (
+    <div aria-hidden={false}>
+      <div
+        className="flex h-2 w-full overflow-hidden rounded-full"
+        role="img"
+        aria-label={`Reputation movement across ${total} vendors: ${seg.map((x) => `${x.n} ${x.label}`).join(", ")}`}
+      >
+        {seg.map((x) => (
+          <div
+            key={x.label}
+            style={{
+              width: `${(x.n / total) * 100}%`,
+              background: x.ink,
+              opacity: x.alpha,
+              boxShadow: "inset -1px 0 0 var(--bg)",
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {seg.map((x) => (
+          <span key={x.label} className="code inline-flex items-baseline gap-1.5 text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
+            <span aria-hidden style={{ color: x.ink, opacity: x.alpha }}>&#9632;</span>
+            {x.n} {x.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 const STATE_RANK: Record<MetricState, number> = {
@@ -102,6 +164,7 @@ function buildFindings(
         ? "Treat perception as unknown for these vendors rather than assuming stability."
         : "Use this as the backdrop for renewal timing: a market where perception is moving is one where vendors are more responsive to being challenged.",
     state: assessed.length === 0 ? "insufficient" : dominant,
+    spread: assessed.length === 0 ? null : { improving, holding, eroding },
   };
 
   /* 2 — divergence: the widest separation on the same axis. */
@@ -253,6 +316,7 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
               <p className="m-0 text-[0.98rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                 {f.body}
               </p>
+              {f.spread ? <ReputationSpread {...f.spread} /> : null}
               <Hairline />
               <p className="m-0 text-[0.9rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
                 <span className="eyebrow">Evidence</span> {f.evidence}
