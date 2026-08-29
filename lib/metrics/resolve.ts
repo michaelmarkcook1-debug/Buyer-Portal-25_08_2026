@@ -673,7 +673,7 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     const score = issues.riskScore;
     const state: MetricState = score >= 70 || cyber > 0 ? "unfavourable" : score >= 55 ? "mixed" : "stable";
     const basis: Basis[] = [
-      { text: `AG rates the external risk of this provider ${bandAgainstTrackedSet(100 - score, 60, 30)}${issues.isStale ? " (upstream marks this analysis stale)" : ""}.`, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt },
+      { text: `AG reads external risk at this provider as ${externalRiskBand(score)} relative to the tracked set.`, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt },
     ];
     for (const t of issues.issueTitles.slice(0, 2)) {
       basis.push({ text: t, source: "AnalystGenius top issues", ownership: "market", asOf: issues.sourcedAt });
@@ -1388,7 +1388,23 @@ function rollup(
     (assessed.some((m) => m.confidence === "low") ? "low" : "medium");
   // §17: divergence is analyst signal, not noise — say when the read is uneven.
   const divergent = states.favourable > 0 && states.unfavourable > 0;
-  const baseReading = state === "favourable" ? favourableReading : state === "unfavourable" ? unfavourableReading : null;
+  /* A state with no sentence beside it asks the buyer to infer the meaning
+     from a chip and a count, which is the hierarchy this product inverts. Five
+     of nine market readings rendered that way. Mixed is a real condition --
+     the market is split, and which side a provider sits on is the question --
+     and stable is a real answer to "has anything moved". */
+  const splitReading =
+    states.favourable > 0 && states.unfavourable > 0
+      ? `The market is split on this: ${states.favourable} of ${n} read favourably for buyers and ${states.unfavourable} against, so it is a provider-by-provider question rather than a market-wide one.`
+      : states.unfavourable > 0
+        ? `No provider reads favourably for buyers here, and ${states.unfavourable} of ${n} read against — treat this as a market-wide condition rather than a lever against any one provider.`
+        : states.favourable > 0
+          ? `${states.favourable} of ${n} providers read favourably for buyers and none read against, so any advantage here is concentrated in those providers rather than available across the market.`
+          : `Nothing in the selected market separates providers on this reading, so it is unlikely to be where commercial advantage sits this period.`;
+  const baseReading =
+    state === "favourable" ? favourableReading
+      : state === "unfavourable" ? unfavourableReading
+        : splitReading;
   return metric(
     id,
     label,
@@ -1545,6 +1561,42 @@ function bandAgainstTrackedSet(score: number, high: number, low: number): string
   if (score >= high) return "among the stronger of the tracked set";
   if (score <= low) return "among the weaker of the tracked set";
   return "in the middle of the tracked set";
+}
+
+
+/**
+ * External risk, said plainly.
+ *
+ * This read "among the weaker of the tracked set", which inverts badly on a
+ * risk scale -- weaker risk is ambiguous where weaker capability is not -- and
+ * it carried "(upstream marks this analysis stale)" into the line Vendor
+ * Detail prints as "Current risk to the buyer". Staleness is a property of the
+ * record, not a thing to tell a buyer mid-sentence; it stays on `asOf`.
+ */
+function externalRiskBand(score: number): string {
+  if (score >= 70) return "elevated";
+  if (score <= 40) return "contained";
+  return "middling";
+}
+
+
+/**
+ * What a movement in award flow means for a buyer.
+ *
+ * Services Demand was the sharpest reading in the product -- public awards
+ * down from 146 to 12 across a quarter -- and it rendered as a state chip and
+ * a count with no sentence saying why that matters. Demand falling is the
+ * condition under which providers compete hardest, which is the whole point of
+ * watching it.
+ */
+function demandReading(movement: Movement): string | null {
+  if (movement.includes("deteriorating")) {
+    return "Award flow into this market has fallen — providers are competing for less new work, which is the backdrop buyers negotiate against.";
+  }
+  if (movement.includes("improving")) {
+    return "Award flow into this market has risen — providers have more work to choose between, which usually firms their commercial position.";
+  }
+  return null;
 }
 
 export const resolveIntelligence = cache(async (scopeJson: string): Promise<MarketIntel> => {
@@ -1822,7 +1874,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         return metric(
           "m.demand", "Services Demand",
           move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
-          move, "medium", null,
+          move, "medium", demandReading(move),
           [{
             text: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (public record, refreshed ${shortDate(proc.lastIngest)}).`,
             source: "Public procurement record", ownership: "market", asOf: proc.lastIngest,
@@ -1835,7 +1887,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       return metric(
         "m.demand", "Services Demand",
         move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
-        move, "low", null,
+        move, "low", demandReading(move),
         [{
           text: `${count(agg.awardsT12)} observed commercial signings across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.dataAsOf ?? anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
           source: "Curated contract tracker (market record)", ownership: "market",
