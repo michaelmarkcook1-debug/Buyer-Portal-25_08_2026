@@ -2455,3 +2455,29 @@ describe("buyer effect \u2260 raw movement direction (2026-08-30)", () => {
     expect(ratioMove(146, 12)).toBe("materially-improving");
   });
 });
+
+describe("provenance legibility (pilot simulation, 2026-08-30)", () => {
+  it("names what each evidence family feeds, visibly", () => {
+    // Two families carry nearly the same name and sit 63 days apart:
+    // "Curated contract tracker" (stg_curated_deal) and "Contract Tracker
+    // curated store" (stg_contract_store). A reader comparing two contract
+    // dates must be able to tell which is which without hovering.
+    const shell = readFileSync(resolve(__dirname, "../components/PortalShell.tsx"), "utf8");
+    const footer = shell.slice(shell.indexOf("function PortalFooter"), shell.indexOf("Approved brand mark"));
+    expect(footer).toMatch(/\{f\.feeds\}/);
+    // not ONLY a hover title — that is invisible on touch and unreliable to AT
+    expect(footer).not.toMatch(/title=\{f\.feeds\}/);
+  });
+
+  it("every freshness family carries a distinct descriptor", () => {
+    const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+    const block = facts.slice(facts.indexOf("const FRESHNESS_SOURCES"), facts.indexOf("export async function getFreshness"));
+    const feeds = [...block.matchAll(/feeds:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(feeds.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(feeds).size).toBe(feeds.length);
+    // the two contract families must not describe themselves identically
+    const sources = [...block.matchAll(/source:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(sources).toContain("Curated contract tracker");
+    expect(sources).toContain("Contract Tracker curated store");
+  });
+});

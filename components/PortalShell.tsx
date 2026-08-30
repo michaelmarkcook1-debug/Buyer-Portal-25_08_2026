@@ -143,11 +143,25 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
     <footer style={{ borderTop: "1px solid var(--surface-line-soft)", background: "var(--bg-elev-2)" }}>
       <div className="mx-auto max-w-[var(--max-width)] px-5 py-6 sm:px-8">
         {ctx.dbReady ? (
-          <ul className="code m-0 flex list-none flex-wrap gap-x-6 gap-y-1.5 p-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+          <ul
+            className="code m-0 grid list-none grid-cols-1 gap-x-8 gap-y-2.5 p-0 text-[0.8rem] sm:grid-cols-2 lg:grid-cols-3"
+            style={{ color: "var(--fg-dim)" }}
+          >
             {ctx.freshness.map((f) => (
-              <li key={f.source} title={f.feeds}>
-                {f.source}: {f.lastSeen ? `${shortDate(f.lastSeen)} (${agoDays(f.daysSince)})` : "never"}
-                {f.snapshots === 1 ? " · loaded once" : ""}
+              <li key={f.source}>
+                <div>
+                  {f.source}: {f.lastSeen ? `${shortDate(f.lastSeen)} (${agoDays(f.daysSince)})` : "never"}
+                  {f.snapshots === 1 ? " · loaded once" : ""}
+                </div>
+                {/* What each family actually feeds. Two of them carry nearly the
+                    same name — "Curated contract tracker" and "Contract Tracker
+                    curated store" — and currently sit 63 days apart, so a reader
+                    comparing two contract dates has no way to tell which is
+                    which. That distinction was already written here, but reached
+                    the reader only as a title attribute: invisible on touch,
+                    unreliable to a screen reader, and absent exactly when
+                    someone is asking why the two dates disagree. */}
+                <div style={{ opacity: 0.68 }}>{f.feeds}</div>
               </li>
             ))}
           </ul>
