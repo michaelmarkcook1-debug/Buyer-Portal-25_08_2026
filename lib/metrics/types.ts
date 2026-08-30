@@ -200,6 +200,13 @@ export interface VendorIntel {
 
 export interface TwelveMonthDimension {
   dimension: string;
+  /**
+   * Dictionary key for the variable this row reports, where one governs it.
+   * Presentation only — it selects the buyer-effect mapping used to colour the
+   * row's direction, and never takes part in any calculation. Undefined where
+   * no dictionary entry governs the row, which renders the direction neutral.
+   */
+  metricId?: string;
   state: MetricState;
   movement: Movement;
   detail: string;

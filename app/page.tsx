@@ -5,6 +5,7 @@ import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import { SignalCard } from "@/components/SignalCard";
 import { TwelveMonthChange } from "@/components/TwelveMonthChange";
 import { VendorComparison } from "@/components/VendorComparison";
+import { displayState } from "@/lib/metrics/dictionary";
 import { ClassChip, EmptyEvidence, MovementText, Panel, SectionHeader } from "@/components/ui";
 import { getDevelopments } from "@/lib/data/facts";
 import { InfoTip, COLOUR_KEY } from "@/components/InfoTip";
@@ -260,7 +261,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
                   {moving.slice(0, 2).map((m) => (
                     <li key={m.id} className="flex flex-wrap items-baseline gap-x-3 text-[0.94rem]">
                       <span className="eyebrow text-[0.72rem]">{m.label}</span>
-                      <MovementText movement={m.movement} className="text-[0.9rem]" />
+                      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.9rem]" />
                       {m.headline ? (
                         <span className="w-full text-[0.9rem]" style={{ color: "var(--fg-muted)" }}>
                           {m.headline}

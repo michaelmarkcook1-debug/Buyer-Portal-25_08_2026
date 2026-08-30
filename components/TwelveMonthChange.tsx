@@ -1,3 +1,4 @@
+import { movementEffect } from "@/lib/metrics/dictionary";
 import type { TwelveMonthDimension } from "@/lib/metrics/types";
 import { CONFIDENCE_LABEL, EmptyEvidence, MovementText, Panel } from "./ui";
 
@@ -38,7 +39,13 @@ export function TwelveMonthChange({
             <div className="w-52 shrink-0 font-medium" style={{ color: "var(--fg)" }}>
               {c.dimension}
             </div>
-            <MovementText movement={c.movement} className="w-44 shrink-0 text-[0.94rem]" />
+            <MovementText
+              movement={c.movement}
+              /* Undefined metricId renders the direction neutral — a row with no
+                 governing variable states its direction without a verdict. */
+              effect={c.metricId ? movementEffect(c.metricId, c.movement) : undefined}
+              className="w-44 shrink-0 text-[0.94rem]"
+            />
             <div className="min-w-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               {c.detail}
               <span className="code ml-2 text-[0.76rem]" style={{ color: "var(--fg-dim)" }}>

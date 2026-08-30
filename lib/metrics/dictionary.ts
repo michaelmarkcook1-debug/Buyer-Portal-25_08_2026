@@ -403,6 +403,35 @@ export function displayState(metricId: string, state: MetricState): ResolvedDisp
   return { label: s.labels[state], effect: s.effect[state], semantics: s };
 }
 
+/**
+ * What a MOVEMENT means for the buyer, read from the metric's own state map.
+ *
+ * Movement and buyer effect are different axes and the codebase keeps them
+ * apart on purpose. `Movement` is the direction of the underlying number:
+ * ratioMove(206, 270) is "deteriorating" because 206 is fewer than 270. Whether
+ * that is good or bad for a buyer is a property of the VARIABLE, not of the
+ * direction — procurementHeatState() already inverts one into the other
+ * (fewer awards ⇒ state "favourable"), and providerMomentum inverts the whole
+ * scale (a strengthening supplier is a caution for the reader).
+ *
+ * So a movement's effect is the effect of the state it is heading toward:
+ * improving heads for the metric's `favourable` state, deteriorating for its
+ * `unfavourable` one. Nothing is inferred from the words "improving" or
+ * "deteriorating" — every answer comes from the metric's own effect map, which
+ * is why softening demand reads as caution (m.demand's own mapping) rather
+ * than being flipped to favourable by a general down-is-good rule.
+ *
+ * Metrics with no dictionary entry return "neutral": an unknown variable gets
+ * a descriptive movement, never a guessed buyer verdict.
+ */
+export function movementEffect(metricId: string, movement: Movement): BuyerEffect {
+  if (movement === "insufficient") return "unknown";
+  if (movement === "stable") return "neutral";
+  const s = METRIC_DICTIONARY[canonicalMetricId(metricId)];
+  if (!s) return "neutral";
+  return movement.includes("improving") ? s.effect.favourable : s.effect.unfavourable;
+}
+
 /** Movement wording is variable-independent — it always describes direction. */
 export const MOVEMENT_VOCABULARY: Record<Movement, string> = {
   "materially-improving": "Materially improving",

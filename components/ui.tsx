@@ -146,15 +146,38 @@ export function StateText({ state, metricId, className = "" }: { state: MetricSt
   );
 }
 
-export function MovementText({ movement, className = "" }: { movement: Movement; className?: string }) {
-  const muted = movement === "insufficient" || movement === "stable";
-  const ink = movement.includes("improving")
-    ? "var(--data-positive-ink)"
-    : movement.includes("deteriorating")
-      ? "var(--data-risk-ink)"
-      : "var(--fg-dim)";
+/**
+ * A direction, coloured by what it MEANS for the buyer — never by which way
+ * the number went.
+ *
+ * This component used to read the movement word: "improving" was painted
+ * positive and "deteriorating" risk-red. That is the raw-direction axis, and
+ * on the variables where the two axes diverge it asserted the opposite of the
+ * analysis sitting beside it. Public awards falling 146 → 12 rendered red
+ * next to prose explaining that providers are competing for materially less
+ * new work; a strengthening supplier rendered green next to a dictionary
+ * entry calling it a caution.
+ *
+ * `effect` is therefore supplied by the caller, which knows the variable.
+ * Without it the movement is DESCRIPTIVE — neutral ink, no buyer verdict —
+ * because a component holding only the word "deteriorating" cannot know
+ * whether that is good or bad for the reader, and guessing is the defect.
+ */
+export function MovementText({
+  movement,
+  effect,
+  className = "",
+}: {
+  movement: Movement;
+  /** Buyer effect for this movement, from movementEffect() or the caller's
+      own canonical state. Omitted where the direction carries no buyer
+      verdict — a legend, a count, an unmapped variable. */
+  effect?: BuyerEffect;
+  className?: string;
+}) {
+  const ink = effect ? EFFECT_INK[effect] : "var(--fg-muted)";
   return (
-    <span className={`tabular ${className}`} style={{ color: muted ? "var(--fg-dim)" : ink }}>
+    <span className={`tabular ${className}`} style={{ color: ink }}>
       <span aria-hidden="true">{MOVEMENT_GLYPH[movement]} </span>
       {MOVEMENT_LABEL[movement]}
     </span>

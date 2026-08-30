@@ -2256,6 +2256,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     if (recent + prior > 0) {
       changes.push({
         dimension: "Deal flow (commercial)",
+        metricId: "m.demand",
         state: recent < prior ? "favourable" : recent > prior ? "unfavourable" : "stable",
         movement: ratioMove(recent, prior),
         detail: `${count(recent)} observed signings across the selected market in the ${commercialWindowLabel(anchor.dataAsOf, shortDate)}, vs ${count(prior)} in the prior 12 months.`,
@@ -2279,6 +2280,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     if (proc.totalT90 + proc.totalPrior90 >= 5) {
       changes.push({
         dimension: "Deal flow (public procurement)",
+        metricId: "m.demand",
         state: proc.totalT90 < proc.totalPrior90 ? "favourable" : proc.totalT90 > proc.totalPrior90 ? "unfavourable" : "stable",
         movement: ratioMove(proc.totalT90, proc.totalPrior90),
         detail: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (${historyModeLabel(procMonthly.mode)}; flow evidence, never enterprise pricing).`,
@@ -2335,6 +2337,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     const t = seriesDelta("talent_net_flow");
     changes.push({
       dimension: "Talent pressure",
+        metricId: "talentPressure",
       state: t.net < 0 ? "unfavourable" : "stable",
       movement: t.assessed === 0 ? "insufficient" : t.net < -500 ? "deteriorating" : t.net > 500 ? "improving" : "stable",
       detail:
@@ -2370,6 +2373,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         : ` AI-readiness moved for ${a.moved} of ${a.assessed} vendors across canonical snapshots (observed snapshots).`;
     changes.push({
       dimension: "AI delivery capability",
+        metricId: "aiProductivityOpportunity",
       state: evTotal > 0 || a.moved > 0 ? "mixed" : "stable",
       movement:
         evVendors >= 2 ? "improving"
@@ -2421,6 +2425,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     if (assessed > 0) {
       changes.push({
         dimension: "Reputation",
+        metricId: "reputationMovement",
         state: netShift < -6 * assessed ? "unfavourable" : "stable",
         movement: netShift > 4 * assessed ? "improving" : netShift < -4 * assessed ? "deteriorating" : "stable",
         detail: `Mean tracker-series shift ${netShift >= 0 ? "+" : ""}${Math.round(netShift / assessed)} points across ${assessed} vendors (reconstructed from the AG tracker's own trailing series).`,
@@ -2434,6 +2439,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     // Buyer leverage inputs — expiry pipeline vs recent endings (both corpora shown separately).
     changes.push({
       dimension: "Buyer leverage",
+        metricId: "buyerLeverage",
       state: agg.inPlay12 > agg.expiredPast12 ? "favourable" : agg.inPlay12 === 0 ? "unfavourable" : "stable",
       movement: ratioMove(agg.inPlay12, agg.expiredPast12),
       detail: `Across your selected market (${count(tickers.length)} vendor${tickers.length === 1 ? "" : "s"}), ${count(agg.inPlay12)} observed commercial agreements reach end-of-term in the next 12 months (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}) vs ${count(agg.expiredPast12)} that ended in the last 12 — market record, not the reader's contracts.`,

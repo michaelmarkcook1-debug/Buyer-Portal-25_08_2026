@@ -1,5 +1,5 @@
 import { InfoTip, fromSemantics } from "@/components/InfoTip";
-import { METRIC_DICTIONARY, canonicalMetricId } from "@/lib/metrics/dictionary";
+import { METRIC_DICTIONARY, canonicalMetricId, displayState } from "@/lib/metrics/dictionary";
 import type { Metric } from "@/lib/metrics/types";
 import { CONFIDENCE_LABEL, ModelledTag, MovementText, Panel, StateText } from "./ui";
 
@@ -37,7 +37,7 @@ export function MetricCard({
         {m.modelled ? <ModelledTag note={m.modelled} /> : null}
       </div>
       <StateText state={m.state} metricId={m.id} className="text-[1.08rem]" />
-      <MovementText movement={m.movement} className="text-[0.88rem]" />
+      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.88rem]" />
       {m.analysis ? (
         /* The analytical body replaces the templated headline: with a driver
            present, the headline only restated the state. */
@@ -136,7 +136,7 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
               {m.modelled ? <ModelledTag note={m.modelled} /> : null}
             </div>
             <StateText state={m.state} metricId={m.id} className="text-[1.1rem]" />
-            <MovementText movement={m.movement} className="text-[0.86rem]" />
+            <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.86rem]" />
             {/* The band is a summary: one line on WHY, never the full body.
                 The Market page carries driver, implication, limitation and
                 the investigation prompt for the same dimensions. */}

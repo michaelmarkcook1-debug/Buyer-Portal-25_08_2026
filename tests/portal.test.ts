@@ -30,7 +30,14 @@ import { EFFECT_INK } from "@/components/ui";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
-import { LEVEL_VOCABULARY, METRIC_DICTIONARY, SIGNAL_CLASS_HELP, displayState, levelEffect } from "@/lib/metrics/dictionary";
+import {
+  LEVEL_VOCABULARY,
+  METRIC_DICTIONARY,
+  SIGNAL_CLASS_HELP,
+  displayState,
+  levelEffect,
+  movementEffect,
+} from "@/lib/metrics/dictionary";
 import {
   BUYER_LEVERAGE_COPY, HEAT_COPY, aiPressureAnalysis, demandAnalysis, deliveryCostAnalysis,
   exposureAnalysis, headroomAnalysis, intensityAnalysis, labourAnalysis, pricingAnalysis,
@@ -2253,5 +2260,198 @@ describe("Analyst Insight headline (2026-08-29)", () => {
     // carries the finding, not the label
     expect(hero).toMatch(/Analyst Insight · \{TAB_LABEL\[tab\]\}/);
     expect(hero).toMatch(/className="eyebrow"/);
+  });
+});
+
+describe("buyer effect \u2260 raw movement direction (2026-08-30)", () => {
+  /* MovementText used to read the movement WORD: "improving" painted positive,
+     "deteriorating" painted risk-red. Movement is the direction of the
+     underlying number; buyer effect is a property of the VARIABLE. Where the
+     two axes diverge the colour asserted the opposite of the analysis beside
+     it — and they diverge in BOTH directions, which is why no single rule over
+     the movement word can be correct:
+
+       m.demand        fewer awards -> state "Softening"  (unfavourable)
+       dealMarketHeat  fewer awards -> state "Cool"       (favourable)
+
+     Two treatments follow. A reading that renders a state takes that state's
+     effect, so the direction can never contradict the verdict beside it. A
+     retrospective row renders a direction ALONE, so it resolves the variable
+     it names through the dictionary, and stays neutral when it names none. */
+
+  const readingEffect = (id: string, state: MetricState) => displayState(id, state).effect;
+
+  it("\u00a78 commercial signings falling is not buyer-unfavourable", () => {
+    // 270 -> 206. ratioMove says "deteriorating" because 206 < 270; that alone
+    // must not paint the row adverse for the reader.
+    expect(ratioMove(206, 270)).toBe("deteriorating");
+    expect(movementEffect("m.demand", ratioMove(206, 270))).not.toBe("unfavourable");
+  });
+
+  it("\u00a79 public procurement collapsing is not buyer-unfavourable", () => {
+    // 146 -> 12
+    expect(ratioMove(12, 146)).toBe("materially-deteriorating");
+    expect(movementEffect("m.demand", ratioMove(12, 146))).not.toBe("unfavourable");
+  });
+
+  it("\u00a76 softening demand is NOT flipped to favourable either", () => {
+    // m.demand's own caveat: "Softening demand is not automatically your gain."
+    // No global down-is-good rule may override the dictionary.
+    expect(movementEffect("m.demand", "materially-deteriorating")).toBe("caution");
+    expect(movementEffect("m.demand", "deteriorating")).toBe("caution");
+    expect(METRIC_DICTIONARY["m.demand"]!.effect.unfavourable).toBe("caution");
+  });
+
+  it("a reading's direction always carries its own state's effect", () => {
+    // the structural guarantee: same source, so the two can never disagree
+    for (const id of Object.keys(METRIC_DICTIONARY)) {
+      for (const st of ["favourable", "stable", "unfavourable", "mixed", "insufficient"] as const) {
+        expect(readingEffect(id, st)).toBe(METRIC_DICTIONARY[id]!.effect[st]);
+      }
+    }
+  });
+
+  it("resolves the two variables that invert against each other", () => {
+    // fewer awards is "Softening" on demand and "Cool" on heat; each reading
+    // takes ITS OWN state's effect, so both render correctly at once
+    expect(procurementHeatState(12, 146).state).toBe("favourable");
+    expect(procurementHeatState(12, 146).movement).toBe("materially-deteriorating");
+    expect(readingEffect("dealMarketHeat", procurementHeatState(12, 146).state)).toBe("favourable");
+    expect(readingEffect("m.demand", "unfavourable")).toBe("caution");
+    // a strengthening supplier is a caution, never a buyer win
+    expect(readingEffect("providerMomentum", "favourable")).toBe("caution");
+    expect(readingEffect("providerMomentum", "unfavourable")).toBe("favourable");
+  });
+
+  it("\u00a710 genuinely adverse deterioration stays adverse", () => {
+    // delivery/workforce capacity and operational risk are unambiguously bad
+    expect(movementEffect("talentPressure", "deteriorating")).toBe("unfavourable");
+    expect(readingEffect("talentPressure", "unfavourable")).toBe("unfavourable");
+    expect(readingEffect("operationalRisk", "unfavourable")).toBe("unfavourable");
+    // financial resilience weakening is a buyer risk, never a buyer win
+    expect(readingEffect("financialResilience", "unfavourable")).toBe("caution");
+    for (const id of ["talentPressure", "operationalRisk", "financialResilience"]) {
+      expect(readingEffect(id, "unfavourable")).not.toBe("favourable");
+      expect(movementEffect(id, "deteriorating")).not.toBe("favourable");
+    }
+  });
+
+  it("\u00a716 eroding reputation is never coloured favourable", () => {
+    // risk and leverage are different things
+    expect(movementEffect("reputationMovement", "deteriorating")).toBe("caution");
+    expect(movementEffect("reputationMovement", "materially-deteriorating")).toBe("caution");
+    expect(readingEffect("reputationMovement", "unfavourable")).toBe("caution");
+    expect(readingEffect("reputationMovement", "unfavourable")).not.toBe("favourable");
+  });
+
+  it("\u00a711 genuine buyer improvement stays favourable", () => {
+    expect(movementEffect("buyerLeverage", "improving")).toBe("favourable");
+    expect(readingEffect("buyerLeverage", "favourable")).toBe("favourable");
+    expect(readingEffect("pricingPressure", "favourable")).toBe("favourable");
+    expect(movementEffect("aiProductivityOpportunity", "improving")).toBe("favourable");
+  });
+
+  it("\u00a717 opportunity direction follows the level, not the direction word", () => {
+    // a fading opportunity is less room, not an adverse event
+    expect(levelEffect("very-high")).toBe("favourable");
+    expect(levelEffect("high")).toBe("favourable");
+    expect(levelEffect("medium")).toBe("neutral");
+    expect(levelEffect("low")).toBe("neutral");
+    expect(levelEffect("insufficient")).toBe("unknown");
+    const page = readFileSync(resolve(__dirname, "../app/opportunities/[vendor]/[type]/page.tsx"), "utf8");
+    expect(page).toMatch(/effect=\{levelEffect\(opp\.level\)\}/);
+    expect(page).not.toMatch(/movement\.includes/);
+  });
+
+  it("\u00a712 neutral movement remains possible", () => {
+    expect(movementEffect("buyerLeverage", "stable")).toBe("neutral");
+    expect(movementEffect("buyerLeverage", "insufficient")).toBe("unknown");
+    // an unmapped variable gets a descriptive direction, never a guessed verdict
+    expect(movementEffect("no-such-metric", "deteriorating")).toBe("neutral");
+    expect(movementEffect("no-such-metric", "improving")).toBe("neutral");
+    // and a caller that supplies no effect renders neutral rather than guessing
+    const ui = readFileSync(resolve(__dirname, "../components/ui.tsx"), "utf8");
+    expect(ui).toMatch(/effect \? EFFECT_INK\[effect\] : "var\(--fg-muted\)"/);
+  });
+
+  it("no global down=bad or down=good rule survives anywhere", () => {
+    // every answer must come from the variable's own effect map
+    const down = ["talentPressure", "m.demand", "providerMomentum", "buyerLeverage"]
+      .map((id) => movementEffect(id, "deteriorating"));
+    expect(new Set(down).size).toBeGreaterThan(1);
+    const up = ["talentPressure", "m.demand", "providerMomentum", "buyerLeverage"]
+      .map((id) => movementEffect(id, "improving"));
+    expect(new Set(up).size).toBeGreaterThan(1);
+  });
+
+  it("MovementText no longer infers colour from the direction word", () => {
+    const ui = readFileSync(resolve(__dirname, "../components/ui.tsx"), "utf8");
+    const cmp = ui.slice(ui.indexOf("export function MovementText"), ui.indexOf("export function ConfidenceText"));
+    // the guess: movement.includes("improving") ? positive : risk
+    expect(cmp).not.toMatch(/movement\.includes\(/);
+    expect(cmp).not.toMatch(/data-positive-ink|data-risk-ink/);
+  });
+
+  it("every caller supplies an effect or deliberately renders neutral", () => {
+    for (const f of [
+      "../components/MetricCard.tsx",
+      "../components/TwelveMonthChange.tsx",
+      "../app/page.tsx",
+      "../app/market/page.tsx",
+      "../app/opportunities/[vendor]/[type]/page.tsx",
+    ]) {
+      const src = readFileSync(resolve(__dirname, f), "utf8");
+      for (const m of src.matchAll(/<MovementText[\s\S]{0,260}?\/>/g)) {
+        expect(m[0], `${f} renders a movement with no effect`).toMatch(/effect=/);
+      }
+    }
+    // the opportunities legend is a COUNT, not a reading — neutral on purpose
+    const legend = readFileSync(resolve(__dirname, "../app/opportunities/page.tsx"), "utf8");
+    expect(legend).toMatch(/<MovementText movement="improving" className/);
+  });
+
+  it("every retrospective row that asserts polarity names its variable", () => {
+    const src = readFileSync(resolve(__dirname, "../lib/metrics/resolve.ts"), "utf8");
+    // the two proven rows resolve through the demand variable, not through
+    // their own raw favourable/unfavourable flag
+    for (const dim of ["Deal flow (commercial)", "Deal flow (public procurement)"]) {
+      const at = src.indexOf(`dimension: "${dim}"`);
+      expect(at, `${dim} missing`).toBeGreaterThan(0);
+      expect(src.slice(at, at + 200)).toMatch(/metricId: "m\.demand"/);
+    }
+    const rows = readFileSync(resolve(__dirname, "../components/TwelveMonthChange.tsx"), "utf8");
+    expect(rows).toMatch(/c\.metricId \? movementEffect\(c\.metricId, c\.movement\) : undefined/);
+  });
+
+  it("\u00a718 gold never carries semantic state", () => {
+    const ui = readFileSync(resolve(__dirname, "../components/ui.tsx"), "utf8");
+    const effectInk = ui.slice(ui.indexOf("export const EFFECT_INK"), ui.indexOf("export const EFFECT_INK") + 320);
+    expect(effectInk).not.toMatch(/accent/);
+    for (const e of ["favourable", "caution", "unfavourable", "neutral", "unknown"] as const) {
+      expect(EFFECT_INK[e]).not.toMatch(/accent/);
+    }
+    // no movement and no reading can ever resolve to gold
+    for (const id of Object.keys(METRIC_DICTIONARY)) {
+      for (const mv of ["improving", "deteriorating", "stable", "insufficient"] as const) {
+        expect(EFFECT_INK[movementEffect(id, mv)]).not.toMatch(/accent/);
+      }
+      for (const st of ["favourable", "stable", "unfavourable", "mixed", "insufficient"] as const) {
+        expect(EFFECT_INK[readingEffect(id, st)]).not.toMatch(/accent/);
+      }
+    }
+  });
+
+  it("colour is never the sole carrier \u2014 glyph and label survive", () => {
+    const ui = readFileSync(resolve(__dirname, "../components/ui.tsx"), "utf8");
+    const cmp = ui.slice(ui.indexOf("export function MovementText"), ui.indexOf("export function ConfidenceText"));
+    expect(cmp).toMatch(/MOVEMENT_GLYPH\[movement\]/);
+    expect(cmp).toMatch(/MOVEMENT_LABEL\[movement\]/);
+  });
+
+  it("canonical figures are untouched by the colour correction", () => {
+    expect(ratioMove(206, 270)).toBe("deteriorating");
+    expect(ratioMove(12, 146)).toBe("materially-deteriorating");
+    expect(ratioMove(270, 206)).toBe("improving");
+    expect(ratioMove(146, 12)).toBe("materially-improving");
   });
 });

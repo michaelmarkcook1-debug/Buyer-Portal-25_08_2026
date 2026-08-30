@@ -157,7 +157,11 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         <Panel hero className="mt-5 px-6 py-6 sm:px-8">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <StateText state={intel.buyerEconomics.state} metricId="m.buyerEconomics" className="display text-[1.7rem]" />
-            <MovementText movement={intel.buyerEconomics.movement} className="text-[1.02rem]" />
+            <MovementText
+              movement={intel.buyerEconomics.movement}
+              effect={displayState("m.buyerEconomics", intel.buyerEconomics.state).effect}
+              className="text-[1.02rem]"
+            />
           </div>
           {/* The exposure chart lives INSIDE its own analytical unit and spans
               the grid: one heading, one interpretation, one conclusion. It

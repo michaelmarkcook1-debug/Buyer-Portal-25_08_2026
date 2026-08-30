@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { shortDate } from "@/lib/format";
 import type { RawSearchParams } from "@/lib/market-scope";
+import { levelEffect } from "@/lib/metrics/dictionary";
 import { OPPORTUNITY_LABELS, OPPORTUNITY_TYPES, type OpportunityType } from "@/lib/metrics/types";
 import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
@@ -91,7 +92,7 @@ export default async function OpportunityDetail({
       <Panel hero className="px-6 py-6 sm:px-9 sm:py-7">
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
           <LevelText level={opp.level} className="display text-[1.9rem]" />
-          <MovementText movement={opp.movement} className="text-[1.02rem]" />
+          <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.02rem]" />
           <span className="eyebrow">Confidence: {CONFIDENCE_LABEL[opp.confidence]}</span>
           {opp.modelled ? <ModelledTag note={opp.modelled} /> : null}
         </div>
@@ -125,7 +126,7 @@ export default async function OpportunityDetail({
         <SectionHeader eyebrow="Retrospective" title="12-month change" />
         <Panel className="mt-5 px-6 py-5">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
-            <MovementText movement={opp.movement} className="text-[1.02rem]" />
+            <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.02rem]" />
             <span className="text-[0.94rem]" style={{ color: "var(--fg-muted)" }}>
               {opp.movement === "insufficient"
                 ? `No direction is held for this opportunity yet${intel.signalTrackingSince ? ` — AG signal tracking began ${shortDate(intel.signalTrackingSince)}` : ""}.`
