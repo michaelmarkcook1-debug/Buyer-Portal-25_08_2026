@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start --port 3100",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:buyer-quality": "node --env-file=.env.local --experimental-transform-types --import ./scripts/bdq/loader.mjs scripts/buyer-quality.ts",
+    "test:buyer-quality:insight": "node --env-file=.env.local --experimental-transform-types --import ./scripts/bdq/loader.mjs scripts/buyer-quality.ts --insight"
   },
   "dependencies": {
     "@fontsource-variable/cormorant-garamond": "^5.2.0",
