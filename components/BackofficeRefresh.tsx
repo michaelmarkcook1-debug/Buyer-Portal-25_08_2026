@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { REFRESH_STAGES, type StageStatus } from "@/lib/backoffice/stages";
+import { stagesFor, type StageStatus } from "@/lib/backoffice/stages";
 
 /**
  * Manual refresh control.
@@ -139,7 +139,11 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
       : null;
   const running = run?.status === "running";
   const canRun = status?.executor.canRun ?? initial.canRun;
-  const stages = run?.stages ?? REFRESH_STAGES.map((s) => ({ id: s.id, status: "pending" as StageStatus, startedAt: null, finishedAt: null, message: null }));
+  /* The stage table follows the runner that will actually execute: a cloud
+     run must not list the local-file sources it cannot reach, or they read as
+     a hung run rather than an absent source. */
+  const specs = stagesFor(status?.executor.mode ?? initial.mode);
+  const stages = run?.stages ?? specs.map((s) => ({ id: s.id, status: "pending" as StageStatus, startedAt: null, finishedAt: null, message: null }));
 
   return (
     <div className="flex flex-col gap-5">
@@ -233,7 +237,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
             </tr>
           </thead>
           <tbody>
-            {REFRESH_STAGES.map((spec) => {
+            {specs.map((spec) => {
               const s = stages.find((x) => x.id === spec.id);
               const st = s?.status ?? "pending";
               return (

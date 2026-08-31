@@ -1,6 +1,6 @@
 import "server-only";
 import { q } from "@/lib/db";
-import { REFRESH_STAGES, type StageStatus } from "./stages";
+import { stagesFor, type StageStatus } from "./stages";
 
 /**
  * Operational run state for the manual refresh.
@@ -134,7 +134,10 @@ export async function activeRun(): Promise<RefreshRun | null> {
 export async function claimRun(runner: string, requestedBy = "backoffice"): Promise<RefreshRun | null> {
   await ensureTable();
   const id = `run_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
-  const stages: StageResult[] = REFRESH_STAGES.map((s) => ({
+  /* Seeded from what THIS runner runs, so a local run has slots for the
+     local-file stages and a cloud run does not show stages it will never
+     report. */
+  const stages: StageResult[] = stagesFor(runner).map((s) => ({
     id: s.id,
     status: "pending",
     startedAt: null,

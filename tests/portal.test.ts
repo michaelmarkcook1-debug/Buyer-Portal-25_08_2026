@@ -23,7 +23,7 @@ import {
 } from "@/lib/metrics/rules";
 import { shiftLevel, type MetricState } from "@/lib/metrics/types";
 import { levelInk, stateInk } from "@/components/charts/Charts";
-import { EXCLUDED_STAGES, REFRESH_STAGES } from "@/lib/backoffice/stages";
+import { EXCLUDED_STAGES, LOCAL_ONLY_STAGES, REFRESH_STAGES, stagesFor } from "@/lib/backoffice/stages";
 import { scrubSecrets } from "@/lib/backoffice/run-state";
 import { detectExecutor } from "@/lib/backoffice/executor";
 import { EFFECT_INK } from "@/components/ui";
@@ -1565,6 +1565,37 @@ describe("backoffice manual refresh (2026-08-25)", () => {
     expect(all).not.toMatch(/fly\.dev/);
     // the single AG touchpoint is explicitly a read
     expect(REFRESH_STAGES.find((s) => s.id === "analystgenius")!.what).toMatch(/GET-only|never writes/i);
+  });
+
+  it("runs local-file sources only where the files exist", () => {
+    // ops/refresh-manual.sh runs on the operator's machine and adds the two
+    // stages refresh-cloud.sh cannot reach. A cloud run must not list them:
+    // pending-for-ever reads as a hung run, not as an absent source.
+    expect(LOCAL_ONLY_STAGES.map((s) => s.id)).toEqual(["contract-store", "contract-tracker"]);
+    const local = stagesFor("local-script").map((s) => s.id);
+    const cloud = stagesFor("github-actions").map((s) => s.id);
+    for (const id of ["contract-store", "contract-tracker"]) {
+      expect(local, `local run missing ${id}`).toContain(id);
+      expect(cloud, `cloud run should not list ${id}`).not.toContain(id);
+    }
+    // the browser names the same thing "local-manual"; both must agree
+    expect(stagesFor("local-manual").map((s) => s.id)).toEqual(local);
+    // local-file stages run BEFORE promote, or promote derives from stale staging
+    expect(local.indexOf("contract-store")).toBeLessThan(local.indexOf("promote"));
+    expect(local.indexOf("contract-tracker")).toBeLessThan(local.indexOf("promote"));
+    // the shared subset is unchanged and stays the cloud definition
+    expect(cloud).toEqual(REFRESH_STAGES.map((s) => s.id));
+  });
+
+  it("keeps Contract Tracker discovery frozen while reading its confirmed store", () => {
+    // reading the already-confirmed store is not resuming discovery, and the
+    // exclusion list must keep saying so rather than quietly dropping it
+    const text = EXCLUDED_STAGES.map((e) => `${e.label} ${e.why}`).join(" ").toLowerCase();
+    expect(text).toMatch(/discovery/);
+    expect(text).toMatch(/frozen/);
+    expect(text).toMatch(/not resuming discovery|is not the same as resuming/);
+    // and the store stage says what it is, so the freeze is not blurred
+    expect(LOCAL_ONLY_STAGES.find((s) => s.id === "contract-store")!.what).toMatch(/not resuming discovery/i);
   });
 
   it("scrubs secrets out of anything stored for the operator to read", () => {
