@@ -45,6 +45,7 @@ import {
   opportunityReason,
   pricingRead,
   procurementHeatState,
+  demandWindowInterpretable,
   ratioMove,
   type MacroSeriesSet,
 } from "./rules";
@@ -87,15 +88,18 @@ import { buildWatchSignals } from "./watch";
  * shows state, movement, confidence and the underlying facts only (spec §23).
  */
 
-const insufficientMetric = (id: string, label: string, note: string): Metric => ({
+/* `basis` is optional so a withheld reading can still SHOW its raw evidence.
+   Where a window is uninterpretable the counts remain true and visible; it is
+   the inference drawn from them that is withdrawn. */
+const insufficientMetric = (id: string, label: string, note: string, basis: Basis[] = [], asOf: string | null = null): Metric => ({
   id,
   label,
   state: "insufficient",
   movement: "insufficient",
   confidence: "insufficient",
   headline: note,
-  basis: [],
-  asOf: null,
+  basis,
+  asOf,
 });
 
 function metric(
@@ -145,6 +149,8 @@ interface VendorInputs {
   scopeVendorCount: number;
   spineLastIngest: string;
   spineDataAsOf: string | null;
+  /** Curated export's own newest evidence — apart from the combined anchor. */
+  spineCuratedAsOf?: string | null;
 }
 
 function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
@@ -306,6 +312,27 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
       "dealMarketHeat",
       "Deal Market Heat",
       "Too few observed contracts or signings to read commercial deal flow for this vendor.",
+    );
+  } else if (!demandWindowInterpretable({
+      channel: "commercial-spine", windowDays: 365,
+      dataAsOf: v.spineDataAsOf, curatedAsOf: v.spineCuratedAsOf ?? null,
+      today: new Date().toISOString().slice(0, 10),
+    }).interpretable) {
+    /* Public flow could not carry the read and the commercial window has an
+       empty tail, so neither channel may assert demand for this vendor. The
+       counts stay visible; the conclusion does not. */
+    dealMarketHeat = insufficientMetric(
+      "dealMarketHeat", "Deal Market Heat",
+      demandWindowInterpretable({
+        channel: "commercial-spine", windowDays: 365,
+        dataAsOf: v.spineDataAsOf, curatedAsOf: v.spineCuratedAsOf ?? null,
+        today: new Date().toISOString().slice(0, 10),
+      }).reason,
+      [{
+        text: `${count(d.awardsT12)} observed signings in the current window vs ${count(d.awardsPrior12)} in the comparison window.`,
+        source: "Curated contract tracker (market record)", ownership: "market",
+      }],
+      v.spineDataAsOf ?? v.spineLastIngest,
     );
   } else {
     const move = ratioMove(d.awardsT12, d.awardsPrior12);
@@ -1670,6 +1697,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       scopeVendorCount: tickers.length,
       spineLastIngest: anchor.lastIngest,
       spineDataAsOf: anchor.dataAsOf,
+      spineCuratedAsOf: anchor.curatedAsOf,
     });
     const opportunities = opportunitiesFor(metrics, (anchor.dataAgeDays ?? 999) > 120);
     const nrg = signals.get(ticker)?.nrg;
@@ -1869,35 +1897,59 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       "Demand is heating across your market.",
     ),
     servicesDemand: (() => {
-      // Fresh public award flow carries demand when it can (§13); the spine is context.
+      /* Both channels are gated on collection maturity before either may carry
+         a demand reading. The counts below are true; what the audit of 31 Aug
+         2026 disproved is that a fall in them means falling demand. Raw
+         evidence stays visible, the inference does not. */
+      const today = new Date().toISOString().slice(0, 10);
       if (proc.totalT90 + proc.totalPrior90 >= 5) {
+        const publicBasis = [{
+          text: `${count(proc.totalT90)} public awards observed in the current 90-day collection window vs ${count(proc.totalPrior90)} in the comparison window (public record, refreshed ${shortDate(proc.lastIngest)}).`,
+          source: "Public procurement record", ownership: "market" as const, asOf: proc.lastIngest,
+        }];
+        const gate = demandWindowInterpretable({ channel: "public-procurement", windowDays: 90, dataAsOf: proc.lastIngest, today });
+        if (!gate.interpretable) {
+          return insufficientMetric("m.demand", "Services Demand", gate.reason, publicBasis, proc.lastIngest);
+        }
         const move = ratioMove(proc.totalT90, proc.totalPrior90);
         return metric(
           "m.demand", "Services Demand",
           move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
-          move, "medium", demandReading(move),
-          [{
-            text: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (public record, refreshed ${shortDate(proc.lastIngest)}).`,
-            source: "Public procurement record", ownership: "market", asOf: proc.lastIngest,
-          }],
-          proc.lastIngest,
+          move, "medium", demandReading(move), publicBasis, proc.lastIngest,
         );
       }
       if (agg.contracts === 0) return insufficientMetric("m.demand", "Services Demand", "No contract evidence in scope.");
+      const spineAsOf = anchor.dataAsOf ?? anchor.lastIngest;
+      const spineBasis = [{
+        text: `${count(agg.awardsT12)} observed commercial signings across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(spineAsOf)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
+        source: "Curated contract tracker (market record)", ownership: "market" as const,
+      }];
+      const spineGate = demandWindowInterpretable({ channel: "commercial-spine", windowDays: 365, dataAsOf: anchor.dataAsOf, curatedAsOf: anchor.curatedAsOf, today });
+      if (!spineGate.interpretable) {
+        return insufficientMetric("m.demand", "Services Demand", spineGate.reason, spineBasis, spineAsOf);
+      }
       const move = ratioMove(agg.awardsT12, agg.awardsPrior12);
       return metric(
         "m.demand", "Services Demand",
         move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
-        move, "low", demandReading(move),
-        [{
-          text: `${count(agg.awardsT12)} observed commercial signings across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(anchor.dataAsOf ?? anchor.lastIngest)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
-          source: "Curated contract tracker (market record)", ownership: "market",
-        }],
-        anchor.dataAsOf ?? anchor.lastIngest,
+        move, "low", demandReading(move), spineBasis, spineAsOf,
       );
     })(),
     competitiveIntensity: (() => {
       if (agg.contracts === 0) return insufficientMetric("m.intensity", "Competitive Intensity", "No contract evidence in scope.");
+      /* Counts distinct winners across the SAME 12-month commercial windows as
+         demand, so a frozen spine empties the current one identically. */
+      const ciGate = demandWindowInterpretable({
+        channel: "commercial-spine", windowDays: 365,
+        dataAsOf: anchor.dataAsOf, curatedAsOf: anchor.curatedAsOf,
+        today: new Date().toISOString().slice(0, 10),
+      });
+      if (!ciGate.interpretable) {
+        return insufficientMetric("m.intensity", "Competitive Intensity", ciGate.reason, [{
+          text: `${count(agg.awardsT12Vendors)} scoped vendors observed winning work in the current window vs ${count(agg.awardsPrior12Vendors)} in the comparison window.`,
+          source: "Curated contract tracker (market record)", ownership: "market",
+        }], anchor.dataAsOf ?? anchor.lastIngest);
+      }
       const move = ratioMove(agg.awardsT12Vendors, agg.awardsPrior12Vendors);
       return metric(
         "m.intensity", "Competitive Intensity",
@@ -1930,39 +1982,12 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
     return t ? pick(t) ?? null : null;
   };
 
-  const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined): Metric =>
-    analysis ? { ...metricValue, analysis } : metricValue;
-
-  /* The band shows these four and the Market grid does not, so they would
-     otherwise carry no explanation anywhere. Analysed on the strip objects
-     themselves, so band and grid can never diverge. */
-  strip.buyerLeverage = withAnalysis(
-    strip.buyerLeverage,
-    rollupAnalysis(readingsFrom(mv((v) => v.metrics.buyerLeverage)), strip.buyerLeverage.state, BUYER_LEVERAGE_COPY),
-  );
-  strip.automationOpportunity = withAnalysis(
-    strip.automationOpportunity,
-    rollupAnalysis(readingsFrom(mv((v) => v.metrics.automationOpportunity)), strip.automationOpportunity.state, AUTOMATION_COPY),
-  );
-  strip.commercialOpportunities = withAnalysis(
-    strip.commercialOpportunities,
-    rollupAnalysis(
-      // same derivation the rollup itself uses: the vendor's overall band
-      vendors.map((v) => ({
-        name: v.name,
-        state: (v.overall.level === "very-high" || v.overall.level === "high"
-          ? "favourable"
-          : v.overall.level === "medium"
-            ? "mixed"
-            : v.overall.level === "insufficient"
-              ? "insufficient"
-              : "stable") as MetricState,
-        rank: levelScore(v.overall.level),
-      })),
-      strip.commercialOpportunities.state,
-      COMMERCIAL_COPY,
-    ),
-  );
+  /* A withheld reading must not keep a narrating body. Where the state is
+   insufficient the analysis would still describe a movement the metric has
+   just declined to assert — the raw counts stay in the basis, the story does
+   not. */
+const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined): Metric =>
+  metricValue.state === "insufficient" ? metricValue : ({ ...metricValue, analysis: analysis ?? metricValue.analysis });
   strip.marketHeat = withAnalysis(
     strip.marketHeat,
     rollupAnalysis(readingsFrom(mv((v) => v.metrics.dealMarketHeat)), strip.marketHeat.state, HEAT_COPY),
@@ -2253,13 +2278,21 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
        from one dataset. Per-vendor figures sum to this total by construction. */
     const recent = agg.awardsT12;
     const prior = agg.awardsPrior12;
+    /* Same confounded window as the demand metric: the curated export's tail is
+       empty while the comparison window matured fully, so a direction here
+       would be collection maturity wearing the clothes of a market movement. */
+    const flowGate = demandWindowInterpretable({
+      channel: "commercial-spine", windowDays: 365,
+      dataAsOf: anchor.dataAsOf, curatedAsOf: anchor.curatedAsOf,
+      today: new Date().toISOString().slice(0, 10),
+    });
     if (recent + prior > 0) {
       changes.push({
         dimension: "Deal flow (commercial)",
         metricId: "m.demand",
-        state: recent < prior ? "favourable" : recent > prior ? "unfavourable" : "stable",
-        movement: ratioMove(recent, prior),
-        detail: `${count(recent)} observed signings across the selected market in the ${commercialWindowLabel(anchor.dataAsOf, shortDate)}, vs ${count(prior)} in the prior 12 months.`,
+        state: flowGate.interpretable ? (recent < prior ? "favourable" : recent > prior ? "unfavourable" : "stable") : "insufficient",
+        movement: flowGate.interpretable ? ratioMove(recent, prior) : "insufficient",
+        detail: `${count(recent)} observed signings across the selected market in the ${commercialWindowLabel(anchor.dataAsOf, shortDate)}, vs ${count(prior)} in the prior 12 months.` + (flowGate.interpretable ? "" : ` ${flowGate.reason}`),
         confidence: "medium",
         source: "Contract market record",
       });
@@ -2277,13 +2310,17 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
 
   {
     // Public award flow — the fresh series.
+    const procGate = demandWindowInterpretable({
+      channel: "public-procurement", windowDays: 90, dataAsOf: proc.lastIngest,
+      today: new Date().toISOString().slice(0, 10),
+    });
     if (proc.totalT90 + proc.totalPrior90 >= 5) {
       changes.push({
         dimension: "Deal flow (public procurement)",
         metricId: "m.demand",
-        state: proc.totalT90 < proc.totalPrior90 ? "favourable" : proc.totalT90 > proc.totalPrior90 ? "unfavourable" : "stable",
-        movement: ratioMove(proc.totalT90, proc.totalPrior90),
-        detail: `${count(proc.totalT90)} public awards to selected vendors in the trailing 90 days vs ${count(proc.totalPrior90)} in the prior 90 (${historyModeLabel(procMonthly.mode)}; flow evidence, never enterprise pricing).`,
+        state: procGate.interpretable ? (proc.totalT90 < proc.totalPrior90 ? "favourable" : proc.totalT90 > proc.totalPrior90 ? "unfavourable" : "stable") : "insufficient",
+        movement: procGate.interpretable ? ratioMove(proc.totalT90, proc.totalPrior90) : "insufficient",
+        detail: `${count(proc.totalT90)} public awards observed in the current 90-day collection window vs ${count(proc.totalPrior90)} in the comparison window (${historyModeLabel(procMonthly.mode)}; flow evidence, never enterprise pricing).` + (procGate.interpretable ? "" : ` ${procGate.reason}`),
         confidence: "medium",
         source: procMonthly.source,
       });

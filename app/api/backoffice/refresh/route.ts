@@ -276,13 +276,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     writes = writes.then(fn, fn);
   };
 
+  /* Everything the child says that ISN'T a stage marker used to be parsed and
+     dropped, so a failing stage recorded only "stage FAILED: x" and the actual
+     error — the one line that would explain it — was lost. Keep a small rolling
+     tail and attach it to the failure, which is what makes a spawn-only failure
+     diagnosable at all. */
+  const TAIL = 40;
+  let tail: string[] = [];
+
   const onLine = (line: string) => {
     const start = /stage:\s+(\S+)/.exec(line);
     const ok = /stage OK:\s+(\S+)/.exec(line);
     const fail = /stage FAILED:\s+(\S+)/.exec(line);
-    if (ok) record(() => setStage(run.id, ok[1]!, "success"));
-    else if (fail) record(() => setStage(run.id, fail[1]!, "failed", line.trim()));
-    else if (start) record(() => setStage(run.id, start[1]!, "running"));
+    if (ok) {
+      tail = [];
+      record(() => setStage(run.id, ok[1]!, "success"));
+    } else if (fail) {
+      /* Wide enough to carry a stack-framed error: the first capture cut the
+         Prisma message off above the pnpm wrapper's own failure lines. */
+      const why = tail.filter((l) => l.trim()).slice(-18).join(" ⏎ ");
+      record(() => setStage(run.id, fail[1]!, "failed", why ? `${line.trim()} — ${why}` : line.trim()));
+      tail = [];
+    } else if (start) {
+      tail = [];
+      record(() => setStage(run.id, start[1]!, "running"));
+    } else {
+      tail.push(line);
+      if (tail.length > TAIL) tail.shift();
+    }
   };
 
   let buf = "";

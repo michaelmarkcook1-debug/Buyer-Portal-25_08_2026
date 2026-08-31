@@ -261,7 +261,7 @@ export interface MarketIntel {
    * observation date the commercial evidence itself contains (data-as-of).
    * Freshness is never inferred from ingestion timestamps alone.
    */
-  spine: { lastIngest: string; daysStale: number; dataAsOf: string | null; dataAgeDays: number | null };
+  spine: { lastIngest: string; daysStale: number; dataAsOf: string | null; dataAgeDays: number | null; curatedAsOf?: string | null };
   strip: {
     buyerLeverage: Metric;
     pricingPressure: Metric;

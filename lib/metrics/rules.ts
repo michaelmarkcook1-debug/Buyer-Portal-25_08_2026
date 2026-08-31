@@ -49,6 +49,83 @@ export function isAllowedPricingSource(source: string): boolean {
   return PRICING_EVIDENCE_SOURCES.has(source);
 }
 
+/* ── collection maturity: is a recent-window comparison interpretable? ──────
+   A trailing-window count comparison measures DEMAND only if both windows had
+   a comparable chance to fill. Where a source publishes long after the event,
+   the recent window is structurally empty and the comparison measures
+   collection maturity instead — a guaranteed "decline" whatever the market did.
+
+   Measured on the staged corpus (31 Aug 2026, tracked-vendor rows, awards
+   starting Jan 2024 – Mar 2026, n=17,505): the gap between an award's start
+   date and the date we hold it runs p25 358 days, median 522, p90 839. A
+   90-day window is roughly a quarter of even the p25 lag, so essentially
+   nothing that starts inside it has been published yet.
+
+   The commercial spine has a different failure: not lag but a frozen export.
+   Its newest announcement sits at the freeze date, so the current window
+   contains no evidence at all rather than partial evidence.
+
+   These are different faults and are tested differently. Both fail closed. */
+
+export interface WindowMaturity {
+  /** True only when the comparison can carry a demand conclusion. */
+  interpretable: boolean;
+  /** Operator/buyer-facing reason, used verbatim where the reading is withheld. */
+  reason: string;
+}
+
+/** Publication lag below which a trailing window cannot populate (measured p25). */
+export const PUBLIC_AWARD_P25_LAG_DAYS = 358;
+
+const daysBetween = (fromIso: string, toIso: string): number =>
+  Math.round((Date.parse(toIso) - Date.parse(fromIso)) / 86_400_000);
+
+export function demandWindowInterpretable(input: {
+  channel: "public-procurement" | "commercial-spine";
+  windowDays: number;
+  /** Newest evidence date the family actually holds. */
+  dataAsOf: string | null;
+  /** The curated export's own newest evidence, where it differs from the anchor. */
+  curatedAsOf?: string | null;
+  /** Reference date the window ends on. */
+  today: string;
+}): WindowMaturity {
+  if (input.channel === "public-procurement") {
+    // Lag, not staleness: the records exist, they just are not published yet.
+    if (input.windowDays < PUBLIC_AWARD_P25_LAG_DAYS) {
+      return {
+        interpretable: false,
+        reason:
+          `Current-period collection is materially incomplete: public awards reach this record a median of ~522 days ` +
+          `after they start, so a ${input.windowDays}-day window cannot yet contain them. No demand conclusion is drawn.`,
+      };
+    }
+    return { interpretable: true, reason: "" };
+  }
+
+  /* Commercial spine: a FROZEN export, not a lagging one, so the test is
+     different. The window is anchored to the evidence itself (it ends at
+     data-as-of, not at today's clock), which is already honest. What the
+     freeze does is empty the window's TAIL: the curated export stops before
+     the anchor, while the prior window it is compared against had matured
+     fully. Beyond roughly a fifth of the window missing, that asymmetry alone
+     can produce the fall. */
+  if (!input.dataAsOf) {
+    return { interpretable: false, reason: "The commercial record carries no evidence date, so its window cannot be dated." };
+  }
+  const tailGapDays = input.curatedAsOf ? daysBetween(input.curatedAsOf, input.dataAsOf) : 0;
+  const share = tailGapDays / input.windowDays;
+  if (share > 0.2) {
+    return {
+      interpretable: false,
+      reason:
+        `The curated commercial export stops ${tailGapDays} days before the end of the window being compared, leaving roughly ` +
+        `${Math.round(share * 100)}% of it without evidence while the comparison window matured fully. No demand conclusion is drawn.`,
+    };
+  }
+  return { interpretable: true, reason: "" };
+}
+
 /** Deal-market state from fresh procurement flow. Cooling favours the buyer. */
 export function procurementHeatState(t90: number, prior90: number): {
   usable: boolean;
@@ -56,6 +133,12 @@ export function procurementHeatState(t90: number, prior90: number): {
   movement: Movement;
 } {
   if (t90 + prior90 < 3) return { usable: false, state: "stable", movement: "insufficient" };
+  /* Same 90-day window as services demand, and the same measured publication
+     lag defeats it: a cooling read here would be collection maturity, not a
+     cooling market. */
+  if (!demandWindowInterpretable({ channel: "public-procurement", windowDays: 90, dataAsOf: null, today: "" }).interpretable) {
+    return { usable: false, state: "stable", movement: "insufficient" };
+  }
   const movement = ratioMove(t90, prior90);
   const state = movement.includes("deteriorating")
     ? ("favourable" as const)

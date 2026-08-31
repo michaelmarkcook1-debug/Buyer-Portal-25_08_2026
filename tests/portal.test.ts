@@ -267,8 +267,13 @@ describe("data-engine truth gates (Sprint 1 §18)", () => {
 
   it("procurement heat refuses to read below the observation floor", () => {
     expect(procurementHeatState(1, 1).usable).toBe(false);
-    expect(procurementHeatState(9, 3)).toMatchObject({ usable: true, state: "unfavourable" });
-    expect(procurementHeatState(2, 8)).toMatchObject({ usable: true, state: "favourable" });
+    /* The observation floor still refuses thin volumes. Above it, the 90-day
+       window is now closed as well: the measured publication lag means a
+       cooling read there would be collection maturity, not a cooling market. */
+    expect(procurementHeatState(12, 146)).toMatchObject({ usable: false, movement: "insufficient" });
+    // above the floor too: every 90-day read is now withheld, whatever the
+    // volumes, because the window itself is the thing that cannot be trusted
+    expect(procurementHeatState(2, 8)).toMatchObject({ usable: false, movement: "insufficient" });
   });
 
   it("seed/stale AI Enterprise intelligence cannot enter portal metrics", () => {
@@ -479,7 +484,7 @@ describe("insight cache hardening (sprint 3 fix 1)", () => {
 
 /* ── Sprint 3 Stage 2: band-aware delivery economics (P4) ── */
 
-import { deliveryCostForBand } from "@/lib/metrics/rules";
+import { deliveryCostForBand, demandWindowInterpretable, PUBLIC_AWARD_P25_LAG_DAYS } from "@/lib/metrics/rules";
 import { deliveryExposure } from "@/lib/metrics/exposure";
 
 describe("delivery-location economics (sprint 3 P4)", () => {
@@ -1633,6 +1638,74 @@ describe("backoffice manual refresh (2026-08-25)", () => {
   });
 });
 
+describe("collection maturity must not read as demand (2026-08-31)", () => {
+  const resolveSrc = readFileSync(resolve(__dirname, "../lib/metrics/resolve.ts"), "utf8");
+  const today = "2026-08-31";
+
+  it("a trailing window shorter than the publication lag carries no demand reading", () => {
+    // measured on the staged corpus: p25 358 days, median 522, p90 839.
+    // A 90-day window is a quarter of even the p25, so nothing that starts
+    // inside it has been published yet — the fall is collection, not demand.
+    expect(PUBLIC_AWARD_P25_LAG_DAYS).toBeGreaterThan(300);
+    const g = demandWindowInterpretable({ channel: "public-procurement", windowDays: 90, dataAsOf: "2026-08-20", today });
+    expect(g.interpretable).toBe(false);
+    expect(g.reason).toMatch(/collection is materially incomplete/i);
+    expect(g.reason).toMatch(/no demand conclusion is drawn/i);
+    // a window long enough to have matured is allowed through
+    expect(demandWindowInterpretable({ channel: "public-procurement", windowDays: 730, dataAsOf: "2026-08-20", today }).interpretable).toBe(true);
+  });
+
+  it("deal-market heat cannot ride the same 90-day window either", () => {
+    // it used to fall back to a cooling read the moment volumes moved
+    expect(procurementHeatState(11, 141).usable).toBe(false);
+    expect(procurementHeatState(11, 141).movement).toBe("insufficient");
+  });
+
+  it("a frozen export empties the window's tail and withholds the reading", () => {
+    // curated export stops 16 Apr while the window runs to 7 Jul: ~22% of the
+    // current window has no evidence, against a fully matured comparison
+    const frozen = demandWindowInterpretable({
+      channel: "commercial-spine", windowDays: 365,
+      dataAsOf: "2026-07-07", curatedAsOf: "2026-04-16", today,
+    });
+    expect(frozen.interpretable).toBe(false);
+    expect(frozen.reason).toMatch(/stops \d+ days before the end of the window/);
+    // and it self-heals: a current export restores the reading, no code change
+    expect(demandWindowInterpretable({
+      channel: "commercial-spine", windowDays: 365,
+      dataAsOf: "2026-07-07", curatedAsOf: "2026-07-01", today,
+    }).interpretable).toBe(true);
+  });
+
+  it("a lag failure and a freeze failure are told apart", () => {
+    // different faults, different remedies — never one crude correction
+    const lag = demandWindowInterpretable({ channel: "public-procurement", windowDays: 90, dataAsOf: "2026-08-20", today });
+    const freeze = demandWindowInterpretable({ channel: "commercial-spine", windowDays: 365, dataAsOf: "2026-07-07", curatedAsOf: "2026-04-16", today });
+    expect(lag.reason).not.toEqual(freeze.reason);
+    expect(lag.reason).toMatch(/522 days|publication|reach this record/i);
+    expect(freeze.reason).toMatch(/export stops/i);
+  });
+
+  it("withheld readings keep their evidence but lose their conclusion", () => {
+    // §4: correct the inference, do not hide the counts
+    expect(resolveSrc).toMatch(/const insufficientMetric = \(id: string, label: string, note: string, basis: Basis\[\] = \[\]/);
+    // §5: an insufficient reading must not keep a narrating analysis body
+    expect(resolveSrc).toMatch(/metricValue\.state === "insufficient" \? metricValue/);
+    // the counts are relabelled as collection, not as market demand
+    expect(resolveSrc).toMatch(/observed in the current 90-day collection window/);
+    expect(resolveSrc).toMatch(/in the comparison window/);
+  });
+
+  it("every channel that reads those windows is gated, not just the headline", () => {
+    for (const metric of ["m.demand", "m.intensity", "dealMarketHeat"]) {
+      expect(resolveSrc, `${metric} still asserts from an ungated window`).toContain(metric);
+    }
+    // demand, intensity, heat and both retrospective rows all consult the gate
+    const gateUses = (resolveSrc.match(/demandWindowInterpretable\(/g) ?? []).length;
+    expect(gateUses).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe("backoffice freshness semantics (2026-08-31)", () => {
   const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
   const runState = readFileSync(resolve(__dirname, "../lib/backoffice/run-state.ts"), "utf8");
@@ -1700,7 +1773,9 @@ describe("backoffice freshness semantics (2026-08-31)", () => {
     expect(byTable["stg_analystgenius_signal"]).toBe('"analystgenius"');
     // no stage lands these, and the table must say so rather than imply staleness
     expect(byTable["stg_procurement_contract"]).toBe("null");
-    expect(byTable["stg_sec_event"]).toBe("null");
+    // the SEC row now points at where the stage actually lands (capability
+    // events, source_system sec_edgar_8k); stg_sec_event keeps its history
+    expect(byTable["stg_capability_event"]).toBe('"sec-events"');
     expect(page).toMatch(/not in this refresh/);
   });
 
@@ -2430,9 +2505,11 @@ describe("buyer effect \u2260 raw movement direction (2026-08-30)", () => {
   it("resolves the two variables that invert against each other", () => {
     // fewer awards is "Softening" on demand and "Cool" on heat; each reading
     // takes ITS OWN state's effect, so both render correctly at once
-    expect(procurementHeatState(12, 146).state).toBe("favourable");
-    expect(procurementHeatState(12, 146).movement).toBe("materially-deteriorating");
-    expect(readingEffect("dealMarketHeat", procurementHeatState(12, 146).state)).toBe("favourable");
+    /* The heat path no longer produces a state from the 90-day window at all
+       (collection maturity, 2026-08-31), so the inversion is asserted where it
+       actually lives — the dictionary — rather than through a closed path. */
+    expect(procurementHeatState(12, 146).usable).toBe(false);
+    expect(readingEffect("dealMarketHeat", "favourable")).toBe("favourable");
     expect(readingEffect("m.demand", "unfavourable")).toBe("caution");
     // a strengthening supplier is a caution, never a buyer win
     expect(readingEffect("providerMomentum", "favourable")).toBe("caution");

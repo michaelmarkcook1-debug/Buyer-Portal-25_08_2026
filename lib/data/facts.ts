@@ -63,7 +63,10 @@ export interface SourceFreshness {
  * evidence date, or null where the source carries no such date. It is never
  * substituted with the ingestion date.
  */
-const FRESHNESS_SOURCES = [
+const FRESHNESS_SOURCES: readonly {
+  table: string; source: string; feeds: string; stage: string | null;
+  evidence: string | null; where?: string;
+}[] = [
   {
     table: "stg_curated_deal",
     stage: "contract-tracker",
@@ -104,17 +107,23 @@ const FRESHNESS_SOURCES = [
     evidence: null,
   },
   {
-    table: "stg_sec_event",
-    stage: null,
+    /* SEC discovery moved: the sec-events stage lands stg_capability_event
+       (source_system 'sec_edgar'), alongside the partnership and tracker
+       families. stg_sec_event still holds its 253 historical rows and is left
+       untouched — but pointing the freshness row at it made a live, working
+       stage look permanently stale from 21 Aug. */
+    table: "stg_capability_event",
+    where: `source_system = 'sec_edgar_8k'`,
+    stage: "sec-events",
     source: "SEC 8-K filings",
     feeds: "corporate events, US-listed vendors",
-    evidence: `to_char(max(filed_at), 'YYYY-MM-DD')`,
+    evidence: `max(left(announcement_date_raw, 10))`,
   },
 ] as const;
 
 export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
   const rows = await Promise.all(
-    FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence, stage }) => {
+    FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence, stage, where }) => {
       // Table names and expressions come from the const list above, never from user input.
       const [r] = await q<{
         rows: string; snapshots: string; first_seen: string | null; last_seen: string | null;
@@ -127,7 +136,7 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
                 (current_date - max(ingested_at)::date) AS days_since,
                 ${evidence ?? "NULL"} AS evidence_date,
                 ${evidence ? `(current_date - (${evidence})::date)` : "NULL"} AS evidence_days
-           FROM ${table}`,
+           FROM ${table}${where ? ` WHERE ${where}` : ""}`,
       );
       return {
         source,
@@ -158,10 +167,12 @@ export interface SpineAnchor {
    */
   dataAsOf: string | null;
   dataAgeDays: number | null;
+  /** The curated spine's own newest evidence, apart from the combined anchor. */
+  curatedAsOf: string | null;
 }
 
 export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
-  const [r] = await q<{ last: string; days: string; as_of: string | null; age: string | null }>(
+  const [r] = await q<{ last: string; days: string; as_of: string | null; age: string | null; curated_as_of: string | null }>(
     `WITH curated AS (
        SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date AS d
          FROM stg_curated_deal
@@ -178,6 +189,7 @@ export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
      SELECT to_char(max(sd.ingested_at), 'YYYY-MM-DD') AS last,
             (current_date - max(sd.ingested_at)::date) AS days,
             to_char(GREATEST((SELECT d FROM curated), (SELECT d FROM store)), 'YYYY-MM-DD') AS as_of,
+            to_char((SELECT d FROM curated), 'YYYY-MM-DD') AS curated_as_of,
             (current_date - GREATEST((SELECT d FROM curated), (SELECT d FROM store))) AS age
        FROM stg_curated_deal sd`,
   );
@@ -185,6 +197,11 @@ export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
     lastIngest: r?.last ?? "",
     daysStale: Number(r?.days ?? 0),
     dataAsOf: r?.as_of ?? null,
+    /* The curated spine's OWN newest evidence, held apart from the combined
+       anchor. When the xlsx export is frozen this sits well behind dataAsOf,
+       leaving the tail of any 12-month window empty — which a comparison
+       against a fully-matured prior window reads as falling demand. */
+    curatedAsOf: r?.curated_as_of ?? null,
     dataAgeDays: r?.age == null ? null : Number(r.age),
   };
 });
