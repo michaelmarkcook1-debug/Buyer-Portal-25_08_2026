@@ -1633,6 +1633,91 @@ describe("backoffice manual refresh (2026-08-25)", () => {
   });
 });
 
+describe("backoffice freshness semantics (2026-08-31)", () => {
+  const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+  const runState = readFileSync(resolve(__dirname, "../lib/backoffice/run-state.ts"), "utf8");
+  const page = readFileSync(resolve(__dirname, "../app/backoffice/page.tsx"), "utf8");
+  const sources = facts.slice(facts.indexOf("const FRESHNESS_SOURCES"), facts.indexOf("export const getFreshness"));
+
+  it("keeps checked, content-change and evidence as three separate facts", () => {
+    // "Last ingestion" alone could not tell a successful no-op apart from a
+    // pipeline that had stopped running — 23 Jun read as "not run since June"
+    // when the stage had in fact run that morning and found nothing new.
+    for (const col of ["Checked", "Content changed", "Evidence through"]) {
+      expect(page, `freshness table lost the "${col}" column`).toMatch(new RegExp(`>${col}<`));
+    }
+    // and the header names the same three for the commercial spine
+    expect(page).toMatch(/Spine checked/);
+    expect(page).toMatch(/Spine content changed/);
+    expect(page).toMatch(/Evidence through/);
+  });
+
+  it("takes 'did it run' from the run record, never from a table timestamp", () => {
+    // a source checked today that contained nothing new leaves ingested_at
+    // exactly where it was, so only the run record knows the stage ran
+    expect(runState).toMatch(/export async function lastSuccessfulChecks/);
+    const fn = runState.slice(runState.indexOf("export async function lastSuccessfulChecks"), runState.indexOf("/** Record a stage transition"));
+    expect(fn).toMatch(/portal_refresh_run/);
+    expect(fn).toMatch(/'success'/);
+    expect(fn).toMatch(/finishedAt/);
+    // the page reads checks from that map, not from lastSeen
+    expect(page).toMatch(/lastSuccessfulChecks\(\)/);
+    expect(page).toMatch(/checks\.get\(f\.stage\)/);
+  });
+
+  it("a failed stage is never reported as a successful check", () => {
+    const fn = runState.slice(runState.indexOf("export async function lastSuccessfulChecks"), runState.indexOf("/** Record a stage transition"));
+    // only success contributes; a failed or running stage must not qualify
+    expect(fn).toMatch(/WHERE s->>'status' = 'success'/);
+    expect(fn).not.toMatch(/'failed'|'running'|'pending'/);
+  });
+
+  it("§14 no freshness laundering — an ingest time can never become an evidence date", () => {
+    // every family's evidence expression must read a real source date column
+    const evidenceExprs = [...sources.matchAll(/evidence:\s*`([^`]+)`/g)].map((m) => m[1]!);
+    expect(evidenceExprs.length).toBeGreaterThanOrEqual(4);
+    for (const e of evidenceExprs) {
+      expect(e, `evidence expression launders an ingest time: ${e}`).not.toMatch(/ingested_at|created_at|updated_at|current_timestamp|now\(\)/i);
+    }
+    // and the spine anchor derives its as-of from announcement dates, not ingest
+    const anchorFn = facts.slice(facts.indexOf("export const getSpineAnchor"), facts.indexOf("/* ───────────────────────── Vendor universe"));
+    expect(anchorFn).toMatch(/announcement_date_raw/);
+    expect(anchorFn).toMatch(/AS as_of/);
+    // last is explicitly the ingest, and stays labelled as such
+    expect(anchorFn).toMatch(/max\(sd\.ingested_at\)[^)]*\)\s*AS last/);
+  });
+
+  it("every family states which stage lands it, and null is a decision", () => {
+    // procurement is imported by hand; stg_sec_event is no longer written by
+    // the sec-events stage (that lands stg_capability_event). Both would read
+    // as permanently stale if a stage were claimed for them.
+    const tables = [...sources.matchAll(/table:\s*"([^"]+)"/g)].map((m) => m[1]!);
+    const stages = [...sources.matchAll(/stage:\s*(null|"[^"]+")/g)].map((m) => m[1]!);
+    expect(stages.length, "a family declares no stage key at all").toBe(tables.length);
+    const byTable = Object.fromEntries(tables.map((t, i) => [t, stages[i]!]));
+    expect(byTable["stg_curated_deal"]).toBe('"contract-tracker"');
+    expect(byTable["stg_contract_store"]).toBe('"contract-store"');
+    expect(byTable["stg_analystgenius_signal"]).toBe('"analystgenius"');
+    // no stage lands these, and the table must say so rather than imply staleness
+    expect(byTable["stg_procurement_contract"]).toBe("null");
+    expect(byTable["stg_sec_event"]).toBe("null");
+    expect(page).toMatch(/not in this refresh/);
+  });
+
+  it("procurement cannot look healthy just because a refresh ran", () => {
+    // its source aggregation is blocked upstream and no stage imports it, so
+    // "checked" must never claim a run it was not part of
+    const idx = sources.indexOf('table: "stg_procurement_contract"');
+    expect(idx).toBeGreaterThan(0);
+    expect(sources.slice(idx, idx + 220)).toMatch(/stage:\s*null/);
+  });
+
+  it("explains the no-op case in one line rather than becoming documentation", () => {
+    expect(page).toMatch(/does not move the content date when the source contains nothing new/);
+    expect(page).toMatch(/evidence dates move only when newer source evidence is actually landed/i);
+  });
+});
+
 describe("local-manual operating mode (2026-08-25)", () => {
   /* During testing, refreshes run on the AG machine and write to the shared
      spine; the deployed portal reads it. The deployed instance therefore

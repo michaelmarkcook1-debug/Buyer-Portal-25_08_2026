@@ -33,6 +33,14 @@ const COMMERCIAL_SYSTEMS = ["contract_tracker", "contract_tracker_store"];
 export interface SourceFreshness {
   source: string;
   feeds: string;
+  /**
+   * The refresh stage that lands this table, or null where no stage does.
+   * Null is a real answer, not a gap: procurement is imported by hand, and
+   * stg_sec_event is no longer written by the sec-events stage (that stage
+   * lands stg_capability_event). Both would otherwise look permanently stale
+   * while the pipeline ran perfectly.
+   */
+  stage: string | null;
   rows: number;
   snapshots: number;
   firstSeen: string | null;
@@ -58,6 +66,7 @@ export interface SourceFreshness {
 const FRESHNESS_SOURCES = [
   {
     table: "stg_curated_deal",
+    stage: "contract-tracker",
     source: "Curated contract tracker",
     feeds: "contract spine — awards, renewals, values",
     // Excel serial day -> date
@@ -65,18 +74,21 @@ const FRESHNESS_SOURCES = [
   },
   {
     table: "stg_contract_store",
+    stage: "contract-store",
     source: "Contract Tracker curated store",
     feeds: "validated discovered contracts, renewal intelligence",
     evidence: `max(left(announcement_date_raw, 10)) FILTER (WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
   },
   {
     table: "stg_procurement_contract",
+    stage: null,
     source: "Public procurement record",
     feeds: "award flow across 6 jurisdictions — market evidence",
     evidence: `max(left(start_date_raw, 10)) FILTER (WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
   },
   {
     table: "stg_analystgenius_signal",
+    stage: "analystgenius",
     source: "AnalystGenius signals",
     feeds: "talent, reputation, top issues, claims vs delivery",
     // as_of_date is stored as text, so it is compared and trimmed as text
@@ -84,6 +96,7 @@ const FRESHNESS_SOURCES = [
   },
   {
     table: "stg_analystgenius_provider",
+    stage: "analystgenius",
     source: "AnalystGenius vendor catalog",
     feeds: "revenue, growth, AI readiness",
     // The catalog is a current-state snapshot and carries no evidence date of
@@ -92,6 +105,7 @@ const FRESHNESS_SOURCES = [
   },
   {
     table: "stg_sec_event",
+    stage: null,
     source: "SEC 8-K filings",
     feeds: "corporate events, US-listed vendors",
     evidence: `to_char(max(filed_at), 'YYYY-MM-DD')`,
@@ -100,7 +114,7 @@ const FRESHNESS_SOURCES = [
 
 export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
   const rows = await Promise.all(
-    FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence }) => {
+    FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence, stage }) => {
       // Table names and expressions come from the const list above, never from user input.
       const [r] = await q<{
         rows: string; snapshots: string; first_seen: string | null; last_seen: string | null;
@@ -118,6 +132,7 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
       return {
         source,
         feeds,
+        stage,
         rows: Number(r?.rows ?? 0),
         snapshots: Number(r?.snapshots ?? 0),
         firstSeen: r?.first_seen ?? null,

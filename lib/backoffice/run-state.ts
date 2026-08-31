@@ -154,6 +154,33 @@ export async function claimRun(runner: string, requestedBy = "backoffice"): Prom
   return rows[0] ? toRun(rows[0]) : null;
 }
 
+/**
+ * When each stage last COMPLETED SUCCESSFULLY — the operational answer to
+ * "did the pipeline run?", taken from the refresh-run record rather than
+ * inferred from table timestamps.
+ *
+ * The distinction matters: a source checked today that contained nothing new
+ * leaves its rows' ingested_at exactly where they were, so a table timestamp
+ * cannot tell a successful no-op apart from a pipeline that stopped running.
+ * Only the run record knows.
+ *
+ * A failed stage contributes nothing, so a family whose stage errored is
+ * never reported as checked.
+ */
+export async function lastSuccessfulChecks(): Promise<Map<string, string>> {
+  await ensureTable();
+  const rows = await q<{ stage: string; last_ok: string | null }>(
+    `SELECT s->>'id' AS stage,
+            to_char(max((s->>'finishedAt')::timestamptz), 'YYYY-MM-DD') AS last_ok
+       FROM portal_refresh_run r, jsonb_array_elements(r.stages) s
+      WHERE s->>'status' = 'success' AND s->>'finishedAt' IS NOT NULL
+      GROUP BY 1`,
+  );
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.stage && r.last_ok) out.set(r.stage, r.last_ok);
+  return out;
+}
+
 /** Record a stage transition against an active run. */
 export async function setStage(
   runId: string,

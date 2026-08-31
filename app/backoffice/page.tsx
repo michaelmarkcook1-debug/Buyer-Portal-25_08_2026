@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BackofficeRefresh } from "@/components/BackofficeRefresh";
 import { Hairline, Panel, SectionHeader } from "@/components/ui";
 import { detectExecutor } from "@/lib/backoffice/executor";
+import { lastSuccessfulChecks, latestRun } from "@/lib/backoffice/run-state";
 import { getFreshness, getSpineAnchor } from "@/lib/data/facts";
 import { isDbConfigured } from "@/lib/db";
 import { count, shortDate } from "@/lib/format";
@@ -25,9 +26,15 @@ export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robot
 export default async function BackofficePage() {
   const executor = detectExecutor();
   const ready = isDbConfigured();
-  const [freshness, spine] = ready
-    ? await Promise.all([getFreshness(), getSpineAnchor()])
-    : [[], { lastIngest: "", daysStale: 0, dataAsOf: null, dataAgeDays: null }];
+  const [freshness, spine, checks, lastRun] = ready
+    ? await Promise.all([getFreshness(), getSpineAnchor(), lastSuccessfulChecks(), latestRun()])
+    : [[], { lastIngest: "", daysStale: 0, dataAsOf: null, dataAgeDays: null }, new Map<string, string>(), null];
+  /* Three different facts, kept apart on purpose:
+       checked          did the stage run — from the refresh-run record
+       content changed  did anything new persist — max(ingested_at)
+       evidence through what the data is ABOUT — the family's own evidence date
+     A successful refresh over an unchanged source moves only the first. */
+  const spineChecked = checks.get("contract-tracker") ?? null;
   const tracker = freshness.find((f) => /Contract Tracker curated store/i.test(f.source)) ?? null;
   return (
     <main className="mx-auto w-full max-w-[880px] px-5 pb-16 pt-10 sm:px-8">
@@ -93,19 +100,27 @@ export default async function BackofficePage() {
         </div>
         <div>
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
-            Latest evidence
+            Spine checked
           </div>
           <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
-            {spine.dataAsOf ? shortDate(spine.dataAsOf) : "—"}
-            {spine.dataAgeDays == null ? "" : ` · ${spine.dataAgeDays} days old`}
+            {spineChecked ? shortDate(spineChecked) : lastRun ? "no successful run recorded" : "no run recorded"}
           </div>
         </div>
         <div>
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
-            Last ingestion
+            Spine content changed
           </div>
           <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
             {spine.lastIngest ? shortDate(spine.lastIngest) : "—"}
+          </div>
+        </div>
+        <div>
+          <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
+            Evidence through
+          </div>
+          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+            {spine.dataAsOf ? shortDate(spine.dataAsOf) : "—"}
+            {spine.dataAgeDays == null ? "" : ` · ${spine.dataAgeDays} days old`}
           </div>
         </div>
       </div>
@@ -123,7 +138,7 @@ export default async function BackofficePage() {
         <SectionHeader
           eyebrow="Freshness"
           title="Evidence by family"
-          aside="Evidence date is what the data is about; ingestion is when we last landed it"
+          aside="Checked, changed and evidence are three different facts"
         />
         <div className="mt-5">
           <Panel className="overflow-hidden">
@@ -133,8 +148,9 @@ export default async function BackofficePage() {
                   <tr>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence family</th>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Feeds</th>
-                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence date</th>
-                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Last ingestion</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Checked</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Content changed</th>
+                    <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence through</th>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Rows</th>
                   </tr>
                 </thead>
@@ -143,6 +159,26 @@ export default async function BackofficePage() {
                     <tr key={f.source} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                       <td className="px-4 py-3" style={{ color: "var(--fg)" }}>{f.source}</td>
                       <td className="px-4 py-3" style={{ color: "var(--fg-muted)" }}>{f.feeds}</td>
+                      {/* DID THE STAGE RUN — from the refresh-run record, never
+                          from a table timestamp. A family no stage lands says so
+                          rather than reading as permanently stale. */}
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>
+                        {f.stage == null ? (
+                          <span style={{ color: "var(--data-watch-ink)" }}>not in this refresh</span>
+                        ) : checks.get(f.stage) ? (
+                          shortDate(checks.get(f.stage)!)
+                        ) : (
+                          <span style={{ color: "var(--fg-dim)" }}>no successful run recorded</span>
+                        )}
+                      </td>
+                      {/* DID ANYTHING NEW PERSIST — unchanged rows keep their
+                          original stamp, so this moves only on real change. */}
+                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>
+                        {f.lastSeen ? shortDate(f.lastSeen) : "—"}
+                        {f.daysSince == null ? "" : (
+                          <span style={{ color: "var(--fg-dim)" }}> · {f.daysSince}d ago</span>
+                        )}
+                      </td>
                       {/* What the data is ABOUT. The catalog carries no evidence
                           date of its own and says so rather than borrowing the
                           ingestion date. */}
@@ -152,13 +188,6 @@ export default async function BackofficePage() {
                           <span style={{ color: "var(--fg-dim)" }}> · {f.evidenceDaysSince}d old</span>
                         )}
                       </td>
-                      {/* When we last LANDED it. */}
-                      <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>
-                        {f.lastSeen ? shortDate(f.lastSeen) : "—"}
-                        {f.daysSince == null ? "" : (
-                          <span style={{ color: "var(--fg-dim)" }}> · {f.daysSince}d ago</span>
-                        )}
-                      </td>
                       <td className="tabular px-4 py-3" style={{ color: "var(--fg-muted)" }}>{count(f.rows)}</td>
                     </tr>
                   ))}
@@ -166,6 +195,12 @@ export default async function BackofficePage() {
               </table>
             </div>
           </Panel>
+          <p className="mt-3 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            A successful refresh does not move the content date when the source contains nothing new,
+            and evidence dates move only when newer source evidence is actually landed. A family marked{" "}
+            <em>not in this refresh</em> is imported separately — its dates are real, but no stage here
+            maintains them.
+          </p>
           <p className="mt-3 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             The portal&apos;s commercial evidence anchor is{" "}
             <strong style={{ color: "var(--fg)" }}>{spine.dataAsOf ? shortDate(spine.dataAsOf) : "not established"}</strong>
