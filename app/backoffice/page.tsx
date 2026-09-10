@@ -46,7 +46,7 @@ export default async function BackofficePage() {
             shell, so without this the only exit is the browser's back button. */}
         <Link
           href="/"
-          className="tap-link code text-[0.86rem] underline-offset-4 hover:underline"
+          className="tap-link code text-[0.92rem] underline-offset-4 hover:underline"
           style={{ color: "var(--fg-muted)" }}
         >
           ← Back to portal
@@ -55,7 +55,7 @@ export default async function BackofficePage() {
       <h1 className="display mt-2 text-[1.9rem] leading-tight" style={{ color: "var(--fg)" }}>
         Manual data refresh
       </h1>
-      <p className="mt-3 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mt-3 max-w-[70ch] text-[1.03rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         {executor.reason === "local-execution" ? (
           <>
             Refresh is manual until further notice: run → validate results → review the portal →
@@ -90,7 +90,7 @@ export default async function BackofficePage() {
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
             Execution
           </div>
-          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+          <div className="mt-1 text-[1.00rem]" style={{ color: "var(--fg)" }}>
             {executor.reason === "local-execution"
               ? "This machine"
               : executor.reason === "github-actions"
@@ -102,7 +102,7 @@ export default async function BackofficePage() {
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
             Spine checked
           </div>
-          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+          <div className="mt-1 text-[1.00rem]" style={{ color: "var(--fg)" }}>
             {spineChecked ? shortDate(spineChecked) : lastRun ? "no successful run recorded" : "no run recorded"}
           </div>
         </div>
@@ -110,7 +110,7 @@ export default async function BackofficePage() {
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
             Spine content changed
           </div>
-          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+          <div className="mt-1 text-[1.00rem]" style={{ color: "var(--fg)" }}>
             {spine.lastIngest ? shortDate(spine.lastIngest) : "—"}
           </div>
         </div>
@@ -118,7 +118,7 @@ export default async function BackofficePage() {
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
             Evidence through
           </div>
-          <div className="mt-1 text-[0.98rem]" style={{ color: "var(--fg)" }}>
+          <div className="mt-1 text-[1.00rem]" style={{ color: "var(--fg)" }}>
             {spine.dataAsOf ? shortDate(spine.dataAsOf) : "—"}
             {spine.dataAgeDays == null ? "" : ` · ${spine.dataAgeDays} days old`}
           </div>
@@ -143,7 +143,7 @@ export default async function BackofficePage() {
         <div className="mt-5">
           <Panel className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[0.95rem]" style={{ minWidth: 620 }}>
+              <table className="w-full border-collapse text-[0.98rem]" style={{ minWidth: 620 }}>
                 <thead>
                   <tr>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Evidence family</th>
@@ -195,13 +195,13 @@ export default async function BackofficePage() {
               </table>
             </div>
           </Panel>
-          <p className="mt-3 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-3 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             A successful refresh does not move the content date when the source contains nothing new,
             and evidence dates move only when newer source evidence is actually landed. A family marked{" "}
             <em>not in this refresh</em> is imported separately — its dates are real, but no stage here
             maintains them.
           </p>
-          <p className="mt-3 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-3 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             The portal&apos;s commercial evidence anchor is{" "}
             <strong style={{ color: "var(--fg)" }}>{spine.dataAsOf ? shortDate(spine.dataAsOf) : "not established"}</strong>
             {spine.dataAgeDays != null ? ` (${count(spine.dataAgeDays)} days old)` : ""} — derived from the newest
@@ -219,13 +219,13 @@ export default async function BackofficePage() {
             <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
               <div>
                 <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Included in manual refresh</div>
-                <div className="mt-1 text-[1.02rem]" style={{ color: "var(--data-watch-ink)" }}>
+                <div className="mt-1 text-[1.03rem]" style={{ color: "var(--data-watch-ink)" }}>
                   No — discovery, import and confirmation are all excluded
                 </div>
               </div>
               <div>
                 <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>State</div>
-                <div className="mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>
+                <div className="mt-1 text-[1.03rem]" style={{ color: "var(--fg)" }}>
                   Frozen at its confirmed 16 Apr 2026 state
                 </div>
               </div>
@@ -233,19 +233,19 @@ export default async function BackofficePage() {
                 <>
                   <div>
                     <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Curated store — last ingestion</div>
-                    <div className="tabular mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>
+                    <div className="tabular mt-1 text-[1.03rem]" style={{ color: "var(--fg)" }}>
                       {tracker.lastSeen ?? "—"}
                       {tracker.daysSince != null ? ` · ${count(tracker.daysSince)}d ago` : ""}
                     </div>
                   </div>
                   <div>
                     <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Rows on the market record</div>
-                    <div className="tabular mt-1 text-[1.02rem]" style={{ color: "var(--fg)" }}>{count(tracker.rows)}</div>
+                    <div className="tabular mt-1 text-[1.03rem]" style={{ color: "var(--fg)" }}>{count(tracker.rows)}</div>
                   </div>
                 </>
               ) : null}
             </div>
-            <p className="mt-4 mb-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            <p className="mt-4 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               Reopening this workstream is a separate, explicit decision. Nothing in the manual refresh confirms a
               held record, promotes an unreviewed one, or runs tracker discovery.
             </p>
@@ -259,7 +259,7 @@ export default async function BackofficePage() {
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <div className="eyebrow">Runs (in order)</div>
-              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.95rem]" style={{ color: "var(--fg)" }}>
+              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.98rem]" style={{ color: "var(--fg)" }}>
                 <li>AnalystGenius intelligence — GET-only read</li>
                 <li>AI Enterprise — read-only extract</li>
                 <li>AI/commercial capability events (confirmed store set + partnerships)</li>
@@ -272,7 +272,7 @@ export default async function BackofficePage() {
             </div>
             <div>
               <div className="eyebrow">Deliberately excluded</div>
-              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
+              <ul className="m-0 mt-2 list-none space-y-1.5 p-0 text-[0.98rem]" style={{ color: "var(--fg-muted)" }}>
                 <li>Contract Tracker discovery / import / confirmation — frozen at its confirmed 16 Apr 2026 state</li>
                 <li>xlsx bridge (manual-export dependent)</li>
                 <li>Any write to the protected AnalystGenius production service — its only touchpoint is a read</li>
@@ -281,7 +281,7 @@ export default async function BackofficePage() {
             </div>
           </div>
           <Hairline className="my-4" />
-          <p className="code m-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+          <p className="code m-0 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
             Stage failures are reported individually and never hidden; a failed stage does not block the others.
             Terminal equivalent: cd &quot;AG Sourcing Tool 20_06_2026&quot; &amp;&amp; ./ops/refresh-manual.sh
           </p>
@@ -292,7 +292,7 @@ export default async function BackofficePage() {
         <SectionHeader eyebrow="Economics" title="Cost estimate per refresh" aside="Estimates, not meters" />
         <Panel className="mt-5 px-6 py-5">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[0.95rem]">
+            <table className="w-full border-collapse text-[0.98rem]">
               <thead>
                 <tr>
                   <th className="eyebrow px-3 py-2.5 text-left font-semibold">Component</th>
@@ -333,7 +333,7 @@ export default async function BackofficePage() {
               </tbody>
             </table>
           </div>
-          <p className="code mt-3 mb-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+          <p className="code mt-3 mb-0 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
             Wall-clock: ~6–12 minutes. Excluded: Contract Tracker discovery (frozen) — reopening that workstream
             adds its own OpenAI extraction cost (~$0.40/run at July&rsquo;s observed size).
           </p>

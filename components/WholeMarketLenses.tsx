@@ -148,32 +148,32 @@ export function WholeMarketLenses({ vendors }: { vendors: VendorIntel[] }) {
       {calls.map((c, i) => (
         <Panel key={c.ticker} className="px-5 py-4">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="code text-[0.88rem]" style={{ color: "var(--accent-ink)" }}>
+            <span className="code text-[0.93rem]" style={{ color: "var(--accent-ink)" }}>
               #{i + 1}
             </span>
             <Link
               href={`/vendors/${c.ticker.toLowerCase()}`}
-              className="text-[1.08rem] font-medium underline-offset-4 hover:underline"
+              className="text-[1.11rem] font-medium underline-offset-4 hover:underline"
               style={{ color: "var(--fg)", textDecorationColor: "var(--accent-fill)" }}
             >
               {c.name}
             </Link>
-            <span className="text-[1rem]" style={{ color: "var(--fg-muted)" }}>
+            <span className="text-[1.02rem]" style={{ color: "var(--fg-muted)" }}>
               — {c.headline}
             </span>
           </div>
-          <p className="m-0 mt-2 text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="m-0 mt-2 text-[0.98rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>Why: </span>
             {c.why}
           </p>
-          <p className="m-0 mt-1 text-[0.95rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+          <p className="m-0 mt-1 text-[0.98rem] leading-relaxed" style={{ color: "var(--fg)" }}>
             <span style={{ color: "var(--fg-dim)" }}>Buyer implication: </span>
             {c.implication}
           </p>
         </Panel>
       ))}
       {tiedNote ? (
-        <p className="m-0 text-[0.9rem]" style={{ color: "var(--fg-dim)" }}>
+        <p className="m-0 text-[0.95rem]" style={{ color: "var(--fg-dim)" }}>
           {tiedNote}
         </p>
       ) : null}

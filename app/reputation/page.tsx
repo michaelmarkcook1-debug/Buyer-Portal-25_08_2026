@@ -91,7 +91,7 @@ function ReputationSpread({ improving, holding, eroding }: { improving: number; 
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {seg.map((x) => (
-          <span key={x.label} className="code inline-flex items-baseline gap-1.5 text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
+          <span key={x.label} className="code inline-flex items-baseline gap-1.5 text-[0.87rem]" style={{ color: "var(--fg-dim)" }}>
             <span aria-hidden style={{ color: x.ink, opacity: x.alpha }}>&#9632;</span>
             {x.n} {x.label}
           </span>
@@ -310,18 +310,18 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
               <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
                 {f.eyebrow}
               </div>
-              <h3 className="m-0 text-[1.06rem] leading-snug" style={{ color: findingInk(f.state) }}>
+              <h3 className="m-0 text-[1.09rem] leading-snug" style={{ color: findingInk(f.state) }}>
                 {f.title}
               </h3>
-              <p className="m-0 text-[0.98rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+              <p className="m-0 text-[1.00rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                 {f.body}
               </p>
               {f.spread ? <ReputationSpread {...f.spread} /> : null}
               <Hairline />
-              <p className="m-0 text-[0.9rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+              <p className="m-0 text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
                 <span className="eyebrow">Evidence</span> {f.evidence}
               </p>
-              <p className="m-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+              <p className="m-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                 <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
                   What to do
                 </span>{" "}
@@ -342,7 +342,7 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
         <div className="mt-5">
           <Panel className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[0.95rem]" style={{ minWidth: 560 }}>
+              <table className="w-full border-collapse text-[0.98rem]" style={{ minWidth: 560 }}>
                 <thead>
                   <tr>
                     <th className="eyebrow px-4 py-2.5 text-left font-semibold">Vendor</th>
@@ -359,13 +359,13 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
                     <tr key={r.ticker} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                       <td className="px-4 py-3" style={{ color: "var(--fg)" }}>{r.name}</td>
                       <td className="px-4 py-3">
-                        <StateText state={r.reputation.state} metricId={r.reputation.id} className="text-[0.95rem]" />
+                        <StateText state={r.reputation.state} metricId={r.reputation.id} className="text-[0.98rem]" />
                       </td>
                       <td className="px-4 py-3">
-                        {r.talent ? <StateText state={r.talent.state} metricId={r.talent.id} className="text-[0.95rem]" /> : "—"}
+                        {r.talent ? <StateText state={r.talent.state} metricId={r.talent.id} className="text-[0.98rem]" /> : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        {r.risk ? <StateText state={r.risk.state} metricId={r.risk.id} className="text-[0.95rem]" /> : "—"}
+                        {r.risk ? <StateText state={r.risk.state} metricId={r.risk.id} className="text-[0.98rem]" /> : "—"}
                       </td>
                     </tr>
                   ))}
@@ -374,7 +374,7 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
             </div>
           </Panel>
         </div>
-        <p className="mt-4 max-w-[80ch] text-[0.9rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
+        <p className="mt-4 max-w-[80ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
           These readings describe how the market perceives each vendor. They are a prompt to ask
           better questions, not a verdict on how a vendor performs on your own account — and the
           underlying analytical scoring is proprietary and is not exposed.

@@ -44,11 +44,11 @@ export function TwelveMonthChange({
               /* Undefined metricId renders the direction neutral — a row with no
                  governing variable states its direction without a verdict. */
               effect={c.metricId ? movementEffect(c.metricId, c.movement) : undefined}
-              className="w-44 shrink-0 text-[0.94rem]"
+              className="w-44 shrink-0 text-[0.97rem]"
             />
-            <div className="min-w-0 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+            <div className="min-w-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
               {c.detail}
-              <span className="code ml-2 text-[0.76rem]" style={{ color: "var(--fg-dim)" }}>
+              <span className="code ml-2 text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
                 · {c.source} · confidence {CONFIDENCE_LABEL[c.confidence]}
               </span>
             </div>

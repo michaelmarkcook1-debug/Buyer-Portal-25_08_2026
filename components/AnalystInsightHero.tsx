@@ -92,7 +92,7 @@ function InsightResultView({
         style={{ borderColor: "var(--surface-line)" }}
       >
         <InsightHeadline tight>Analyst Insight is not configured.</InsightHeadline>
-        <p className="code mt-2 mb-0 text-[0.88rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="code mt-2 mb-0 text-[0.93rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {result.reason}
         </p>
       </div>
@@ -107,7 +107,7 @@ function InsightResultView({
         style={{ borderColor: "var(--surface-line)" }}
       >
         <InsightHeadline tight>Analyst Insight temporarily unavailable.</InsightHeadline>
-        <p className="mt-2 mb-0 max-w-[70ch] text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-2 mb-0 max-w-[70ch] text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           The intelligence below is complete and unaffected.
         </p>
       </div>
@@ -140,8 +140,22 @@ function InsightResultView({
   const cut = breaks.find((c) => c > 40 && c < 230) ?? breaks.find((c) => c > 40) ?? breaks[0] ?? -1;
   /* A briefing with no break at all is one sentence long: it IS the headline,
      and there is no body to set beneath it. */
-  const headline = cut > 0 ? text.slice(0, cut).trim() : text;
-  const body = cut > 0 ? text.slice(cut).trim() : "";
+  const rawHeadline = cut > 0 ? text.slice(0, cut).trim() : text;
+  const rawBody = cut > 0 ? text.slice(cut).trim() : "";
+  /* A colon cut leaves the headline trailing into nothing and the body opening
+     in lower case — one sentence sawn in half and set in two sizes. This is a
+     deck-and-lede split, so it is set as one: the joining colon goes, and the
+     lede takes a capital.
+
+     The capital is only ever applied to a plain lower-case first letter whose
+     second letter is not upper case, so a lower-case-initial name (eBay,
+     iPhone) is left exactly as the briefing wrote it. Nothing else in the text
+     is altered — no word is added, removed or reordered. */
+  const headline = rawHeadline.replace(/:$/, "");
+  const body =
+    cut > 0 && rawHeadline.endsWith(":") && /^[a-z][^A-Z]/.test(rawBody)
+      ? rawBody.charAt(0).toUpperCase() + rawBody.slice(1)
+      : rawBody;
   const longHeadline = headline.length > 230;
 
   return (
@@ -149,13 +163,13 @@ function InsightResultView({
       <InsightHeadline tight={longHeadline}>{headline}</InsightHeadline>
       {body ? (
         <p
-          className="display m-0 mt-4 max-w-[64ch] whitespace-pre-line text-[1.12rem] leading-[1.6] sm:text-[1.18rem]"
+          className="display m-0 mt-4 max-w-[64ch] whitespace-pre-line text-[1.15rem] leading-[1.6] sm:text-[1.18rem]"
           style={{ color: "var(--fg)", opacity: 0.92 }}
         >
           {body}
         </p>
       ) : null}
-      <div className="code mt-5 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code mt-5 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
         Grounded in the canonical intelligence below · interpretation, not additional data
         {scenario ? ` · modelled under “${scenario.label}”` : ""}
       </div>
@@ -210,7 +224,7 @@ export async function AnalystInsightHero(props: {
             <InsightHeadline tight muted>Preparing this market briefing…</InsightHeadline>
             {/* The briefing streams in on its own — no refresh, no client JS.
                 Say so, so a reader does not sit waiting or reload the page. */}
-            <p className="m-0 mt-2.5 text-[0.94rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+            <p className="m-0 mt-2.5 text-[0.97rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
               Prepared from the evidence for your selected market. It will appear here when ready —
               the intelligence below is complete and usable now.
             </p>

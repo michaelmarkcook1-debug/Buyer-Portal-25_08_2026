@@ -36,12 +36,12 @@ function Figure({
     <figure className="m-0 flex flex-col gap-3">
       {children}
       {interpretation ? (
-        <figcaption className="m-0 max-w-[76ch] text-[0.95rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+        <figcaption className="m-0 max-w-[76ch] text-[0.98rem] leading-relaxed" style={{ color: "var(--fg)" }}>
           {interpretation}
         </figcaption>
       ) : null}
       {footnote ? (
-        <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+        <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
           {footnote}
         </div>
       ) : null}
@@ -118,7 +118,7 @@ export function ExposureConcentrationChart({
                   y={y + rowH / 2}
                   textAnchor="end"
                   dominantBaseline="middle"
-                  fontSize="13"
+                  fontSize="14"
                   fill="var(--fg)"
                 >
                   {b.name.length > 18 ? `${b.name.slice(0, 17)}…` : b.name}
@@ -141,7 +141,7 @@ export function ExposureConcentrationChart({
                   x={labelW + 9 + w}
                   y={y + rowH / 2}
                   dominantBaseline="middle"
-                  fontSize="12.5"
+                  fontSize="13.5"
                   fill="var(--fg-muted)"
                 >
                   {b.disclosedUsd ? moneyFmt(b.disclosedUsd) : "no disclosed value"}
@@ -152,7 +152,7 @@ export function ExposureConcentrationChart({
           })}
         </svg>
       </div>
-      <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
         {valueLabel}
       </div>
     </Figure>
@@ -211,22 +211,22 @@ export function SigningsSlopeChart({
           {[0, 0.5, 1].map((t) => (
             <line key={t} x1={x(max * t)} y1={18} x2={x(max * t)} y2={h - 8} stroke={GRID} strokeWidth="1" />
           ))}
-          <text x={x(0)} y={11} fontSize="11.5" fill="var(--fg-dim)" textAnchor="middle">0</text>
-          <text x={x(max)} y={11} fontSize="11.5" fill="var(--fg-dim)" textAnchor="middle">{max}</text>
+          <text x={x(0)} y={11} fontSize="12.5" fill="var(--fg-dim)" textAnchor="middle">0</text>
+          <text x={x(max)} y={11} fontSize="12.5" fill="var(--fg-dim)" textAnchor="middle">{max}</text>
           {rows.map((r, i) => {
             const y = i * rowH + 30;
             const a = x(r.prior);
             const b = x(r.current);
             return (
               <g key={r.name}>
-                <text x={labelW - 10} y={y} textAnchor="end" dominantBaseline="middle" fontSize="13" fill="var(--fg)">
+                <text x={labelW - 10} y={y} textAnchor="end" dominantBaseline="middle" fontSize="14" fill="var(--fg)">
                   {r.name.length > 18 ? `${r.name.slice(0, 17)}…` : r.name}
                 </text>
                 <line x1={a} y1={y} x2={b} y2={y} stroke="var(--fg-dim)" strokeWidth="1.5" opacity="0.55" />
                 {/* prior: hollow. current: solid. Shape carries direction, not hue. */}
                 <circle cx={a} cy={y} r="4.5" fill="var(--bg-elev-1)" stroke="var(--fg-dim)" strokeWidth="1.5" />
                 <circle cx={b} cy={y} r="5" fill="var(--fg)" />
-                <text x={620 - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize="12.5" fill="var(--fg-muted)">
+                <text x={620 - 8} y={y} textAnchor="end" dominantBaseline="middle" fontSize="13.5" fill="var(--fg-muted)">
                   {r.prior} → {r.current}
                 </text>
               </g>
@@ -234,7 +234,7 @@ export function SigningsSlopeChart({
           })}
         </svg>
       </div>
-      <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
         Hollow marker = prior window · solid marker = current window · {windowLabel}
       </div>
     </Figure>
@@ -280,10 +280,10 @@ export function DistributionChart({
           return (
             <div key={r.dimension} className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-                <span className="text-[0.95rem] font-medium" style={{ color: "var(--fg)" }}>
+                <span className="text-[0.98rem] font-medium" style={{ color: "var(--fg)" }}>
                   {r.dimension}
                 </span>
-                <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+                <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
                   {total} vendors
                 </span>
               </div>
@@ -303,7 +303,7 @@ export function DistributionChart({
                   ))}
               </div>
               {/* the same numbers in text — colour is never the sole carrier */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.86rem]" style={{ color: "var(--fg-muted)" }}>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.92rem]" style={{ color: "var(--fg-muted)" }}>
                 {r.bands
                   .filter((b) => b.count > 0)
                   .map((b) => (
@@ -388,11 +388,11 @@ export function FlowComparisonChart({
           return (
             <div key={s.label} className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <span className="text-[0.95rem] font-medium" style={{ color: "var(--fg)" }}>
+                <span className="text-[0.98rem] font-medium" style={{ color: "var(--fg)" }}>
                   {s.label}
                 </span>
                 {s.asOf ? (
-                  <span className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+                  <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
                     to {s.asOf}
                   </span>
                 ) : null}
@@ -401,7 +401,7 @@ export function FlowComparisonChart({
                 {rows.map((r) => (
                   <div key={r.window} className="flex items-center gap-2 sm:gap-3">
                     <span
-                      className="w-[6.6rem] shrink-0 text-[0.86rem] leading-tight sm:w-[8.5rem]"
+                      className="w-[6.6rem] shrink-0 text-[0.92rem] leading-tight sm:w-[8.5rem]"
                       style={{ color: "var(--fg-muted)" }}
                     >
                       {r.window}
@@ -418,7 +418,7 @@ export function FlowComparisonChart({
                       />
                     </span>
                     <span
-                      className="tabular w-[3.2rem] shrink-0 text-right text-[0.94rem] font-medium"
+                      className="tabular w-[3.2rem] shrink-0 text-right text-[0.97rem] font-medium"
                       style={{ color: "var(--fg)" }}
                     >
                       {r.value}
@@ -430,7 +430,7 @@ export function FlowComparisonChart({
           );
         })}
       </div>
-      <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
         Lighter bar = prior window · solid bar = current window · each measure is scaled against
         itself, never against the other
       </div>

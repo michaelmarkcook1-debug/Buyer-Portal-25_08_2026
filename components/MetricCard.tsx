@@ -36,29 +36,29 @@ export function MetricCard({
         ) : null}
         {m.modelled ? <ModelledTag note={m.modelled} /> : null}
       </div>
-      <StateText state={m.state} metricId={m.id} className="text-[1.08rem]" />
-      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.88rem]" />
+      <StateText state={m.state} metricId={m.id} className="text-[1.11rem]" />
+      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.93rem]" />
       {m.analysis ? (
         /* The analytical body replaces the templated headline: with a driver
            present, the headline only restated the state. */
         <div className="mt-1.5 flex flex-col gap-2">
-          <p className="m-0 text-[0.9rem] leading-snug" style={{ color: "var(--fg)" }}>
+          <p className="m-0 text-[0.95rem] leading-snug" style={{ color: "var(--fg)" }}>
             {m.analysis.driver}
           </p>
           {visual ? <div className="mt-1">{visual}</div> : null}
-          <p className="m-0 text-[0.88rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+          <p className="m-0 text-[0.93rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>For the buyer: </span>
             {m.analysis.implication}
           </p>
           {m.analysis.limitation ? (
-            <p className="m-0 text-[0.86rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+            <p className="m-0 text-[0.92rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
               <span style={{ color: "var(--fg-dim)" }}>Limitation: </span>
               {m.analysis.limitation}
             </p>
           ) : null}
           {m.analysis.test ? (
             <p
-              className="m-0 rounded-[var(--radius-sm)] px-2.5 py-2 text-[0.86rem] leading-snug"
+              className="m-0 rounded-[var(--radius-sm)] px-2.5 py-2 text-[0.92rem] leading-snug"
               style={{ background: "var(--bg-elev-2)", color: "var(--fg-muted)" }}
             >
               <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
@@ -67,18 +67,18 @@ export function MetricCard({
               {m.analysis.test}
             </p>
           ) : null}
-          <div className="code text-[0.8rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+          <div className="code text-[0.88rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
             {m.analysis.evidence}
             {m.analysis.distribution ? ` · ${m.analysis.distribution}` : ""}
           </div>
         </div>
       ) : m.headline ? (
-        <p className="m-0 text-[0.9rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+        <p className="m-0 text-[0.95rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
           {m.headline}
         </p>
       ) : null}
       {m.confidence === "low" || m.confidence === "insufficient" ? (
-        <div className="code mt-auto pt-1 text-[0.8rem]" style={{ color: "var(--fg-muted)" }}>
+        <div className="code mt-auto pt-1 text-[0.88rem]" style={{ color: "var(--fg-muted)" }}>
           {m.confidence === "insufficient" ? "Insufficient evidence" : "Directional — evidence is thin"}
         </div>
       ) : null}
@@ -135,13 +135,13 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
               ) : null}
               {m.modelled ? <ModelledTag note={m.modelled} /> : null}
             </div>
-            <StateText state={m.state} metricId={m.id} className="text-[1.1rem]" />
-            <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.86rem]" />
+            <StateText state={m.state} metricId={m.id} className="text-[1.13rem]" />
+            <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.92rem]" />
             {/* The band is a summary: one line on WHY, never the full body.
                 The Market page carries driver, implication, limitation and
                 the investigation prompt for the same dimensions. */}
             {m.analysis ? (
-              <p className="m-0 mt-1 text-[0.86rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+              <p className="m-0 mt-1 text-[0.92rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                 {leadSentence(m.analysis.driver)}
               </p>
             ) : null}
@@ -158,7 +158,7 @@ export function MarketStateBand({ metrics }: { metrics: Metric[] }) {
         if (thin.length === 0) return null;
         return (
           <div
-            className="code px-5 py-2 text-[0.8rem]"
+            className="code max-w-[90ch] px-5 py-2 text-[0.88rem]"
             style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)" }}
           >
             {thin.length === metrics.length

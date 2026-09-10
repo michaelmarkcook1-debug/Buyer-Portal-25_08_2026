@@ -16,18 +16,18 @@ export function SignalCard({ s }: { s: WatchSignal }) {
           {s.vendors.join(" · ")}
         </span>
         {s.change ? (
-          <span className="code ml-auto text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code ml-auto text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
             {s.change}
           </span>
         ) : null}
       </div>
-      <div className="display mt-2 text-[1.12rem] leading-snug" style={{ color: "var(--fg)" }}>
+      <div className="display mt-2 text-[1.15rem] leading-snug" style={{ color: "var(--fg)" }}>
         {s.headline}
       </div>
-      <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.96rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mt-1.5 mb-0 max-w-[70ch] text-[0.99rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         {s.implication}
       </p>
-      <div className="code mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.87rem]" style={{ color: "var(--fg-dim)" }}>
         {s.opportunityType ? <span>Opportunity: {OPPORTUNITY_LABELS[s.opportunityType]}</span> : null}
         {s.confidence === "low" || s.confidence === "insufficient" ? <span>Directional — evidence is thin</span> : null}
         {s.sourceUrl ? (

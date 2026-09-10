@@ -151,7 +151,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
           that cannot execute is working as intended, so this is written in the
           ordinary voice of the page — never in a warning colour. */}
       <div
-        className="rounded-[var(--radius-sm)] px-4 py-3 text-[0.94rem] leading-relaxed"
+        className="rounded-[var(--radius-sm)] px-4 py-3 text-[0.97rem] leading-relaxed"
         style={{
           background: "var(--bg-elev-2)",
           color: "var(--fg-muted)",
@@ -170,7 +170,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
             type="button"
             onClick={start}
             disabled={running || busy}
-            className="tap rounded-[var(--radius-sm)] px-5 py-2.5 text-[0.95rem] font-medium transition-colors"
+            className="tap rounded-[var(--radius-sm)] px-5 py-2.5 text-[0.98rem] font-medium transition-colors"
             style={{
               background: running || busy ? "var(--bg-elev-2)" : "var(--accent-fill)",
               color: running || busy ? "var(--fg-dim)" : "var(--on-accent, #0b1220)",
@@ -183,14 +183,14 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
         ) : (
           /* No dead button: the honest statement is where it runs instead. */
           <span
-            className="rounded-[var(--radius-sm)] px-4 py-2.5 text-[0.95rem]"
+            className="rounded-[var(--radius-sm)] px-4 py-2.5 text-[0.98rem]"
             style={{ background: "var(--bg-elev-2)", border: "1px solid var(--surface-line)", color: "var(--fg-muted)" }}
           >
             Run from the local AG environment
           </span>
         )}
         {run ? (
-          <span className="code text-[0.86rem]" style={{ color: "var(--fg-muted)" }}>
+          <span className="code text-[0.92rem]" style={{ color: "var(--fg-muted)" }}>
             {run.status === "running" ? "RUNNING" : run.status === "success" ? "SUCCESS" : "FAILED"} · started{" "}
             {clock(run.startedAt)} · {duration(run.startedAt, run.finishedAt)}
             {run.currentStage ? ` · ${run.currentStage}` : ""}
@@ -201,33 +201,33 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
             href={`${ghBase}/actions/runs/${run.runnerRef}`}
             target="_blank"
             rel="noreferrer"
-            className="tap-link code text-[0.86rem] underline-offset-4 hover:underline"
+            className="tap-link code text-[0.92rem] underline-offset-4 hover:underline"
             style={{ color: "var(--fg-muted)" }}
           >
             View workflow run
           </a>
         ) : (
-          <span className="code text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code text-[0.92rem]" style={{ color: "var(--fg-dim)" }}>
             {canRun ? "IDLE — no run recorded" : "LOCAL EXECUTION ONLY — no run recorded yet"}
           </span>
         )}
       </div>
 
       {note ? (
-        <p className="m-0 text-[0.94rem]" style={{ color: "var(--data-watch-ink)" }}>
+        <p className="m-0 text-[0.97rem]" style={{ color: "var(--data-watch-ink)" }}>
           {note}
         </p>
       ) : null}
 
       {run?.errorSummary ? (
-        <p className="m-0 text-[0.94rem]" style={{ color: "var(--data-risk-ink)" }}>
+        <p className="m-0 text-[0.97rem]" style={{ color: "var(--data-risk-ink)" }}>
           {run.errorSummary}
         </p>
       ) : null}
 
       {/* Stages */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[0.95rem]" style={{ minWidth: 520 }}>
+        <table className="w-full border-collapse text-[0.98rem]" style={{ minWidth: 520 }}>
           <thead>
             <tr>
               <th className="eyebrow px-3 py-2.5 text-left font-semibold">Stage</th>
@@ -244,7 +244,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
                 <tr key={spec.id} style={{ borderTop: "1px solid var(--surface-line-soft)" }}>
                   <td className="px-3 py-3">
                     <div style={{ color: "var(--fg)" }}>{spec.label}</div>
-                    <div className="code text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+                    <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
                       {spec.command}
                     </div>
                   </td>
@@ -252,11 +252,11 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
                     {spec.what}
                   </td>
                   <td className="px-3 py-3">
-                    <span className="code text-[0.86rem]" style={{ color: TONE[st].ink }}>
+                    <span className="code text-[0.92rem]" style={{ color: TONE[st].ink }}>
                       {TONE[st].label}
                     </span>
                     {s?.message ? (
-                      <div className="mt-1 text-[0.84rem]" style={{ color: "var(--data-risk-ink)" }}>
+                      <div className="mt-1 text-[0.90rem]" style={{ color: "var(--data-risk-ink)" }}>
                         {s.message}
                       </div>
                     ) : null}
@@ -278,7 +278,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
             Recent runs
           </div>
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full border-collapse text-[0.95rem]" style={{ minWidth: 460 }}>
+            <table className="w-full border-collapse text-[0.98rem]" style={{ minWidth: 460 }}>
               <thead>
                 <tr>
                   <th className="eyebrow px-3 py-2.5 text-left font-semibold">Started</th>
@@ -294,7 +294,7 @@ export function BackofficeRefresh({ initial }: { initial: Executor }) {
                     <td className="tabular px-3 py-3" style={{ color: "var(--fg-muted)" }}>{duration(h.startedAt, h.finishedAt)}</td>
                     <td className="px-3 py-3">
                       <span
-                        className="code text-[0.86rem]"
+                        className="code text-[0.92rem]"
                         style={{ color: h.status === "success" ? "var(--data-positive-ink)" : h.status === "failed" ? "var(--data-risk-ink)" : "var(--accent-ink)" }}
                       >
                         {h.status.toUpperCase()}

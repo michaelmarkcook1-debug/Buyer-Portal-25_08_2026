@@ -63,10 +63,10 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                   >
                     {s.label}
                   </div>
-                  <p className="mt-1.5 mb-0 text-[0.9rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                  <p className="mt-1.5 mb-0 text-[0.95rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                     {s.question}
                   </p>
-                  <div className="code mt-2.5 text-[0.74rem]" style={{ color: "var(--fg-dim)" }}>
+                  <div className="code mt-2.5 text-[0.85rem]" style={{ color: "var(--fg-dim)" }}>
                     {active ? "Active — select to clear" : `Adjusts: ${s.adjusts.join(" · ")}`}
                   </div>
                 </Panel>
@@ -85,10 +85,10 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                 <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>Scenario read</span>
                 <ModelledTag note={`Modelled under: ${scenario.assumes}`} />
               </div>
-              <p className="mt-3 mb-0 max-w-[78ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+              <p className="mt-3 mb-0 max-w-[78ch] text-[1.03rem] leading-relaxed" style={{ color: "var(--fg)" }}>
                 {read.note}
               </p>
-              <p className="mt-2 mb-0 text-[0.9rem]" style={{ color: "var(--fg-muted)" }}>
+              <p className="mt-2 mb-0 text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
                 Most affected: {read.mostAffected ? read.mostAffected.name : "none"} · Family moving most:{" "}
                 {read.familyMoved ?? "none"} · Buyer relative position: {read.position}.
               </p>
@@ -103,11 +103,11 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
             <Panel className="px-6 py-4" >
               <div className="flex flex-wrap items-center gap-3">
                 <ModelledTag note="Scenario outputs are recalculated states, not new evidence." />
-                <span className="text-[0.98rem]" style={{ color: "var(--fg)" }}>
+                <span className="text-[1.00rem]" style={{ color: "var(--fg)" }}>
                   Assumes: {scenario.assumes}
                 </span>
               </div>
-              <p className="mt-2 mb-0 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+              <p className="mt-2 mb-0 text-[0.93rem]" style={{ color: "var(--fg-dim)" }}>
                 The scenario remains scoped to your selected vendor market. Baseline evidence is
                 unchanged; only the stated states shift, and each shifted value carries the modelled mark.
               </p>
@@ -119,7 +119,7 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
             <div className="mt-5">
               <Panel className="overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-[0.95rem]">
+                  <table className="w-full border-collapse text-[0.98rem]">
                     <thead>
                       <tr>
                         <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
@@ -178,9 +178,9 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                             </td>
                             <td className="px-4 py-3">
                               <span className="inline-flex items-center gap-2">
-                                <LevelText level={baseline?.overall.level ?? "insufficient"} className="text-[0.94rem]" />
+                                <LevelText level={baseline?.overall.level ?? "insufficient"} className="text-[0.97rem]" />
                                 <span aria-hidden="true" style={{ color: "var(--fg-dim)" }}>→</span>
-                                <LevelText level={v.overall.level} className="text-[0.94rem]" />
+                                <LevelText level={v.overall.level} className="text-[0.97rem]" />
                               </span>
                             </td>
                             <td className="tabular px-4 py-3">
@@ -211,7 +211,7 @@ export default async function ScenariosPage({ searchParams }: { searchParams: Pr
                     const base = intel.vendors.find((b) => b.ticker === v.ticker);
                     return v.overall.level === "very-high" && base?.overall.level === "very-high";
                   }) ? (
-                  <p className="m-0 border-t px-5 py-3 text-[0.9rem]" style={{ color: "var(--fg-dim)", borderColor: "var(--surface-line-soft)" }}>
+                  <p className="m-0 border-t px-5 py-3 text-[0.95rem]" style={{ color: "var(--fg-dim)", borderColor: "var(--surface-line-soft)" }}>
                     Overall opportunity stays Very High because these vendors were already in the top
                     band — read the family column for what this scenario actually moves.
                   </p>

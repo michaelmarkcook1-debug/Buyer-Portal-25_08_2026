@@ -75,14 +75,24 @@
   /* Phase 1 readability correction. The audit measured 68% of Market text at
      <=13px and evidence lines at 10-11px — too small for an executive buyer
      product. The small tier moves up; display sizes are untouched so the
-     hierarchy between them widens rather than flattens. */
+     hierarchy between them widens rather than flattens.
+
+     Phase 2 (2026-09-10). Phase 1 left 36-41% of Market and Home text still at
+     <=13px, because it raised the tokens while the cards kept their own
+     hard-coded sizes. This pass lifts the floor again and remaps those sizes
+     monotonically, so card prose reads at the body tier the tokens always
+     claimed rather than two steps below it. Display sizes stay put. */
   --fs-body: 1rem;
-  --fs-small: 0.9rem;
-  --fs-micro: 0.78rem;
+  --fs-small: 0.94rem;
+  --fs-micro: 0.84rem;
 
   --tracking-display: -0.018em;
   --tracking-tight: -0.01em;
-  --tracking-eyebrow: 0.22em;
+  /* 0.22em set a 12.5px uppercase label as wide as 17px text would be: it
+     read as shouting, and the longest labels ("AI Productivity Pressure")
+     overflowed their column and wrapped while their siblings did not. Tables
+     already carried a local override to 0.09em for exactly this reason. */
+  --tracking-eyebrow: 0.13em;
   --tracking-mono: 0.04em;
 
   /* ── Spacing & geometry — brand pack ───────────────────────────────── */
@@ -446,22 +456,46 @@ a {
   }
 }
 
-/* ── Type primitives — brand pack ──────────────────────────────────── */
+/* ── Type primitives — brand pack ──────────────────────────────────────
+ *
+ * DECLARED IN @layer components, AND THAT IS LOAD-BEARING.
+ *
+ * Tailwind v4's `@import "tailwindcss"` establishes @layer theme, base,
+ * components, utilities. An UNLAYERED rule outranks every layered one however
+ * specific it is, so while these primitives sat outside a layer they silently
+ * beat every Tailwind utility written against them — and did so invisibly,
+ * because the markup looked correct.
+ *
+ * What that cost, before this was found:
+ *   · .display's 1.06 headline leading overrode leading-[1.6] on 19px
+ *     analytical prose. Body copy rendered with its lines nearly touching.
+ *   · .eyebrow's font-size overrode every text-[…] on an eyebrow, so a size
+ *     set deliberately at a call site did nothing at all.
+ *   · .display's font-weight overrode font-normal.
+ *   · .code's letter-spacing overrode tracking-[…].
+ *
+ * Inside the components layer these are what they were always meant to be:
+ * defaults a call site may override. Anything moved out of this layer silently
+ * becomes un-overridable again.
+ */
+@layer components {
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--fs-micro);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-eyebrow);
+    color: var(--fg-dim);
+    font-weight: 600;
+  }
 
-.eyebrow {
-  font-family: var(--font-sans);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--fg-dim);
-  font-weight: 600;
-}
-
-.display {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.06;
+  .display {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: var(--tracking-display);
+    /* A HEADLINE leading — right for a 44px hero, ruinous for 19px prose that
+       carries .display only for its typeface. Overridable, by design. */
+    line-height: 1.06;
+  }
 }
 
 .tabular,
@@ -470,9 +504,11 @@ a {
   letter-spacing: 0;
 }
 
-.code {
-  font-family: var(--font-mono);
-  letter-spacing: var(--tracking-mono);
+@layer components {
+  .code {
+    font-family: var(--font-mono);
+    letter-spacing: var(--tracking-mono);
+  }
 }
 
 /* ── Surfaces ──────────────────────────────────────────────────────── */

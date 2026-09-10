@@ -160,7 +160,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <MovementText
               movement={intel.buyerEconomics.movement}
               effect={displayState("m.buyerEconomics", intel.buyerEconomics.state).effect}
-              className="text-[1.02rem]"
+              className="text-[1.03rem]"
             />
           </div>
           {/* The exposure chart lives INSIDE its own analytical unit and spans
@@ -207,7 +207,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                     <span className="w-56 font-medium" style={{ color: "var(--fg)" }}>
                       {l.line}
                     </span>
-                    <span className="tabular text-[0.94rem]" style={{ color: "var(--fg-muted)" }}>
+                    <span className="tabular text-[0.97rem]" style={{ color: "var(--fg-muted)" }}>
                       {count(l.contracts)} contracts in scope · {count(l.inPlay24)} in play
                     </span>
                   </li>
@@ -238,7 +238,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                   filling the column. The name links through to the vendor's
                   full reading, which is what gives the row a focus target. */}
               {intel.vendors.map((v) => (
-                <li key={v.ticker} className="reveal flex flex-wrap items-baseline gap-x-4 text-[0.95rem]">
+                <li key={v.ticker} className="reveal flex flex-wrap items-baseline gap-x-4 text-[0.98rem]">
                   <Link
                     href={`/vendors/${v.ticker.toLowerCase()}`}
                     className="tap-link w-44 truncate font-medium underline-offset-4 hover:underline"
@@ -246,7 +246,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                   >
                     {v.name}
                   </Link>
-                  <StateText state={v.metrics.aiProductivityOpportunity.state} metricId="aiProductivityOpportunity" className="text-[0.94rem]" />
+                  <StateText state={v.metrics.aiProductivityOpportunity.state} metricId="aiProductivityOpportunity" className="text-[0.97rem]" />
                   {v.metrics.aiProductivityOpportunity.headline ? (
                     <span className="reveal-panel" role="note">
                       {v.metrics.aiProductivityOpportunity.headline}
@@ -278,7 +278,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                       <span className="w-44 truncate font-medium" style={{ color: "var(--fg)" }}>
                         {v.name}
                       </span>
-                      <StateText state={t.state} metricId="talentPressure" className="text-[0.94rem]" />
+                      <StateText state={t.state} metricId="talentPressure" className="text-[0.97rem]" />
                     </div>
                     {t.basis.length > 0 ? <BasisList basis={t.basis.slice(0, 1)} className="mt-1" /> : null}
                   </li>
@@ -320,8 +320,8 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             {topAwards.length > 0 ? (
               <ul className="m-0 mt-2 list-none space-y-2 p-0">
                 {topAwards.map((d, i) => (
-                  <li key={i} className="flex flex-wrap items-baseline gap-x-3 text-[0.95rem]">
-                    <span className="code tabular text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-3 text-[0.98rem]">
+                    <span className="code tabular text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
                       {shortDate(d.date)}
                     </span>
                     <span className="font-medium" style={{ color: "var(--fg)" }}>
@@ -331,7 +331,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                       {d.headline} · {money(d.tcvUsd)}
                     </span>
                     {d.sourceUrl ? (
-                      <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="code tap-link text-[0.8rem]" style={{ color: "var(--rail-ink)" }}>
+                      <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="code tap-link text-[0.88rem]" style={{ color: "var(--rail-ink)" }}>
                         Source ↗
                       </a>
                     ) : null}
@@ -339,7 +339,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                 ))}
               </ul>
             ) : (
-              <p className="mt-2 mb-0 text-[0.94rem]" style={{ color: "var(--fg-dim)" }}>
+              <p className="mt-2 mb-0 text-[0.97rem]" style={{ color: "var(--fg-dim)" }}>
                 No signed agreements on record in the trailing window.
               </p>
             )}
@@ -384,7 +384,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
               />
             </Panel>
             <details className="group">
-              <summary className="tap cursor-pointer list-none text-[0.95rem]" style={{ color: "var(--accent-ink)" }}>
+              <summary className="tap cursor-pointer list-none text-[0.98rem]" style={{ color: "var(--accent-ink)" }}>
                 Show all {count(intel.vendors.length)} vendors
               </summary>
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">

@@ -51,7 +51,7 @@ function RankedOpportunityTable({ rows }: { rows: VendorIntel[] }) {
   return (
                 <Panel className="overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-[0.95rem]">
+                    <table className="w-full border-collapse text-[0.98rem]">
                       <thead>
                         <tr>
                           <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
@@ -85,7 +85,7 @@ function RankedOpportunityTable({ rows }: { rows: VendorIntel[] }) {
                                     This is the emphasis the ranking legitimately
                                     earns; the level keeps its buyer-effect colour. */}
                                 <span
-                                  className={`code tabular w-5 text-right text-[0.8rem] ${i === 0 ? "font-bold" : ""}`}
+                                  className={`code tabular w-5 text-right text-[0.88rem] ${i === 0 ? "font-bold" : ""}`}
                                   style={{ color: i === 0 ? "var(--accent-ink)" : "var(--fg-dim)" }}
                                 >
                                   {i + 1}
@@ -102,7 +102,7 @@ function RankedOpportunityTable({ rows }: { rows: VendorIntel[] }) {
                               <div className="flex flex-col gap-1">
                                 <LevelText level={v.overall.level} emphasis={i === 0} />
                                 {v.overall.reason ? (
-                                  <span className="max-w-[36ch] text-[0.82rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                                  <span className="max-w-[36ch] text-[0.89rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                                     {v.overall.reason}
                                   </span>
                                 ) : null}
@@ -121,7 +121,7 @@ function RankedOpportunityTable({ rows }: { rows: VendorIntel[] }) {
                                     className="tap-link underline-offset-4 hover:underline"
                                     style={{ textDecorationColor: "var(--accent-fill)" }}
                                   >
-                                    <LevelText level={v.opportunities[t].level} className="text-[0.94rem]" emphasis={t === dominant} />
+                                    <LevelText level={v.opportunities[t].level} className="text-[0.97rem]" emphasis={t === dominant} />
                                   </Link>
                                 </td>
                               ));
@@ -189,8 +189,8 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                   style={i > 0 ? { borderLeft: "1px solid var(--surface-line-soft)" } : undefined}
                 >
                   <div className="eyebrow">{label}</div>
-                  <LevelText level={d.best} className="text-[1.1rem]" />
-                  <p className="m-0 text-[0.84rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
+                  <LevelText level={d.best} className="text-[1.13rem]" />
+                  <p className="m-0 text-[0.90rem] leading-snug" style={{ color: "var(--fg-muted)" }}>
                     {d.assessed === 0
                       ? "No vendor carries sufficient evidence."
                       : `${d.highPlus} of ${d.assessed} assessed at High or above.`}
@@ -255,7 +255,7 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
               {isWhole && intel.vendors.length > rankedShown.length ? (
                 <details className="mt-4">
                   <summary
-                    className="tap cursor-pointer text-[0.95rem] underline-offset-4 hover:underline"
+                    className="tap cursor-pointer text-[0.98rem] underline-offset-4 hover:underline"
                     style={{ color: "var(--accent-ink)" }}
                   >
                     Show all {count(intel.vendors.length)} vendors
@@ -290,16 +290,16 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
                     {OPPORTUNITY_LABELS[tm.type]}
                   </span>
                   {tm.up === 0 && tm.down === 0 ? (
-                    <span className="text-[0.94rem] italic" style={{ color: "var(--fg-dim)" }}>
+                    <span className="text-[0.97rem] italic" style={{ color: "var(--fg-dim)" }}>
                       No movement the record can support
                       {intel.signalTrackingSince ? ` — tracking since ${shortDate(intel.signalTrackingSince)}` : ""}
                     </span>
                   ) : (
                     <>
                       {tm.up > 0 ? (
-                        <MovementText movement="improving" className="text-[0.94rem]" />
+                        <MovementText movement="improving" className="text-[0.97rem]" />
                       ) : null}
-                      <span className="text-[0.94rem]" style={{ color: "var(--fg-muted)" }}>
+                      <span className="text-[0.97rem]" style={{ color: "var(--fg-muted)" }}>
                         {tm.up} vendor{tm.up === 1 ? "" : "s"} improving · {tm.down} deteriorating
                       </span>
                     </>

@@ -1902,7 +1902,13 @@ describe("Backoffice entry point (2026-08-25)", () => {
   it("stays visually subordinate — dim ink, footer type size", () => {
     const link = shell.slice(shell.indexOf('href="/backoffice"') - 320, shell.indexOf('href="/backoffice"') + 260);
     expect(link).toMatch(/--fg-dim/);
-    expect(link).toMatch(/text-\[0\.8rem\]/);
+    /* The invariant is SUBORDINATE, not one magic number: a typography pass
+       may legitimately move the footer tier, and pinning the literal value
+       made a readability change look like a regression. Assert the size sits
+       below the body tier instead. */
+    const size = /text-\[(\d*\.?\d+)rem\]/.exec(link);
+    expect(size).not.toBeNull();
+    expect(Number(size![1])).toBeLessThan(1);
     expect(link).not.toMatch(/accent-fill|display/);
   });
 });
@@ -2441,8 +2447,10 @@ describe("Analyst Insight headline (2026-08-29)", () => {
     expect(hero).toMatch(
       /breaks\.find\(\(c\) => c > 40 && c < 230\) \?\? breaks\.find\(\(c\) => c > 40\) \?\? breaks\[0\] \?\? -1/,
     );
-    // and a single-sentence briefing is the headline, with no empty body tag
-    expect(hero).toMatch(/const body = cut > 0 \? text\.slice\(cut\)\.trim\(\) : ""/);
+    // and a single-sentence briefing is the headline, with no empty body tag.
+    // The INVARIANT is that no break means no body — not the identifier that
+    // happens to hold it, which a later editorial pass legitimately renamed.
+    expect(hero).toMatch(/cut > 0 \? text\.slice\(cut\)\.trim\(\) : ""/);
     expect(hero).toMatch(/\{body \? \(/);
   });
 
@@ -2672,5 +2680,34 @@ describe("provenance legibility (pilot simulation, 2026-08-30)", () => {
     const sources = [...block.matchAll(/source:\s*"([^"]+)"/g)].map((m) => m[1]);
     expect(sources).toContain("Curated contract tracker");
     expect(sources).toContain("Contract Tracker curated store");
+  });
+});
+
+describe("a deck and its lede are set as one sentence (2026-09-10)", () => {
+  const hero = readFileSync(resolve(__dirname, "../components/AnalystInsightHero.tsx"), "utf8");
+  const join = hero.slice(hero.indexOf("const rawHeadline"), hero.indexOf("const longHeadline"));
+
+  it("the colon that joined them does not survive into the headline", () => {
+    // "…end-of-term contract activity:" trailing into a display-size void,
+    // with the body opening in lower case, was one sentence sawn in half.
+    expect(join).toMatch(/replace\(\/:\$\/, ""\)/);
+  });
+
+  it("the lede takes a capital only where that is safe", () => {
+    // Guarded so a lower-case-initial name is never rewritten.
+    expect(join).toMatch(/\^\[a-z\]\[\^A-Z\]/);
+    expect(join).toMatch(/toUpperCase\(\)/);
+  });
+
+  it("nothing but the join is altered — no word is added or dropped", () => {
+    // The headline stays a verbatim prefix, and the body a verbatim suffix.
+    expect(join).toMatch(/text\.slice\(0, cut\)\.trim\(\)/);
+    expect(join).toMatch(/text\.slice\(cut\)\.trim\(\)/);
+    expect(join).not.toMatch(/\breplace\((?!\/:\$\/)/);
+  });
+
+  it("a sentence break needs no repair", () => {
+    // Only a colon cut is repaired; a full stop already yields a capital.
+    expect(join).toMatch(/rawHeadline\.endsWith\(":"\)/);
   });
 });

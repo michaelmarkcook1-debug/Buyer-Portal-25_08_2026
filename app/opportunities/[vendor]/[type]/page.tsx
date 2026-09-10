@@ -62,7 +62,7 @@ export default async function OpportunityDetail({
     return (
       <PortalShell active="opportunities" ctx={ctx} returnTo={returnTo}>
         <Panel hero className="mx-auto max-w-xl px-8 py-8 text-center">
-          <p className="m-0 text-[1.02rem]" style={{ color: "var(--fg-muted)" }}>
+          <p className="m-0 text-[1.03rem]" style={{ color: "var(--fg-muted)" }}>
             This vendor is not part of your selected market.{" "}
             <Link href="/opportunities" style={{ color: "var(--accent-ink)" }}>
               Back to opportunities
@@ -92,17 +92,17 @@ export default async function OpportunityDetail({
       <Panel hero className="px-6 py-6 sm:px-9 sm:py-7">
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
           <LevelText level={opp.level} className="display text-[1.9rem]" />
-          <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.02rem]" />
+          <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.03rem]" />
           <span className="eyebrow">Confidence: {CONFIDENCE_LABEL[opp.confidence]}</span>
           {opp.modelled ? <ModelledTag note={opp.modelled} /> : null}
         </div>
         {opp.reason ? (
-          <p className="mt-3 mb-0 max-w-[74ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-3 mb-0 max-w-[74ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             {opp.reason}
           </p>
         ) : null}
         {opp.level === "insufficient" ? (
-          <p className="mt-4 mb-0 max-w-[70ch] text-[1.02rem]" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-4 mb-0 max-w-[70ch] text-[1.03rem]" style={{ color: "var(--fg-muted)" }}>
             Insufficient evidence for a reliable {OPPORTUNITY_LABELS[oppType].toLowerCase()} assessment.
             This is a legitimate state — the portal does not estimate past the record.
           </p>
@@ -126,8 +126,8 @@ export default async function OpportunityDetail({
         <SectionHeader eyebrow="Retrospective" title="12-month change" />
         <Panel className="mt-5 px-6 py-5">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
-            <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.02rem]" />
-            <span className="text-[0.94rem]" style={{ color: "var(--fg-muted)" }}>
+            <MovementText movement={opp.movement} effect={levelEffect(opp.level)} className="text-[1.03rem]" />
+            <span className="text-[0.97rem]" style={{ color: "var(--fg-muted)" }}>
               {opp.movement === "insufficient"
                 ? `No direction is held for this opportunity yet${intel.signalTrackingSince ? ` — AG signal tracking began ${shortDate(intel.signalTrackingSince)}` : ""}.`
                 : `Direction observed across the held windows; a full 12-month series builds as the intelligence refreshes (baseline ${shortDate(intel.baselineStart)}).`}
@@ -142,7 +142,7 @@ export default async function OpportunityDetail({
           <Panel className="mt-5 px-6 py-5">
             <ul className="m-0 list-none space-y-2.5 p-0">
               {opp.investigate.map((line, i) => (
-                <li key={i} className="flex gap-3 text-[1rem]" style={{ color: "var(--fg)" }}>
+                <li key={i} className="flex gap-3 text-[1.02rem]" style={{ color: "var(--fg)" }}>
                   <span aria-hidden="true" style={{ color: "var(--accent-ink)" }}>
                     →
                   </span>
@@ -150,7 +150,7 @@ export default async function OpportunityDetail({
                 </li>
               ))}
             </ul>
-            <p className="mt-4 mb-0 text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
+            <p className="mt-4 mb-0 text-[0.92rem]" style={{ color: "var(--fg-dim)" }}>
               AnalystGenius does not hold your contract terms. Nothing here asserts what your
               agreements contain — these are areas the market evidence says are worth pressing.
             </p>

@@ -97,7 +97,7 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
             </div>
             <details className="mt-4">
               <summary
-                className="cursor-pointer text-[0.95rem] underline-offset-4 hover:underline"
+                className="cursor-pointer text-[0.98rem] underline-offset-4 hover:underline"
                 style={{ color: "var(--accent-ink)" }}
               >
                 Show all {count(intel.vendors.length)} covered vendors
@@ -165,7 +165,7 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
               />
               <details className="mt-4">
                 <summary
-                  className="cursor-pointer text-[0.95rem] underline-offset-4 hover:underline"
+                  className="cursor-pointer text-[0.98rem] underline-offset-4 hover:underline"
                   style={{ color: "var(--accent-ink)" }}
                 >
                   Show all {count(intel.vendors.length)} covered vendors

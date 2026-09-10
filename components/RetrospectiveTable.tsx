@@ -105,7 +105,7 @@ export function RetrospectiveTable({
   return (
     <Panel className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[0.95rem]">
+        <table className="w-full border-collapse text-[0.98rem]">
           <thead>
             <tr>
               <th className="eyebrow px-5 py-2.5 text-left font-semibold">Vendor</th>
