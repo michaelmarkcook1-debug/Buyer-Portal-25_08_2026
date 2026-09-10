@@ -1135,6 +1135,58 @@ export const getScopeLines = cache(async (tickersKey: string): Promise<ScopeLine
   return rows.map((r) => ({ line: r.line, contracts: Number(r.n), inPlay24: Number(r.in_play) }));
 });
 
+export interface ScopeCountry {
+  country: string;
+  contracts: number;
+  inPlay12: number;
+  /** Disclosed value only — an estimated value never enters a country total. */
+  disclosedUsd: number | null;
+}
+
+/**
+ * Where the selected market's observed agreements were SIGNED.
+ *
+ * The country is the one the source names, folded to a single spelling per
+ * country upstream. It is a property of the agreement, not of delivery: a
+ * contract signed in the United Kingdom may be delivered from anywhere, and
+ * this must never be read as a delivery-location or offshore-exposure figure.
+ *
+ * Agreements whose source names no country are counted apart rather than
+ * dropped, so a reader can see how much of the market the lens does not cover.
+ */
+export const getScopeCountries = cache(
+  async (tickersKey: string): Promise<{ rows: ScopeCountry[]; unstated: number }> => {
+    const tickers = tickersKey.split(",").filter(Boolean);
+    if (tickers.length === 0) return { rows: [], unstated: 0 };
+    const rows = await q<{ country: string | null; n: string; in_play: string; usd: number | null }>(
+      `SELECT d.signing_region AS country,
+              count(*) AS n,
+              count(*) FILTER (WHERE d.end_date >= current_date
+                AND d.end_date < current_date + interval '12 months') AS in_play,
+              sum(d.tcv_usd) FILTER (WHERE d.value_provenance = 'disclosed') AS usd
+         FROM deal d
+         JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
+        WHERE d.source_system = ANY($1::text[])
+          AND x.external_id = ANY($2::text[])
+        GROUP BY 1
+        ORDER BY count(*) DESC`,
+      [COMMERCIAL_SYSTEMS, tickers],
+    );
+    let unstated = 0;
+    const out: ScopeCountry[] = [];
+    for (const r of rows) {
+      if (!r.country) { unstated += Number(r.n); continue; }
+      out.push({
+        country: r.country,
+        contracts: Number(r.n),
+        inPlay12: Number(r.in_play),
+        disclosedUsd: r.usd,
+      });
+    }
+    return { rows: out, unstated };
+  },
+);
+
 /* ───────────────────────── Public procurement flow (fresh market evidence) ───────────────────────── */
 
 export interface ProcurementFlow {

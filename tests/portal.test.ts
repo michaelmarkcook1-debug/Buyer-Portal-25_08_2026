@@ -2902,3 +2902,45 @@ describe("a deck and its lede are set as one sentence (2026-09-10)", () => {
     expect(join).toMatch(/rawHeadline\.endsWith\(":"\)/);
   });
 });
+
+describe("a signing country is not a delivery location (2026-09-10)", () => {
+  const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+  const fact = facts.slice(
+    facts.indexOf("export const getScopeCountries"),
+    facts.indexOf("/* ───────────────────────── Public procurement flow"),
+  );
+  const page = readFileSync(resolve(__dirname, "../app/market/page.tsx"), "utf8");
+  const section = page.slice(page.indexOf("Where this market signs"), page.indexOf('eyebrow="AI"'));
+
+  it("says on the page that it is not a delivery location", () => {
+    // The one reading a buyer would most plausibly misuse: signing country
+    // read as offshore exposure. It must be denied where it is shown, not
+    // only in a comment.
+    expect(section).toMatch(/never where it is delivered from/);
+    expect(section).toMatch(/says nothing about where work is delivered/);
+  });
+
+  it("counts agreements with no country apart rather than dropping them", () => {
+    // Silently excluding them would make the lens look like full coverage.
+    expect(fact).toMatch(/unstated/);
+    expect(section).toMatch(/name no country and are counted in none of these/);
+  });
+
+  it("a country total is disclosed value only", () => {
+    // The store models a value for most of its rows; a modelled figure summed
+    // into a country total would read as a measured market size.
+    expect(fact).toMatch(/FILTER \(WHERE d\.value_provenance = 'disclosed'\)/);
+  });
+
+  it("reads the commercial feeds only, and scopes to the selected market", () => {
+    expect(fact).toMatch(/COMMERCIAL_SYSTEMS/);
+    expect(fact).toMatch(/x\.external_id = ANY\(\$2::text\[\]\)/);
+  });
+
+  it("never reads the ISO country column, which holds a different format", () => {
+    // Deal.country is procurement-only ISO codes and already mixes alpha-2
+    // with alpha-3; the commercial feeds carry names.
+    expect(fact).toMatch(/d\.signing_region/);
+    expect(fact).not.toMatch(/d\.country/);
+  });
+});

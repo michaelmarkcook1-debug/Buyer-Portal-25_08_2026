@@ -19,7 +19,7 @@ import {
   SectionHeader,
   StateText,
 } from "@/components/ui";
-import { getDevelopments, getScopeLines } from "@/lib/data/facts";
+import { getDevelopments, getScopeCountries, getScopeLines } from "@/lib/data/facts";
 import { count, money, shortDate } from "@/lib/format";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import { METRIC_DICTIONARY, displayState } from "@/lib/metrics/dictionary";
@@ -96,8 +96,9 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
     exposureTop?.disclosedUsd && exposureTotalDisclosed > 0
       ? exposureTop.disclosedUsd / exposureTotalDisclosed
       : 0;
-  const [lines, developments] = await Promise.all([
+  const [lines, geography, developments] = await Promise.all([
     getScopeLines(tickersKey),
+    getScopeCountries(tickersKey),
     getDevelopments(tickersKey, 20),
   ]);
   const topAwards = developments.filter((d) => d.kind === "award" && d.tcvUsd != null).slice(0, 4);
@@ -218,6 +219,67 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <EmptyEvidence
               title="Insufficient evidence for a pricing view by service family."
               body="Your selected vendors hold no classified contracts on the spine."
+            />
+          )}
+        </div>
+      </section>
+
+      {/* WHERE THE MARKET SIGNS (2026-09-10). The spine carried no geography at
+          all: the columns existed on the table but were absent from the model,
+          so nothing could write them. A country-level question — who signs
+          where, and what is reaching term there — could not be put to the
+          product. This reads the SIGNING country, which is not a delivery
+          location, and the section says so rather than letting a reader infer
+          offshore exposure from it. */}
+      <section className="mt-12">
+        <SectionHeader
+          eyebrow="Geography"
+          title="Where this market signs"
+          aside="The country each agreement was signed in — never where it is delivered from"
+        />
+        <div className="mt-5">
+          {geography.rows.length > 0 ? (
+            <Panel>
+              <ul className="m-0 list-none divide-y p-0" style={{ borderColor: "var(--surface-line-soft)" }}>
+                {geography.rows.slice(0, 12).map((c) => (
+                  <li key={c.country} className="flex flex-wrap items-baseline gap-x-4 px-5 py-3">
+                    <span className="w-56 font-medium" style={{ color: "var(--fg)" }}>
+                      {c.country}
+                    </span>
+                    <span className="tabular text-[0.97rem]" style={{ color: "var(--fg-muted)" }}>
+                      {count(c.contracts)} contracts in scope · {count(c.inPlay12)} reaching term inside 12 months
+                    </span>
+                    {/* Disclosed value only. A modelled figure never enters a
+                        country total, so a country with none shows none. */}
+                    {c.disclosedUsd != null ? (
+                      <span className="tabular ml-auto text-[0.97rem]" style={{ color: "var(--fg-dim)" }}>
+                        {money(c.disclosedUsd)} disclosed
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <div
+                className="code max-w-[92ch] px-5 py-3 text-[0.88rem] leading-snug"
+                style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)" }}
+              >
+                {[
+                  geography.rows.length > 12
+                    ? `Showing the 12 largest of ${count(geography.rows.length)} countries in the record.`
+                    : `${count(geography.rows.length)} countries in the record.`,
+                  geography.unstated > 0
+                    ? `${count(geography.unstated)} agreements name no country and are counted in none of these.`
+                    : null,
+                  "Signing country only — this says nothing about where work is delivered.",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </Panel>
+          ) : (
+            <EmptyEvidence
+              title="No signing country is recorded for this market."
+              body="The agreements on the spine for your selected vendors name no country of signature."
             />
           )}
         </div>
