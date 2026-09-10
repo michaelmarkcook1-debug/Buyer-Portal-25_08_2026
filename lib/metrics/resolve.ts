@@ -26,6 +26,7 @@ import {
   type VendorSignals,
 } from "@/lib/data/facts";
 import {
+  getCommercialModelBreakdown,
   getPricingModelMixByYear,
   getProcurementMonthlyFlow,
   getReputationSeries,
@@ -41,6 +42,7 @@ import {
   headroomState,
   historyModeLabel,
   invertMove,
+  commercialModelReading,
   newestOf,
   opportunityReason,
   pricingRead,
@@ -71,7 +73,7 @@ import {
 } from "./types";
 import {
   AUTOMATION_COPY, BUYER_LEVERAGE_COPY, COMMERCIAL_COPY, HEAT_COPY,
-  aiPressureAnalysis, demandAnalysis, deliveryCostAnalysis, exposureAnalysis,
+  aiPressureAnalysis, commercialModelAnalysis, demandAnalysis, deliveryCostAnalysis, exposureAnalysis,
   headroomAnalysis, intensityAnalysis, pricingAnalysis, productivityTermsAnalysis,
   readingsFrom, riskAnalysis, rollupAnalysis,
 } from "./market-analysis";
@@ -1634,7 +1636,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
   const tickers = scopedTickers(scope, universeTickers);
   const key = [...tickers].sort().join(",");
 
-  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, procMonthly, pricingMix, aiEvents, macroMap] =
+  const [deals, signals, catalog, sec, deltas, agg, anchor, freshness, proc, prims, repSeries, procMonthly, pricingMix, modelMix, aiEvents, macroMap] =
     await Promise.all([
       getVendorDealFacts(key),
       getVendorSignals(key),
@@ -1649,6 +1651,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       getReputationSeries(key),
       getProcurementMonthlyFlow(key),
       getPricingModelMixByYear(key),
+      getCommercialModelBreakdown(key),
       getAiEvents(key),
       getMacroReadings(),
     ]);
@@ -1750,7 +1753,10 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         nrg && narrativeRecordIsSelfConsistent(nrg.direction, nrg.headline)
           ? { direction: nrg.direction, headline: nrg.headline, asOf: nrg.generatedAt ?? nrg.sourcedAt }
           : null,
-      lastUpdated: asOfs.sort().at(-1) ?? anchor.lastIngest,
+      /* Newest evidence date across this vendor's readings, or null. It does
+         not fall back to the spine's ingest time: a vendor whose evidence
+         carries no date is undated, not freshly updated. */
+      lastUpdated: asOfs.sort().at(-1) ?? null,
     };
   });
 
@@ -1919,7 +1925,11 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         );
       }
       if (agg.contracts === 0) return insufficientMetric("m.demand", "Services Demand", "No contract evidence in scope.");
-      const spineAsOf = anchor.dataAsOf ?? anchor.lastIngest;
+      /* An ingestion timestamp is NOT an evidence date (§1). Where the spine
+         carries no dated evidence this stays null and the reading renders
+         undated, rather than borrowing the pipeline's clock and presenting a
+         landing time as the date the market moved. */
+      const spineAsOf = anchor.dataAsOf;
       const spineBasis = [{
         text: `${count(agg.awardsT12)} observed commercial signings across ${count(agg.awardsT12Vendors)} vendors in the 12 months to ${shortDate(spineAsOf)}, vs ${count(agg.awardsPrior12)} across ${count(agg.awardsPrior12Vendors)} in the prior 12.`,
         source: "Curated contract tracker (market record)", ownership: "market" as const,
@@ -1948,7 +1958,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
         return insufficientMetric("m.intensity", "Competitive Intensity", ciGate.reason, [{
           text: `${count(agg.awardsT12Vendors)} scoped vendors observed winning work in the current window vs ${count(agg.awardsPrior12Vendors)} in the comparison window.`,
           source: "Curated contract tracker (market record)", ownership: "market",
-        }], anchor.dataAsOf ?? anchor.lastIngest);
+        }], anchor.dataAsOf);
       }
       const move = ratioMove(agg.awardsT12Vendors, agg.awardsPrior12Vendors);
       return metric(
@@ -1959,7 +1969,7 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
           text: `${count(agg.awardsT12Vendors)} scoped vendors won work in the current window vs ${count(agg.awardsPrior12Vendors)} in the prior window.`,
           source: "Curated contract tracker (market record)", ownership: "market",
         }],
-        anchor.lastIngest,
+        anchor.dataAsOf,
       );
     })(),
     aiProductivityPressure: rollup(
@@ -2029,7 +2039,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
             })),
             procT90: proc.totalT90,
             procPrior90: proc.totalPrior90,
-            asOf: shortDate(anchor.dataAsOf ?? anchor.lastIngest),
+            asOf: shortDate(anchor.dataAsOf),
             procAsOf: proc.lastIngest ? shortDate(proc.lastIngest) : null,
           },
           strip.servicesDemand.state,
@@ -2083,7 +2093,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
         text: `${count(total)} observed agreement${total === 1 ? "" : "s"} reach end-of-term within 12 months across the selected market (${formatValueMix({ disclosedUsd: agg.inPlay12Tcv, inferredLowUsd: agg.inPlay12Inf.low, inferredMidUsd: agg.inPlay12Inf.mid, inferredHighUsd: agg.inPlay12Inf.high })}); ${count(agg.inPlay24)} within 24 months.`,
         source: "Curated contract tracker (market record)", ownership: "market",
       }],
-      anchor.dataAsOf ?? anchor.lastIngest,
+      anchor.dataAsOf,
     );
   })();
 
@@ -2125,7 +2135,35 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
     return metric(
       "m.prodTerms", "Productivity vs Commercial Terms", state, "insufficient",
       withShare.length >= 2 ? "medium" : "low", null, basis,
-      anchor.dataAsOf ?? anchor.lastIngest,
+      anchor.dataAsOf,
+    );
+  })();
+
+  /* E. What the market writes its agreements ON. The commercial-model record
+        already fed the productivity-vs-terms gap and a coverage footnote, but
+        was never stated as a reading — so a buyer whose objective is
+        gain-sharing could not see whether the structure they want is normal
+        here or an exception. That is the first thing that ask depends on. */
+  const modelReading = commercialModelReading(pricingMix.points, anchor.dataAsOf);
+  const commercialModel = (() => {
+    const reading = modelReading;
+    const basis: Basis[] = [];
+    if (modelMix.classified > 0) {
+      basis.push({
+        text: `${count(modelMix.classified)} agreement${modelMix.classified === 1 ? "" : "s"} signed by the selected vendors in the last four years carry a commercial-model classification${modelMix.methods[0] ? `; ${modelMix.methods[0].method.toLowerCase()} is the most common at ${count(modelMix.methods[0].n)}` : ""}.`,
+        source: "Curated contract record — commercial model", ownership: "market",
+      });
+    }
+    if (reading.state === "insufficient") {
+      return insufficientMetric(
+        "m.commercialModel", "Commercial Model",
+        "No signing year in the window carries enough classified agreements to state a commercial-model share.",
+        basis, anchor.dataAsOf,
+      );
+    }
+    return metric(
+      "m.commercialModel", "Commercial Model", reading.state, reading.movement,
+      modelMix.classified >= 100 ? "medium" : "low", null, basis, anchor.dataAsOf,
     );
   })();
 
@@ -2182,10 +2220,29 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
                   ? { name: byValue[0].name, share: byValue[0].usd / totalUsd }
                   : null;
               })(),
-              asOf: shortDate(anchor.dataAsOf ?? anchor.lastIngest),
+              asOf: shortDate(anchor.dataAsOf),
             },
             exposure.state,
           ),
+    ),
+    withAnalysis(
+      commercialModel,
+      commercialModelAnalysis(
+        {
+          methods: modelMix.methods,
+          classified: modelMix.classified,
+          /* From the SERIES' own coverage, not a second count of our own: the
+             observed universe spans both commercial feeds and only the tracker
+             feed carries a commercial-model field, so a locally-derived figure
+             would quietly disagree with the coverage the series reports. */
+          unclassified: pricingMix.coverage
+            ? Math.max(0, pricingMix.coverage.observedCount - pricingMix.coverage.classifiedCount)
+            : modelMix.unclassified,
+          latest: modelReading.latest,
+          earliest: modelReading.earliest,
+        },
+        commercialModel.state,
+      ),
     ),
     withAnalysis(
       productivityTerms,

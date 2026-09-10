@@ -13,16 +13,34 @@ import { SCENARIOS, applyScenario } from "../lib/scenarios";
 import { resolveIntelligence } from "../lib/metrics/resolve";
 import { levelScore } from "../lib/metrics/types";
 import type { VendorIntel } from "../lib/metrics/types";
+import type { MarketScope } from "../lib/market-scope";
 
 type Classification = "DECISION_CHANGING" | "USEFUL_CONTEXT" | "LOW_VALUE";
 
+/*
+ * MarketScope, not ScopeCookie. Two similarly-named shapes exist and only one
+ * of them is what the resolver parses: the cookie carries `vendors` and
+ * `selectedAt`, the resolver expects `vendorIds`, `selectionTimestamp` and a
+ * `baselineStart`. Building the cookie shape here silently yields an
+ * undefined ticker list.
+ *
+ * The frame is pinned rather than taken from "today" so that a rerun compares
+ * like with like, matching the BDQ harness. Data may move; the frame must not.
+ */
+const AUDIT_SELECTED_AT = "2026-01-01T00:00:00.000Z";
+const AUDIT_FIRST_USE_AT = "2025-01-01T00:00:00.000Z";
+const AUDIT_BASELINE_START = "2025-01-01";
+
 const SCOPE = JSON.stringify({
-  v: 1,
   mode: "selected_vendors",
-  vendors: (process.env.AUDIT_VENDORS ?? "ACN,CTSH,TTNQY").split(","),
-  selectedAt: "2026-08-23T00:00:00.000Z",
-  firstUseAt: "2025-08-21T00:00:00.000Z",
-});
+  vendorIds: (process.env.AUDIT_VENDORS ?? "ACN,CTSH,TTNQY")
+    .split(",")
+    .map((t) => t.trim().toUpperCase())
+    .filter(Boolean),
+  selectionTimestamp: AUDIT_SELECTED_AT,
+  baselineStart: AUDIT_BASELINE_START,
+  firstUseAt: AUDIT_FIRST_USE_AT,
+} satisfies MarketScope);
 
 function strongestLever(v: VendorIntel): string {
   const defined = Object.values(v.opportunities).filter((o) => o.level !== "insufficient");

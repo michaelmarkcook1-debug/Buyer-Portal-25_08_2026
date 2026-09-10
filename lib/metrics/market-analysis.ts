@@ -1,3 +1,4 @@
+import { count } from "@/lib/format";
 import type { Metric, MetricAnalysis, MetricState } from "./types";
 
 /**
@@ -770,5 +771,77 @@ export function productivityTermsAnalysis(p: ProdTermsInputs, state: MetricState
       ? `Pricing-model evidence covers ${p.coverage}; rate LEVELS remain unverifiable from the observed record.`
       : "Rate levels remain unverifiable from the observed record — this reads structure, not price.",
     test: "Is there a mechanism in your agreements that converts a productivity gain into a price change?",
+  };
+}
+
+/* ── commercial model (2026-09-10) ────────────────────────────────────────── */
+
+export interface CommercialModelInputs {
+  /** Method label with its count, largest first, over the signing window. */
+  methods: { method: string; n: number }[];
+  classified: number;
+  unclassified: number;
+  /** Most recent year carrying enough volume to state a share. */
+  latest: { period: string; value: number | null; n: number } | null;
+  /** Earliest such year, for the direction of travel. */
+  earliest: { period: string; value: number | null; n: number } | null;
+}
+
+/**
+ * What the market writes its agreements ON — the question a buyer asking for
+ * gain-sharing has to answer before the ask lands. The card names the dominant
+ * structure and how rare the alternative is, because "rare" is precisely what
+ * determines whether the ask is a reference or an argument.
+ */
+export function commercialModelAnalysis(c: CommercialModelInputs, state: MetricState): MetricAnalysis | undefined {
+  if (state === "insufficient" || c.classified === 0) return undefined;
+
+  const top = c.methods[0];
+  const share = (n: number) => Math.round((n / c.classified) * 100);
+  const outcomeCount = c.methods
+    .filter((m) => /subscription|performance/i.test(m.method))
+    .reduce((a, m) => a + m.n, 0);
+
+  const dominant = top
+    ? `${top.method} accounts for ${share(top.n)}% of the ${count(c.classified)} classified agreement${c.classified === 1 ? "" : "s"} signed in the last four years`
+    : `no single commercial model dominates the ${count(c.classified)} classified agreements`;
+
+  /* Naming the rare structure in absolute terms, not only as a percentage: at
+     these volumes "2 agreements" lands where "0.1%" does not. */
+  const rare =
+    outcomeCount === 0
+      ? "not one carries consumption or outcome-linked terms"
+      : `${count(outcomeCount)} carr${outcomeCount === 1 ? "ies" : "y"} consumption or outcome-linked terms`;
+
+  const travel =
+    c.earliest?.value != null && c.latest?.value != null && c.earliest.period !== c.latest.period
+      ? ` That share has moved from ${c.earliest.value}% of agreements signed in ${c.earliest.period} to ${c.latest.value}% in ${c.latest.period}.`
+      : "";
+
+  const driver = `${dominant}, and ${rare}.${travel}`;
+
+  const implication =
+    state === "unfavourable"
+      ? "A gain-sharing or outcome-linked ask is an exception in this market rather than a norm, so it has to be argued on its own merits — there is little precedent in the record to point at, and a vendor can accurately say it is not how they contract."
+      : state === "favourable"
+        ? "Outcome-linked terms are already an established structure here, so the ask can be made by reference rather than from first principles — the question shifts from whether to how it is measured."
+        : "Both structures are in regular use, so an outcome-linked ask is neither unusual nor assumed — expect it to be negotiated on the mechanism rather than the principle.";
+
+  return {
+    driver,
+    implication,
+    evidence: "Curated contract record — commercial-model classification",
+    limitation:
+      c.unclassified > 0
+        ? `${count(c.unclassified)} agreement${c.unclassified === 1 ? "" : "s"} in the same window carry no commercial-model classification, and rate LEVELS are not in the observed record at all — this reads structure, never price.`
+        : "Rate levels are not in the observed record — this reads structure, never price.",
+    test:
+      state === "unfavourable"
+        ? "Ask the vendor to name where they already deliver on consumption or outcome terms, and why this scope could not be one of them."
+        : "Ask which measurement mechanism governs the outcome component, and who audits it.",
+    distribution: c.methods
+      .slice(0, 4)
+      .map((m) => `${m.method} ${count(m.n)}`)
+      .join(" · "),
   };
 }

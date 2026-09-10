@@ -27,6 +27,12 @@ import { EXCLUDED_STAGES, LOCAL_ONLY_STAGES, REFRESH_STAGES, stagesFor } from "@
 import { scrubSecrets } from "@/lib/backoffice/run-state";
 import { detectExecutor } from "@/lib/backoffice/executor";
 import { EFFECT_INK } from "@/components/ui";
+import { shortDate } from "@/lib/format";
+import {
+  COMMERCIAL_MODEL_ESTABLISHED_PCT, COMMERCIAL_MODEL_FIXED_PCT,
+  commercialModelReading, lastCompleteSigningYear,
+} from "@/lib/metrics/rules";
+import { commercialModelAnalysis } from "@/lib/metrics/market-analysis";
 import { METRIC_REGISTRY, commercialWindowLabel, scopeLabel } from "@/lib/metrics/canonical";
 import { evidenceSufficiency } from "@/lib/metrics/resolve";
 import { marketFirstViolation } from "@/lib/insight/generate";
@@ -2680,6 +2686,191 @@ describe("provenance legibility (pilot simulation, 2026-08-30)", () => {
     const sources = [...block.matchAll(/source:\s*"([^"]+)"/g)].map((m) => m[1]);
     expect(sources).toContain("Curated contract tracker");
     expect(sources).toContain("Contract Tracker curated store");
+  });
+});
+
+describe("an ingest time is never an evidence date (2026-09-10)", () => {
+  /* Source, minus comments — the rule below is discussed in prose in the very
+     file it guards, so matching raw text would pass on a sentence. */
+  const resolveSrc = readFileSync(resolve(__dirname, "../lib/metrics/resolve.ts"), "utf8")
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join("\n");
+
+  it("no reading dates itself by falling back to the spine ingest", () => {
+    // `anchor.dataAsOf ?? anchor.lastIngest` presented a pipeline landing time
+    // as the date the market moved — exactly the conflation the freshness work
+    // removed everywhere else. Dormant while the spine carries dated evidence,
+    // and wrong the moment it does not.
+    expect(resolveSrc).not.toMatch(/dataAsOf\s*\?\?\s*[\w.]*lastIngest/);
+    expect(resolveSrc).not.toMatch(/lastIngest\s*\?\?\s*[\w.]*dataAsOf/);
+  });
+
+  it("the spine ingest is only ever read under a name that says so", () => {
+    // One legitimate use remains: pipeline provenance, explicitly labelled.
+    const anchorReads = [...resolveSrc.matchAll(/anchor\.lastIngest/g)];
+    expect(anchorReads.length).toBe(1);
+    expect(resolveSrc).toMatch(/spineLastIngest:\s*anchor\.lastIngest/);
+  });
+
+  it("an undated reading renders undated rather than borrowing a date", () => {
+    // metric() and the analysis inputs both accept the absence honestly.
+    expect(shortDate(null)).toBe("\u2014");
+    expect(shortDate(undefined)).toBe("\u2014");
+    expect(shortDate("2026-07-07")).toBe("7 Jul 2026");
+  });
+
+  it("Competitive Intensity dates both its branches the same way", () => {
+    // The insufficient branch used dataAsOf while the healthy branch used the
+    // ingest date — one metric, two clocks, depending which way it resolved.
+    const ci = resolveSrc.slice(
+      resolveSrc.indexOf("competitiveIntensity: (() => {"),
+      resolveSrc.indexOf("aiProductivityPressure: rollup("),
+    );
+    expect(ci).toContain("competitive");
+    expect(ci).not.toMatch(/anchor\.lastIngest/);
+    expect([...ci.matchAll(/anchor\.dataAsOf/g)].length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("commercial model is a reading, not a footnote (2026-09-10)", () => {
+  const YEARS = [
+    { period: "2022", value: 0, n: 48 },
+    { period: "2023", value: 0.6, n: 171 },
+    { period: "2024", value: 1.6, n: 185 },
+    { period: "2025", value: 3.4, n: 179 },
+    { period: "2026", value: 0, n: 12 },   // frozen spine: covers Jan–Apr only
+  ];
+
+  it("an incomplete signing year never sets the reading", () => {
+    // The failure this guards: 12 agreements in a part-year read as "0%,
+    // unchanged since 2022" while the last COMPLETE year said 3.4% and rising.
+    const r = commercialModelReading(YEARS, "2026-07-07");
+    expect(r.latest?.period).toBe("2025");
+    expect(r.latest?.value).toBe(3.4);
+    expect(r.earliest?.period).toBe("2022");
+    expect(r.movement).toBe("improving");
+  });
+
+  it("a year completed by the evidence is allowed to set it", () => {
+    const r = commercialModelReading(YEARS, "2026-12-31");
+    expect(r.latest?.period).toBe("2026");
+  });
+
+  it("lastCompleteSigningYear only trusts a year the evidence closes", () => {
+    expect(lastCompleteSigningYear("2026-07-07")).toBe(2025);
+    expect(lastCompleteSigningYear("2026-12-31")).toBe(2026);
+    expect(lastCompleteSigningYear("2026-01-01")).toBe(2025);
+    expect(lastCompleteSigningYear(null)).toBeNull();
+  });
+
+  it("a thin year asserts no share rather than a percentage of a handful", () => {
+    const thin = [{ period: "2024", value: 50, n: 4 }, { period: "2025", value: 0, n: 6 }];
+    expect(commercialModelReading(thin, "2026-07-07").state).toBe("insufficient");
+  });
+
+  it("states track the share, and the bands do not overlap", () => {
+    const at = (pct: number) =>
+      commercialModelReading([{ period: "2025", value: pct, n: 200 }], "2026-07-07").state;
+    expect(at(3.4)).toBe("unfavourable");     // fixed-price market
+    expect(at(12)).toBe("stable");            // both models in use
+    expect(at(35)).toBe("favourable");        // outcome terms established
+    expect(COMMERCIAL_MODEL_FIXED_PCT).toBeLessThan(COMMERCIAL_MODEL_ESTABLISHED_PCT);
+  });
+
+  it("a fixed-price market is an obstacle, never coloured as a hazard", () => {
+    // The ask being unusual is a structural fact. Red would say the market is
+    // dangerous; it is not, it is just not written the way the buyer wants.
+    expect(displayState("m.commercialModel", "unfavourable").effect).toBe("caution");
+    expect(displayState("m.commercialModel", "favourable").effect).toBe("favourable");
+    // and the movement axis stays independent of the state
+    expect(movementEffect("m.commercialModel", "improving")).toBe("favourable");
+    expect(movementEffect("m.commercialModel", "deteriorating")).toBe("caution");
+  });
+
+  it("the reading names structure and never a rate", () => {
+    const a = commercialModelAnalysis(
+      { methods: [{ method: "Fixed price", n: 577 }, { method: "Subscription based", n: 10 }],
+        classified: 595, unclassified: 238,
+        latest: { period: "2025", value: 3.4, n: 179 },
+        earliest: { period: "2022", value: 0, n: 48 } },
+      "unfavourable",
+    );
+    expect(a).toBeDefined();
+    expect(a!.driver).toMatch(/Fixed price accounts for 97%/);
+    expect(a!.driver).toMatch(/2022.*2025/);
+    expect(a!.limitation).toMatch(/rate LEVELS|Rate levels/i);
+    // a structure reading must never imply it knows price
+    expect(`${a!.driver} ${a!.implication}`).not.toMatch(/\$|per hour|day rate|cheaper|expensive/i);
+  });
+
+  it("says nothing at all when the record cannot support it", () => {
+    expect(commercialModelAnalysis(
+      { methods: [], classified: 0, unclassified: 0, latest: null, earliest: null }, "insufficient",
+    )).toBeUndefined();
+  });
+});
+
+describe("renewal evidence is the store's verdict, not ours (2026-09-10)", () => {
+  const page = readFileSync(resolve(__dirname, "../app/vendors/[vendor]/page.tsx"), "utf8");
+  const section = page.slice(
+    page.indexOf("Renewals they have been observed winning"),
+    page.indexOf('SectionHeader eyebrow="Supporting detail"'),
+  );
+  const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+  const fact = facts.slice(
+    facts.indexOf("export const getVendorRenewalEvidence"),
+    facts.indexOf("/* ───────────────────────── AG signals"),
+  );
+
+  it("takes the store's verdict verbatim and never recomputes one", () => {
+    // The integration boundary: this repo reads AG truth, it does not re-derive
+    // it. A renewal verdict inferred here would be a second, rival opinion.
+    expect(fact).toMatch(/renewal_status_raw/);
+    expect(fact).not.toMatch(/renewalStatus\s*=\s*|inferRenewal|scoreRenewal|classifyRenewal/);
+    // and it reads the store's own confidence rather than asserting one
+    expect(fact).toMatch(/renewal_confidence_raw/);
+  });
+
+  it("a modelled value never appears in a row that reads as a record", () => {
+    // The store models a value for almost every one of these. A modelled figure
+    // beside a named client and a source link reads as disclosed.
+    expect(section).toMatch(/r\.tcvUsd != null && !r\.tcvEstimated/);
+  });
+
+  it("modelled contract terms are not rendered at all", () => {
+    // End dates here are derived from a modelled contractLengthMonths, which
+    // produced terms running to 2045 and 2046. None may reach the page.
+    expect(section).not.toMatch(/r\.endDate|r\.lengthMonths|r\.startDate/);
+  });
+
+  it("says how the verdict was reached, not just what it was", () => {
+    const note = page.slice(page.indexOf("function renewalNote"), page.indexOf("export default"));
+    expect(note).toMatch(/source-language detection/i);
+    expect(note).toMatch(/confidence/);
+    expect(note).toMatch(/modelled/);
+  });
+
+  it("never implies these are the reader's own agreements", () => {
+    const note = page.slice(page.indexOf("function renewalNote"), page.indexOf("export default"));
+    expect(note).toMatch(/never the reader's/);
+    expect(section).not.toMatch(/your (contract|renewal|agreement)/i);
+  });
+
+  it("absence of a renewal record is not evidence of losing work", () => {
+    expect(section).toMatch(/absence of evidence, not evidence they lose work/);
+  });
+
+  it("the decision service reports separately from the evidence held", () => {
+    // "Not connected" previously sat where a reader would take it to mean no
+    // renewal evidence existed at all. The two are different statements.
+    expect(section).toMatch(/Per-renewal decision briefs:/);
+    expect(section).toMatch(/agBriefs\.status !== "ok"/);
+  });
+
+  it("an unnamed country renders as absent rather than as a place", () => {
+    // The store writes the literal string "Not Specified".
+    expect(fact).toMatch(/!== "Not Specified"/);
   });
 });
 

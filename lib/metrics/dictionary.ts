@@ -317,6 +317,35 @@ export const METRIC_DICTIONARY: Record<string, MetricSemantics> = {
     },
   },
 
+  /* 2026-09-10. The product could already SEE the commercial model — it fed
+     the productivity-vs-terms gap and a footnote — but never stated it. For a
+     buyer whose stated goal is gain-sharing, whether outcome terms are normal
+     in this market is a first-order question, not a footnote. */
+  "m.commercialModel": {
+    name: "Commercial model",
+    definition:
+      "The shape observed agreements are written in — fixed price against consumption- or outcome-linked terms.",
+    interpretation:
+      "Outcome-linked terms established means a meaningful share of the record already carries them, so the structure a buyer wants has precedent in this market and can be referenced. Fixed-price market means it does not: the same ask is still an exception here and has to be argued rather than cited.",
+    caveat:
+      "It reads the STRUCTURE of agreements, never their rates. A fixed-price market is not an expensive one, and nothing here is a price benchmark.",
+    window: "Agreements signed in the last four years, by signing year.",
+    labels: {
+      favourable: "Outcome-linked terms established",
+      stable: "Both models in regular use",
+      unfavourable: "Fixed-price market",
+      mixed: "No dominant model",
+      insufficient: "Insufficient evidence",
+    },
+    /* A fixed-price market is an obstacle to the buyer's ask, not a hazard —
+       caution, never the risk ink. The same map gives movement its meaning:
+       a rising consumption share is the buyer-favourable direction. */
+    effect: {
+      favourable: "favourable", stable: "neutral", unfavourable: "caution",
+      mixed: "neutral", insufficient: "unknown",
+    },
+  },
+
   "m.buyerEconomics": {
     name: "Buyer economics",
     definition:

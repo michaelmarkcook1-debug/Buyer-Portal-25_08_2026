@@ -1,4 +1,4 @@
-import type { Basis, Confidence, Movement, OpportunityLevel } from "./types";
+import type { Basis, Confidence, MetricState, Movement, OpportunityLevel } from "./types";
 
 /**
  * Pure metric rules — extracted so the truth-critical behaviours are unit-testable
@@ -553,4 +553,90 @@ export function opportunityReason(level: OpportunityLevel, confidence: Confidenc
  */
 export function showsConfidenceCaveat(confidence: Confidence): boolean {
   return confidence === "low" || confidence === "insufficient";
+}
+
+/* ── commercial model (2026-09-10) ────────────────────────────────────────── */
+
+/**
+ * Whether the observed market writes agreements on fixed price or on
+ * consumption/outcome-linked terms.
+ *
+ * This is a STRUCTURE reading, never a rate one. It answers a question a buyer
+ * chasing gain-sharing actually has to answer first: is what I am asking for
+ * already normal in this market, or am I asking for an exception? A market
+ * where outcome terms are common gives the ask a precedent to point at; a
+ * fixed-price market means the ask has to be argued from first principles.
+ *
+ * Thresholds are on the share of agreements signed in the most recent year
+ * that carries enough volume to state one (n >= MIN_YEAR_N). A year thinner
+ * than that asserts no share rather than reporting a percentage built on a
+ * handful of records.
+ */
+export const COMMERCIAL_MODEL_MIN_YEAR_N = 10;
+/** At or above this share, outcome-linked terms are an established option. */
+export const COMMERCIAL_MODEL_ESTABLISHED_PCT = 20;
+/** Below this share, the market is fixed-price in practice. */
+export const COMMERCIAL_MODEL_FIXED_PCT = 8;
+
+export interface CommercialModelPoint {
+  period: string;
+  /** Percent of that year's agreements on consumption/outcome terms; null = too thin to state. */
+  value: number | null;
+  n: number;
+}
+
+export interface CommercialModelReading {
+  state: MetricState;
+  movement: Movement;
+  /** The most recent COMPLETE year with enough volume to state a share. */
+  latest: CommercialModelPoint | null;
+  /** The earliest such year, for the direction of travel. */
+  earliest: CommercialModelPoint | null;
+}
+
+/**
+ * The last signing year the evidence covers END TO END.
+ *
+ * A year still in progress — or, as here, one the frozen spine only covers to
+ * April — carries a fraction of its eventual agreements, and its share is not
+ * comparable with a complete year's. Reading it as one produced the worst kind
+ * of wrong answer: 12 agreements in a part-year said "0%, unchanged since
+ * 2022" while the last complete year said 3.4% and rising.
+ */
+export function lastCompleteSigningYear(dataAsOf: string | null): number | null {
+  if (!dataAsOf || dataAsOf.length < 10) return null;
+  const year = Number(dataAsOf.slice(0, 4));
+  if (!Number.isFinite(year)) return null;
+  return dataAsOf.slice(5, 10) === "12-31" ? year : year - 1;
+}
+
+export function commercialModelReading(
+  points: readonly CommercialModelPoint[],
+  dataAsOf: string | null = null,
+): CommercialModelReading {
+  const through = lastCompleteSigningYear(dataAsOf);
+  const complete = through == null ? points : points.filter((p) => Number(p.period) <= through);
+  const usable = complete.filter((p) => p.value != null && p.n >= COMMERCIAL_MODEL_MIN_YEAR_N);
+  const earliest = usable[0] ?? null;
+  const latest = usable.at(-1) ?? null;
+  if (!latest || latest.value == null) {
+    return { state: "insufficient", movement: "insufficient", latest: null, earliest: null };
+  }
+  const share = latest.value;
+  const state: MetricState =
+    share >= COMMERCIAL_MODEL_ESTABLISHED_PCT ? "favourable"
+    : share < COMMERCIAL_MODEL_FIXED_PCT ? "unfavourable"
+    : "stable";
+
+  /* Direction of travel across the held years. A rising consumption share is
+     the buyer-favourable direction — the effect map, not this function, is
+     what turns that into ink. Both endpoints are percentages, so ratioMove
+     compares like with like; a first year of 0 with any later share reads as
+     improving rather than dividing by zero. */
+  const movement: Movement =
+    !earliest || earliest === latest || earliest.value == null
+      ? "insufficient"
+      : ratioMove(latest.value, earliest.value);
+
+  return { state, movement, latest, earliest };
 }

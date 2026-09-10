@@ -163,6 +163,54 @@ export const getPricingModelMixByYear = cache(async (tickersKey: string): Promis
   });
 });
 
+/**
+ * The commercial-model BREAKDOWN over the same four-year signing window as
+ * getPricingModelMixByYear — how many agreements carry each method, so the
+ * reading can say what the market is written on rather than only what share
+ * it is not. Same join and window as the series, so the two can never
+ * disagree about the set they describe.
+ */
+export interface CommercialModelBreakdown {
+  /** Method label as the record states it, with its count. Largest first. */
+  methods: { method: string; n: number }[];
+  classified: number;
+  /** Agreements in the window carrying no commercial-model classification. */
+  unclassified: number;
+}
+
+export const getCommercialModelBreakdown = cache(
+  async (tickersKey: string): Promise<CommercialModelBreakdown> => {
+    const tickers = tickersKey.split(",").filter(Boolean);
+    const empty: CommercialModelBreakdown = { methods: [], classified: 0, unclassified: 0 };
+    if (tickers.length === 0) return empty;
+    const rows = await q<{ method: string | null; n: string }>(
+      `SELECT sd.pricing_method_raw AS method, count(*) AS n
+         FROM deal d
+         JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
+         LEFT JOIN stg_curated_deal sd
+           ON sd.source_system = d.source_system
+          AND d.deal_id = substr(encode(digest('deal:' || sd.source_system || ':' || sd.source_record_id, 'sha256'), 'hex'), 1, 32)
+        WHERE d.source_system = 'contract_tracker'
+          AND x.external_id = ANY($1::text[])
+          AND d.start_date >= current_date - interval '4 years'
+          AND d.start_date <= current_date
+        GROUP BY 1 ORDER BY count(*) DESC`,
+      [tickers],
+    );
+    let unclassified = 0;
+    const methods: { method: string; n: number }[] = [];
+    for (const r of rows) {
+      const n = Number(r.n);
+      /* The source writes an HTML entity for "Time & materials"; it is a
+         label, not markup, and the buyer should not read the escape. */
+      const label = (r.method ?? "").replace(/&amp;/g, "&").trim();
+      if (!label) unclassified += n;
+      else methods.push({ method: label, n });
+    }
+    return { methods, classified: methods.reduce((a, m) => a + m.n, 0), unclassified };
+  },
+);
+
 /** Mean reputation sentiment series per vendor from the AG tracker's own 8-point series. */
 export const getReputationSeries = cache(async (tickersKey: string): Promise<Map<string, HistorySeries>> => {
   const tickers = tickersKey.split(",").filter(Boolean);

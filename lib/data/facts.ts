@@ -457,6 +457,94 @@ export async function getVendorExposure(ticker: string, limit = 8): Promise<Expo
   }));
 }
 
+export interface RenewalEvidence {
+  client: string;
+  line: string | null;
+  country: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  endEstimated: boolean;
+  lengthMonths: number | null;
+  tcvUsd: number | null;
+  tcvEstimated: boolean;
+  /** The store's own verdict and its own confidence in it. Never recomputed. */
+  status: string;
+  confidence: number | null;
+  /** Why the store reached that verdict, in the store's words. */
+  rationale: string | null;
+  incumbent: string | null;
+  announcedOn: string | null;
+  articleUrl: string | null;
+}
+
+/**
+ * Observed RENEWAL OUTCOMES for one provider, from the Contract Tracker
+ * curated store's own renewal verdicts.
+ *
+ * The store adjudicates each discovered contract and records whether it read
+ * as a renewal, a loss, or neither, with its own confidence and its own
+ * one-line reason. Those verdicts land verbatim (§ integration boundary): this
+ * function selects and scopes them, and never re-derives, re-scores or
+ * second-guesses one.
+ *
+ * These are the PROVIDER's renewals with their own clients — market evidence
+ * of whether this vendor tends to retain or lose work. They are never the
+ * reader's agreements, and the page must not imply otherwise.
+ */
+export const getVendorRenewalEvidence = cache(
+  async (ticker: string, limit = 8): Promise<RenewalEvidence[]> => {
+    const rows = await q<{
+      client: string | null; line: string | null; country: string | null;
+      start_date: string | null; end_date: string | null; end_estimated: boolean | null;
+      length_months: number | null; tcv_usd: number | null; tcv_estimated: boolean | null;
+      status: string; confidence: number | null; rationale: string | null;
+      incumbent: string | null; announced_on: string | null; article_url: string | null;
+    }>(
+      `SELECT s.client_name_raw AS client,
+              NULLIF(s.service_line_raw, '') AS line,
+              NULLIF(s.country_signed_raw, '') AS country,
+              NULLIF(s.start_date_raw, '') AS start_date,
+              NULLIF(s.end_date_raw, '') AS end_date,
+              s.end_estimated, s.length_months,
+              s.tcv_usd_raw AS tcv_usd, s.tcv_estimated,
+              s.renewal_status_raw AS status,
+              s.renewal_confidence_raw::float8 AS confidence,
+              NULLIF(s.raw->>'renewalRationale', '') AS rationale,
+              NULLIF(s.raw->>'incumbentProvider', '') AS incumbent,
+              NULLIF(s.announcement_date_raw, '') AS announced_on,
+              NULLIF(s.article_url, '') AS article_url
+         FROM stg_contract_store s
+         JOIN xref_identity x
+           ON x.ag_provider_id = s.resolved_ag_provider_id AND x.system = 'ticker'
+        WHERE s.resolution_status = 'resolved'
+          AND x.external_id = $1
+          AND s.renewal_status_raw IN ('Renewal', 'Loss')
+        ORDER BY s.announcement_date_raw DESC NULLS LAST
+        LIMIT $2`,
+      [ticker, limit],
+    );
+    return rows.map((r) => ({
+      client: r.client ?? "Client not named in the source",
+      line: r.line,
+      /* The store writes "Not Specified" where it has no country. That is an
+         absence, and absence renders as absence — never as a place. */
+      country: r.country && r.country !== "Not Specified" ? r.country : null,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      endEstimated: r.end_estimated === true,
+      lengthMonths: r.length_months,
+      tcvUsd: r.tcv_usd,
+      tcvEstimated: r.tcv_estimated === true,
+      status: r.status,
+      confidence: r.confidence,
+      rationale: r.rationale,
+      incumbent: r.incumbent,
+      announcedOn: r.announced_on,
+      articleUrl: r.article_url,
+    }));
+  },
+);
+
 /* ───────────────────────── AG signals (latest per ticker) ───────────────────────── */
 
 export interface TalentFacts {

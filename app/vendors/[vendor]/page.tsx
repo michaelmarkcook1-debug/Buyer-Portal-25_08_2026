@@ -11,7 +11,7 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { fetchAgRenewals } from "@/lib/adapters/decision-api";
-import { getDevelopments, getVendorExposure } from "@/lib/data/facts";
+import { getDevelopments, getVendorExposure, getVendorRenewalEvidence } from "@/lib/data/facts";
 import { count, formatTcvDisplay, money, monthsRemaining, shortDate } from "@/lib/format";
 import type { RawSearchParams } from "@/lib/market-scope";
 import { levelScore, type Metric, type VendorIntel } from "@/lib/metrics/types";
@@ -19,6 +19,39 @@ import { resolveIntelligence } from "@/lib/metrics/resolve";
 import { getPortalContext } from "@/lib/portal";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * What the rows above are, and are not.
+ *
+ * Every part of this is a property of the EVIDENCE, not a judgement of the
+ * provider: the store reached its verdict by reading the source headline, it
+ * says how confident it is, and it models the term and usually the value. A
+ * reader who takes "Retained" as an audited outcome is reading more than the
+ * record supports, so the note says exactly how the verdict was reached.
+ */
+function renewalNote(rows: { confidence: number | null; rationale: string | null; tcvEstimated: boolean }[]): string {
+  const conf = rows.map((r) => r.confidence).filter((c): c is number => c != null);
+  const lo = conf.length ? Math.min(...conf) : null;
+  const hi = conf.length ? Math.max(...conf) : null;
+  const band =
+    lo == null ? "" : lo === hi ? ` at confidence ${lo}` : ` at confidence ${lo}–${hi}`;
+  /* The store's reasons are formulaic by design — it detects renewal language
+     rather than adjudicating the commercial substance. Say so once, in its
+     words, rather than repeating an identical sentence on every row. */
+  const reason = rows.find((r) => r.rationale)?.rationale ?? null;
+  const modelled = rows.filter((r) => r.tcvEstimated).length;
+  return [
+    `Curated contract store's own renewal verdicts${band}, landed as recorded.`,
+    reason ? `Reached by source-language detection — "${reason}"` : null,
+    "Contract terms are modelled by the store, so end dates are not shown here.",
+    modelled > 0
+      ? `${modelled} of ${rows.length} carry a modelled value, which is withheld; only disclosed values appear above.`
+      : null,
+    "These are the provider's agreements with their own clients — never the reader's.",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 const CVD_LABEL: Record<string, string> = {
   "over-hyped": "Claims ahead of evidence",
@@ -87,13 +120,13 @@ export default async function VendorDetail({
           <h2 className="display mt-3 text-[1.5rem]" style={{ color: "var(--fg)" }}>
             {name} is not part of your selected vendor market.
           </h2>
-          <p className="mx-auto mt-3 max-w-[50ch] text-[0.98rem]" style={{ color: "var(--fg-muted)" }}>
+          <p className="mx-auto mt-3 max-w-[50ch] text-[1.00rem]" style={{ color: "var(--fg-muted)" }}>
             Your market is {intel.scope.names.join(", ")}. Viewing a vendor never silently changes
             that scope — add them if they should be part of it.
           </p>
           <Link
             href={addUrl}
-            className="tap mt-5 inline-flex rounded-md px-5 py-2 text-[0.98rem] font-semibold"
+            className="tap mt-5 inline-flex rounded-md px-5 py-2 text-[1.00rem] font-semibold"
             style={{ background: "var(--accent-fill)", color: "#07142a" }}
           >
             Add {name} to your tracked vendors
@@ -103,9 +136,10 @@ export default async function VendorDetail({
     );
   }
 
-  const [exposure, developments, agBriefs] = await Promise.all([
+  const [exposure, developments, renewals, agBriefs] = await Promise.all([
     getVendorExposure(ticker, 8),
     getDevelopments(ticker, 10),
+    getVendorRenewalEvidence(ticker, 6),
     fetchAgRenewals(ticker, 12),
   ]);
 
@@ -126,7 +160,7 @@ export default async function VendorDetail({
         <h2 className="display mt-2 text-[2rem] leading-tight" style={{ color: "var(--fg)" }}>
           {focal.name}
         </h2>
-        <p className="mt-1.5 mb-0 text-[0.96rem]" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-1.5 mb-0 text-[0.99rem]" style={{ color: "var(--fg-muted)" }}>
           Compared with your market: {comparedWith}. {count(focal.coverage.contracts)} observed
           contracts on the market record · {count(focal.coverage.inPlay12)} reaching end-of-term
           within 12 months.
@@ -158,21 +192,21 @@ export default async function VendorDetail({
                 focal.differentiation.weakest,
               ].filter(Boolean) as string[];
               return support.length > 0 ? (
-                <p className="mt-3.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                <p className="mt-3.5 mb-0 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                   {support.join(" ")}
                 </p>
               ) : null;
             })()}
 
             {focal.differentiation.risk ? (
-              <p className="mt-2.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--data-risk-ink)" }}>
+              <p className="mt-2.5 mb-0 max-w-[70ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--data-risk-ink)" }}>
                 Current risk to the buyer: {focal.differentiation.risk}
               </p>
             ) : null}
 
             {focal.differentiation.discuss ? (
               <p
-                className="mt-5 mb-0 max-w-[70ch] rounded-[var(--radius-sm)] px-4 py-3 text-[1rem] leading-relaxed"
+                className="mt-5 mb-0 max-w-[70ch] rounded-[var(--radius-sm)] px-4 py-3 text-[1.02rem] leading-relaxed"
                 style={{ background: "var(--bg-elev-2)", color: "var(--fg)" }}
               >
                 <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>Worth challenging</span>{" "}
@@ -180,7 +214,7 @@ export default async function VendorDetail({
               </p>
             ) : null}
 
-            <div className="code mt-4 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+            <div className="code mt-4 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
               Derived from this vendor&apos;s canonical readings · scoped to your {count(intel.vendors.length)}-vendor market
               {intel.spine.dataAsOf ? ` · commercial evidence to ${shortDate(intel.spine.dataAsOf)}` : ""}
             </div>
@@ -193,7 +227,7 @@ export default async function VendorDetail({
         <section className="mt-6">
           <Panel className="px-6 py-4">
             <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>Also distinctive</div>
-            <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0 text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
+            <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0 text-[0.98rem]" style={{ color: "var(--fg-muted)" }}>
               {focal.differentiation.relatives.slice(1).map((r) => (
                 <li key={r}>{r}</li>
               ))}
@@ -213,21 +247,21 @@ export default async function VendorDetail({
             <ol className="m-0 flex list-none flex-col gap-4 p-0">
               {challenges.map((c, i) => (
                 <li key={i} className="flex gap-4">
-                  <span className="code shrink-0 text-[0.88rem]" style={{ color: "var(--accent-ink)" }}>
+                  <span className="code shrink-0 text-[0.93rem]" style={{ color: "var(--accent-ink)" }}>
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <div className="min-w-0">
-                    <p className="m-0 text-[1.02rem] leading-snug font-medium" style={{ color: "var(--fg)" }}>
+                    <p className="m-0 text-[1.03rem] leading-snug font-medium" style={{ color: "var(--fg)" }}>
                       {c.point}
                     </p>
-                    <p className="m-0 mt-1 text-[0.94rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+                    <p className="m-0 mt-1 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
                       Because {c.because}.
                     </p>
                   </div>
                 </li>
               ))}
             </ol>
-            <div className="code mt-4 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+            <div className="code mt-4 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
               Discussion prompts from market evidence — the portal holds none of the reader's own contracts or spend.
             </div>
           </Panel>
@@ -271,7 +305,7 @@ export default async function VendorDetail({
                 {ranks.map((r) => (
                   <li key={r.label} className="flex items-baseline gap-4 px-5 py-3">
                     <span className="w-64 font-medium" style={{ color: "var(--fg)" }}>{r.label}</span>
-                    <span className="tabular text-[0.98rem]" style={{ color: "var(--fg-muted)" }}>
+                    <span className="tabular text-[1.00rem]" style={{ color: "var(--fg-muted)" }}>
                       {ordinal(r.rank)} of {r.of} assessed vendors
                     </span>
                   </li>
@@ -301,11 +335,11 @@ export default async function VendorDetail({
                 : "Direction not stated"}
             </div>
             {focal.claimsVsDelivery.headline ? (
-              <p className="mt-2 mb-0 max-w-[75ch] text-[1.02rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+              <p className="mt-2 mb-0 max-w-[75ch] text-[1.03rem] leading-relaxed" style={{ color: "var(--fg)" }}>
                 {focal.claimsVsDelivery.headline}
               </p>
             ) : null}
-            <p className="code mt-3 mb-0 text-[0.78rem]" style={{ color: "var(--fg-dim)" }}>
+            <p className="code mt-3 mb-0 text-[0.87rem]" style={{ color: "var(--fg-dim)" }}>
               AG conclusion and direction only — the underlying assessment methodology is proprietary.
             </p>
           </Panel>
@@ -322,7 +356,7 @@ export default async function VendorDetail({
               : "Their defensive position is your leverage"
           }
         />
-        <p className="mt-2 mb-0 text-[0.9rem]" style={{ color: "var(--fg-dim)" }}>
+        <p className="mt-2 mb-0 text-[0.95rem]" style={{ color: "var(--fg-dim)" }}>
           Observed agreements between {focal.name} and other organisations, from the public and
           curated market record. None of these are your contracts — the portal holds no buyer-owned
           contract data.
@@ -331,7 +365,7 @@ export default async function VendorDetail({
           {exposure.length > 0 ? (
             <Panel className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-[0.95rem]">
+                <table className="w-full border-collapse text-[0.98rem]">
                   <thead>
                     <tr>
                       <th className="eyebrow px-5 py-2.5 text-left font-semibold">Client</th>
@@ -368,12 +402,82 @@ export default async function VendorDetail({
               body="The contract spine holds no expiring agreements for this vendor in the window."
             />
           )}
+        </div>
+      </section>
+
+      {/* RENEWAL TRACK RECORD (2026-09-10). The Contract Tracker store already
+          adjudicates each discovered contract for renewal language and records
+          its own verdict, confidence and reason. Those verdicts landed in
+          staging and stopped there — the page showed only "AG renewal briefs
+          are not connected", which is true of the decision SERVICE and said
+          nothing about the renewal evidence already held. The store's verdict
+          is rendered verbatim; nothing here is re-scored. */}
+      <section className="mt-12">
+        <SectionHeader
+          eyebrow="Market record"
+          title="Renewals they have been observed winning"
+          aside="Whether this provider tends to retain the work it holds"
+        />
+        <div className="mt-5">
+          {renewals.length > 0 ? (
+            <Panel>
+              <ul className="m-0 list-none divide-y p-0" style={{ borderColor: "var(--surface-line-soft)" }}>
+                {renewals.map((r, i) => (
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3 text-[0.98rem]">
+                    <span className="code tabular text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+                      {shortDate(r.announcedOn)}
+                    </span>
+                    <span style={{ color: "var(--fg)" }}>{r.client}</span>
+                    {r.status === "Loss" ? (
+                      <span className="eyebrow" style={{ color: "var(--data-risk-ink)" }}>Lost</span>
+                    ) : (
+                      <span className="eyebrow" style={{ color: "var(--data-positive-ink)" }}>Retained</span>
+                    )}
+                    {r.line ? <span style={{ color: "var(--fg-muted)" }}>{r.line}</span> : null}
+                    {r.country ? <span style={{ color: "var(--fg-dim)" }}>{r.country}</span> : null}
+                    {/* Value shows ONLY where the source disclosed it. The store
+                        models a value for most of these, and a modelled figure
+                        must never sit in a row that reads as a record. */}
+                    {r.tcvUsd != null && !r.tcvEstimated ? (
+                      <span className="tabular" style={{ color: "var(--fg-muted)" }}>{money(r.tcvUsd)}</span>
+                    ) : null}
+                    {r.articleUrl ? (
+                      <a
+                        href={r.articleUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="code tap-link ml-auto text-[0.88rem]"
+                        style={{ color: "var(--rail-ink)" }}
+                      >
+                        Source ↗
+                      </a>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <div
+                className="code max-w-[92ch] px-5 py-3 text-[0.88rem] leading-snug"
+                style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)" }}
+              >
+                {renewalNote(renewals)}
+              </div>
+            </Panel>
+          ) : (
+            <EmptyEvidence
+              title="No renewal outcome is recorded for this provider."
+              body="The curated store holds no contract for them that it read as a renewal or a loss. That is an absence of evidence, not evidence they lose work."
+            />
+          )}
+          {/* The decision SERVICE is a separate, richer thing: per-renewal
+              briefs from SourcingGenius. Its status is reported on its own,
+              so "not connected" can never be mistaken for "no renewal
+              evidence held". */}
           {agBriefs.status !== "ok" ? (
-            <p className="code mt-2 mb-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
-              AG renewal briefs: {agBriefs.reason}
+            <p className="code mt-3 mb-0 max-w-[92ch] text-[0.88rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+              Per-renewal decision briefs: {agBriefs.reason}
             </p>
           ) : (
-            <p className="code mt-2 mb-0 text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>
+            <p className="code mt-3 mb-0 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
               AG decision service connected — {agBriefs.count} renewal brief{agBriefs.count === 1 ? "" : "s"} available for this vendor.
             </p>
           )}
@@ -387,13 +491,13 @@ export default async function VendorDetail({
             <Panel>
               <ul className="m-0 list-none divide-y p-0" style={{ borderColor: "var(--surface-line-soft)" }}>
                 {developments.slice(0, 6).map((d, i) => (
-                  <li key={i} className="flex flex-wrap items-baseline gap-x-3 px-5 py-3 text-[0.95rem]">
-                    <span className="code tabular text-[0.8rem]" style={{ color: "var(--fg-dim)" }}>{shortDate(d.date)}</span>
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-3 px-5 py-3 text-[0.98rem]">
+                    <span className="code tabular text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>{shortDate(d.date)}</span>
                     <span style={{ color: "var(--fg)" }}>{d.headline}</span>
                     {d.tcvUsd != null ? <span className="tabular" style={{ color: "var(--fg-muted)" }}>{money(d.tcvUsd)}</span> : null}
                     {d.detail ? <span style={{ color: "var(--fg-dim)" }}>{d.detail}</span> : null}
                     {d.sourceUrl ? (
-                      <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="code tap-link ml-auto text-[0.8rem]" style={{ color: "var(--rail-ink)" }}>
+                      <a href={d.sourceUrl} target="_blank" rel="noreferrer" className="code tap-link ml-auto text-[0.88rem]" style={{ color: "var(--rail-ink)" }}>
                         Source ↗
                       </a>
                     ) : null}
