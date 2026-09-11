@@ -28,6 +28,8 @@ export interface ServiceFamilyOption {
   count: number;
   /** Those providers, so the picker can gate to them without a second read. */
   tickers: string[];
+  /** Where the membership came from — shown wherever the family is used. */
+  basis: string;
 }
 
 /**
@@ -51,7 +53,7 @@ export async function getPortalContext(sp: RawSearchParams): Promise<PortalConte
   const families: ServiceFamilyOption[] = familyIds
     .map((id, i) => {
       const tickers = familyTickers[i]!.filter((t) => valid.has(t));
-      return { id, label: SERVICE_FAMILIES[id].label, count: tickers.length, tickers };
+      return { id, label: SERVICE_FAMILIES[id]!.label, basis: SERVICE_FAMILIES[id]!.basis, count: tickers.length, tickers };
     })
     .filter((f) => f.count >= MIN_PROVIDERS_FOR_FAMILY_SCOPE);
   return { dbReady: true, universe, scope, names, freshness, spine, updatedAt, families };

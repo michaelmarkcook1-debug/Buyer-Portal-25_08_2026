@@ -2950,17 +2950,34 @@ describe("a service family gates who can be selected (2026-09-11)", () => {
   const bar = readFileSync(resolve(__dirname, "../components/ScopeBar.tsx"), "utf8");
   const route = readFileSync(resolve(__dirname, "../app/select/route.ts"), "utf8");
 
-  it("HR BPO is not offered, and the reason is recorded where the decision lives", () => {
-    // A gate has to be right about who it EXCLUDES. Neither the contract
-    // record nor the AG catalog can establish who delivers outsourced HR, and
-    // a gate on either would have told a buyer that ADP does not.
-    expect(facts).not.toMatch(/"hr-bpo":\s*\{/);
-    const why = facts.slice(facts.indexOf("HR BPO IS DELIBERATELY NOT HERE"), facts.indexOf("export type ServiceFamilyId"));
+  it("HR BPO membership is STATED, never inferred from the contract record", () => {
+    // A gate has to be right about who it EXCLUDES, and the record cannot
+    // establish who delivers outsourced HR: ADP holds one agreement in total,
+    // and TCS, Cognizant, Wipro, Conduent, Genpact and WNS hold no
+    // HR-classified agreement at all. Inferring the family from contracts
+    // would have told a buyer that ADP does not do HR.
+    const why = facts.slice(facts.indexOf("HR BPO IS A STATED CAPABILITY LIST"), facts.indexOf('"hr-bpo": {'));
     expect(why).toMatch(/ADP/);
     expect(why).toMatch(/staffing and recruitment/i);
     expect(why).toMatch(/no HR category/i);
-    // and it says what would turn it on, so the omission is actionable
-    expect(why).toMatch(/capability/i);
+    // it is an explicit provider list, and carries no taxonomy roots at all
+    const fam = facts.slice(facts.indexOf('"hr-bpo": {'), facts.indexOf("export type ServiceFamilyId"));
+    expect(fam).toMatch(/tickers: \[/);
+    expect(fam).not.toMatch(/roots:/);
+    // and the four providers that are not tracked are named, not silently lost
+    expect(why).toMatch(/Alight/);
+    expect(why).toMatch(/SD Worx/);
+    expect(why).toMatch(/Strada/);
+    expect(why).toMatch(/TMF Group/);
+  });
+
+  it("a stated family says so wherever it is used", () => {
+    // A capability someone asserted and a capability the record shows are
+    // different kinds of claim, and must never read as the same one.
+    const fam = facts.slice(facts.indexOf('"hr-bpo": {'), facts.indexOf("export type ServiceFamilyId"));
+    expect(fam).toMatch(/basis:/);
+    expect(fam).toMatch(/stated capability, not an observed one/i);
+    expect(bar).toMatch(/activeFamily\.basis/);
   });
 
   it("a family selects vendors and never becomes a second scope dimension", () => {

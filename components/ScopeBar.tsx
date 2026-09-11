@@ -31,7 +31,7 @@ export function ScopeBar({
   spineDataAgeDays: number | null;
   returnTo: string;
   /** Service families with enough evidence to be worth offering as a scope. */
-  families: { id: string; label: string; count: number; tickers: string[] }[];
+  families: { id: string; label: string; count: number; tickers: string[]; basis: string }[];
 }) {
   const tracking =
     scope.mode === "selected_vendors"
@@ -97,8 +97,8 @@ export function ScopeBar({
                 <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
                   {activeFamily.label} only
                 </span>{" "}
-                Showing the {activeFamily.count} of {universe.length} tracked providers holding
-                observed {activeFamily.label} agreements.{" "}
+                Showing {activeFamily.count} of {universe.length} tracked providers.{" "}
+                {activeFamily.basis}{" "}
                 <Link
                   href={`/select?market=whole&return=${encodeURIComponent(returnTo)}`}
                   className="tap-link"
@@ -182,7 +182,7 @@ export function ScopeBar({
             href={`/select?family=${f.id}&return=${encodeURIComponent(returnTo)}`}
             className="tap text-[0.96rem]"
             style={{ color: "var(--rail-ink)" }}
-            title={`${f.count} of ${universe.length} tracked providers hold observed ${f.label} agreements`}
+            title={`${f.count} of ${universe.length} tracked providers · ${f.basis}`}
           >
             {f.label} providers
           </Link>

@@ -1146,36 +1146,65 @@ export const getScopeLines = cache(async (tickersKey: string): Promise<ScopeLine
  * drawn from all of a provider's work would otherwise be read as an HR BPO
  * market view, which it is not.
  */
-export const SERVICE_FAMILIES = {
-  tech: { label: "Tech", roots: ["svc_it_services"] },
-} as const;
-
-/*
- * HR BPO IS DELIBERATELY NOT HERE (2026-09-11).
- *
- * A gate has to be right about who it excludes. Checked against the record on
- * 11 Sep 2026, neither source can establish which providers deliver outsourced
- * HR, and a gate built on either would have told a buyer that ADP does not.
- *
- * The contract record cannot: of 119 HR & payroll agreements on the spine most
- * belong to staffing and recruitment firms — Hays, Randstad, Itcons, Talent
- * International — which supply contingent labour rather than run an HR
- * function. Among tracked providers ADP holds ONE agreement in total (filed
- * under application outsourcing), and TCS (146 agreements), Cognizant (70),
- * Wipro (44), Conduent (24), Genpact (10) and WNS (6) hold no HR-classified
- * agreement at all. The record classifies what a contract WAS, and at this
- * density that is not evidence of what a provider CAN DO.
- *
- * The AG catalog cannot either: its segment field is genuine vendor-level
- * positioning — Global Systems Integrator, CX / Contact Center BPO,
- * Enterprise BPO, Analytics-led BPO — and carries no HR category.
- *
- * The gate turns on when a source states provider CAPABILITY by service line:
- * an HR segment in the AG catalog, or a curated capability list carrying its
- * own provenance. Inferring it from this contract sample would be a confident
- * wrong answer about the market, which is the one thing the product may not
- * produce.
- */
+export const SERVICE_FAMILIES: Record<string, {
+  label: string;
+  /** Taxonomy roots — the family is whoever holds agreements in them. */
+  roots?: readonly string[];
+  /** An explicit provider list — the family is exactly these, whatever the contract record shows. */
+  tickers?: readonly string[];
+  /** Shown wherever the family is used. Says where the membership came from. */
+  basis: string;
+}> = {
+  tech: {
+    label: "Tech",
+    roots: ["svc_it_services"],
+    basis: "Providers holding observed IT services agreements on the contract record.",
+  },
+  bpo: {
+    label: "BPO",
+    roots: ["svc_bpo"],
+    basis:
+      "Providers holding observed business-process agreements on the contract record — customer operations, finance and accounting, procurement, supply chain, industry-specific and HR alike.",
+  },
+  /*
+   * HR BPO IS A STATED CAPABILITY LIST, NOT AN OBSERVED ONE — and it has to be.
+   *
+   * Checked against the record on 11 Sep 2026, neither source can establish who
+   * delivers outsourced HR. Of 119 HR & payroll agreements on the spine most
+   * belong to staffing and recruitment firms — Hays, Randstad, Itcons, Talent
+   * International — supplying contingent labour rather than running an HR
+   * function. ADP holds ONE agreement in total, filed under application
+   * outsourcing, and TCS (146 agreements), Cognizant (70), Wipro (44),
+   * Conduent (24), Genpact (10) and WNS (6) hold no HR-classified agreement at
+   * all. The record classifies what a contract WAS; at this density that is not
+   * evidence of what a provider CAN DO. The AG catalog cannot answer it either
+   * — its segment field carries no HR category.
+   *
+   * So membership is supplied by the buyer and labelled as such everywhere it
+   * is used. It is a claim about capability with a named source and a date, not
+   * an inference this product made from thin evidence, and the two must never
+   * be presented as the same kind of thing.
+   *
+   * Supplied 11 Sep 2026, 18 providers over two tiers, with Capita added on
+   * request the same day. Fifteen are tracked and appear below in the buyer's
+   * own tier order. Four are not in the AG universe and cannot be scoped to:
+   * Alight, SD Worx, Strada and TMF Group. "Sopra HR Software" is scoped to
+   * its tracked parent, Sopra Steria.
+   */
+  "hr-bpo": {
+    label: "HR BPO",
+    tickers: [
+      // Tier 1 — ADP, Accenture, TCS, IBM, Conduent, Capgemini, Infosys, Wipro, Cognizant
+      "ADP", "ACN", "TTNQY", "IBM", "CNDT", "CGEMY", "INFY", "WIT", "CTSH",
+      // Tier 2 — Genpact, HCLTech, CGI, Sopra, WNS
+      "G", "HCTHY", "GIB", "SOP", "WNS",
+      // Added on request 11 Sep 2026, after the original list. No tier stated.
+      "CPI",
+    ],
+    basis:
+      "Providers the buyer identifies as delivering outsourced HR (list supplied 11 Sep 2026). A stated capability, not an observed one — the contract record is too sparse to establish it.",
+  },
+};
 
 export type ServiceFamilyId = keyof typeof SERVICE_FAMILIES;
 
@@ -1183,9 +1212,12 @@ export function isServiceFamily(v: string | null | undefined): v is ServiceFamil
   return typeof v === "string" && Object.hasOwn(SERVICE_FAMILIES, v);
 }
 
-/** Tickers with at least one observed commercial agreement in the family. */
+/** The providers in a family: an explicit list where one is stated, otherwise whoever holds agreements in its taxonomy roots. */
 export const getVendorsInServiceFamily = cache(async (family: ServiceFamilyId): Promise<string[]> => {
-  const roots = [...SERVICE_FAMILIES[family].roots];
+  const spec = SERVICE_FAMILIES[family]!;
+  if (spec.tickers) return [...spec.tickers];
+  const roots = [...(spec.roots ?? [])];
+  if (roots.length === 0) return [];
   const rows = await q<{ ticker: string }>(
     `SELECT DISTINCT x.external_id AS ticker
        FROM deal d

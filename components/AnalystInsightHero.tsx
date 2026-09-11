@@ -47,7 +47,7 @@ function InsightHeadline({
 }) {
   return (
     <h2
-      className={`display m-0 max-w-[52ch] ${
+      className={`display m-0 ${
         tight ? "text-[1.3rem] leading-[1.4] sm:text-[1.42rem]" : "text-[1.55rem] leading-[1.35] sm:text-[1.72rem]"
       }`}
       style={{ color: muted ? "var(--fg-muted)" : "var(--fg)", fontWeight: 700 }}
@@ -59,7 +59,13 @@ function InsightHeadline({
 
 function Frame({ tab, children }: { tab: InsightTab; children: React.ReactNode }) {
   return (
-    <Panel hero className="px-6 py-7 sm:px-10 sm:py-9">
+    /* The panel is the width of the READING, not the width of the page.
+       It used to span the full 1440px container while the prose inside was
+       capped for legibility, so on a wide screen most of a bordered panel was
+       empty and the briefing looked like a column adrift in a box. The measure
+       now lives here, once, and the grids below stay full width — the lede is
+       a column of prose, the evidence under it is a grid. */
+    <Panel hero className="max-w-[44rem] px-6 py-7 sm:px-10 sm:py-9">
       <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
         Analyst Insight · {TAB_LABEL[tab]}
       </div>
@@ -163,7 +169,7 @@ function InsightResultView({
       <InsightHeadline tight={longHeadline}>{headline}</InsightHeadline>
       {body ? (
         <p
-          className="display m-0 mt-4 max-w-[64ch] whitespace-pre-line text-[1.15rem] leading-[1.6] sm:text-[1.18rem]"
+          className="display m-0 mt-4 whitespace-pre-line text-[1.15rem] leading-[1.6] sm:text-[1.18rem]"
           style={{ color: "var(--fg)", opacity: 0.92 }}
         >
           {body}
