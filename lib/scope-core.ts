@@ -9,6 +9,16 @@ export interface ScopeCookie {
   vendors: string[];
   selectedAt: string;
   firstUseAt: string;
+  /**
+   * The service family the vendors were chosen from, where one was.
+   *
+   * It is a FILTER ON CHOOSING, never a second scope dimension: the selected
+   * vendors remain the market and every reading still covers each provider's
+   * whole observed position. It is remembered only so the picker stays gated
+   * to the same family the buyer is working in, and so the tracking line can
+   * say which family put these providers on screen.
+   */
+  family?: string;
 }
 
 function isoDate(d: Date): string {
@@ -32,6 +42,7 @@ export function parseCookieValue(rawValue: string | undefined): ScopeCookie | nu
     return {
       v: 1,
       mode: parsed.mode,
+      family: typeof parsed.family === "string" && /^[a-z0-9-]{1,32}$/.test(parsed.family) ? parsed.family : undefined,
       vendors: Array.isArray(parsed.vendors)
         ? parsed.vendors.filter((t): t is string => typeof t === "string").map((t) => t.toUpperCase())
         : [],

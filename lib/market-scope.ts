@@ -35,6 +35,8 @@ export interface MarketScope {
   mode: ScopeMode;
   /** Uppercase AG tickers. Empty when whole_market or unset. */
   vendorIds: string[];
+  /** The service family the vendors were chosen from, if any. */
+  family?: string;
   selectionTimestamp: string | null;
   /** first_use_date − 12 months (YYYY-MM-DD). */
   baselineStart: string;
@@ -73,7 +75,7 @@ export async function getMarketScope(
       return { mode: "whole_market", vendorIds: [], selectionTimestamp: stored.selectedAt, baselineStart: baselineFrom(firstUseAt), firstUseAt };
     }
     if (vendors.length > 0) {
-      return { mode: "selected_vendors", vendorIds: vendors, selectionTimestamp: stored.selectedAt, baselineStart: baselineFrom(firstUseAt), firstUseAt };
+      return { mode: "selected_vendors", vendorIds: vendors, family: stored.family, selectionTimestamp: stored.selectedAt, baselineStart: baselineFrom(firstUseAt), firstUseAt };
     }
   }
 

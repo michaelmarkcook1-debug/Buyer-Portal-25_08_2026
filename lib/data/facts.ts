@@ -1135,6 +1135,70 @@ export const getScopeLines = cache(async (tickersKey: string): Promise<ScopeLine
   return rows.map((r) => ({ line: r.line, contracts: Number(r.n), inPlay24: Number(r.in_play) }));
 });
 
+/**
+ * The service families offered as a one-click scope.
+ *
+ * A family selects the PROVIDERS carrying commercial evidence in that line —
+ * it does not filter their evidence down to it. In this product the selected
+ * vendors ARE the market, so every reading still covers each provider's whole
+ * observed position; what changes is which providers are in the room. The
+ * scope bar says so in those words, because "HR BPO" over a set of readings
+ * drawn from all of a provider's work would otherwise be read as an HR BPO
+ * market view, which it is not.
+ */
+export const SERVICE_FAMILIES = {
+  tech: { label: "Tech", roots: ["svc_it_services"] },
+} as const;
+
+/*
+ * HR BPO IS DELIBERATELY NOT HERE (2026-09-11).
+ *
+ * A gate has to be right about who it excludes. Checked against the record on
+ * 11 Sep 2026, neither source can establish which providers deliver outsourced
+ * HR, and a gate built on either would have told a buyer that ADP does not.
+ *
+ * The contract record cannot: of 119 HR & payroll agreements on the spine most
+ * belong to staffing and recruitment firms — Hays, Randstad, Itcons, Talent
+ * International — which supply contingent labour rather than run an HR
+ * function. Among tracked providers ADP holds ONE agreement in total (filed
+ * under application outsourcing), and TCS (146 agreements), Cognizant (70),
+ * Wipro (44), Conduent (24), Genpact (10) and WNS (6) hold no HR-classified
+ * agreement at all. The record classifies what a contract WAS, and at this
+ * density that is not evidence of what a provider CAN DO.
+ *
+ * The AG catalog cannot either: its segment field is genuine vendor-level
+ * positioning — Global Systems Integrator, CX / Contact Center BPO,
+ * Enterprise BPO, Analytics-led BPO — and carries no HR category.
+ *
+ * The gate turns on when a source states provider CAPABILITY by service line:
+ * an HR segment in the AG catalog, or a curated capability list carrying its
+ * own provenance. Inferring it from this contract sample would be a confident
+ * wrong answer about the market, which is the one thing the product may not
+ * produce.
+ */
+
+export type ServiceFamilyId = keyof typeof SERVICE_FAMILIES;
+
+export function isServiceFamily(v: string | null | undefined): v is ServiceFamilyId {
+  return typeof v === "string" && Object.hasOwn(SERVICE_FAMILIES, v);
+}
+
+/** Tickers with at least one observed commercial agreement in the family. */
+export const getVendorsInServiceFamily = cache(async (family: ServiceFamilyId): Promise<string[]> => {
+  const roots = [...SERVICE_FAMILIES[family].roots];
+  const rows = await q<{ ticker: string }>(
+    `SELECT DISTINCT x.external_id AS ticker
+       FROM deal d
+       JOIN service_taxonomy t ON t.taxonomy_id = d.taxonomy_id
+       JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
+      WHERE d.source_system = ANY($1::text[])
+        AND (t.taxonomy_id = ANY($2::text[]) OR t.parent_id = ANY($2::text[]))
+      ORDER BY 1`,
+    [COMMERCIAL_SYSTEMS, roots],
+  );
+  return rows.map((r) => r.ticker);
+});
+
 export interface ScopeCountry {
   country: string;
   contracts: number;

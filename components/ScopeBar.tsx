@@ -20,6 +20,7 @@ export function ScopeBar({
   spineDataAsOf,
   spineDataAgeDays,
   returnTo,
+  families,
 }: {
   scope: MarketScope;
   universe: UniverseVendor[];
@@ -29,17 +30,27 @@ export function ScopeBar({
   spineDataAsOf: string | null;
   spineDataAgeDays: number | null;
   returnTo: string;
+  /** Service families with enough evidence to be worth offering as a scope. */
+  families: { id: string; label: string; count: number; tickers: string[] }[];
 }) {
   const tracking =
     scope.mode === "selected_vendors"
-      ? names.length <= 4
-        ? names.join(" · ")
-        : `${names.slice(0, 3).join(" · ")} · +${names.length - 3} more`
+      ? (names.length <= 4
+          ? names.join(" · ")
+          : `${names.slice(0, 3).join(" · ")} · +${names.length - 3} more`)
       : scope.mode === "whole_market"
         ? `Whole market — ${universe.length} AG-covered vendors`
         : "No vendors selected";
 
   const selected = new Set(scope.vendorIds);
+
+  /* THE GATE. While a family is active the picker offers only the providers
+     that family admits, so a buyer working in one cannot silently reselect
+     their way out of it. It is stated above the list and cleared in one click,
+     because a filter a reader cannot see is a filter they will misread. */
+  const activeFamily = families.find((f) => f.id === scope.family) ?? null;
+  const gated = activeFamily ? new Set(activeFamily.tickers) : null;
+  const offered = gated ? universe.filter((v) => gated.has(v.ticker)) : universe;
 
   return (
     <div
@@ -78,6 +89,25 @@ export function ScopeBar({
               Contract observations are market evidence — agreements between these vendors and other
               organisations. AnalystGenius holds none of your own contracts, spend or renewal dates.
             </p>
+            {activeFamily ? (
+              <p
+                className="mt-0 mb-3 rounded-[var(--radius-sm)] px-3 py-2 text-[0.93rem] leading-relaxed"
+                style={{ background: "var(--bg-elev-2)", color: "var(--fg-muted)" }}
+              >
+                <span className="eyebrow" style={{ color: "var(--accent-ink)" }}>
+                  {activeFamily.label} only
+                </span>{" "}
+                Showing the {activeFamily.count} of {universe.length} tracked providers holding
+                observed {activeFamily.label} agreements.{" "}
+                <Link
+                  href={`/select?market=whole&return=${encodeURIComponent(returnTo)}`}
+                  className="tap-link"
+                  style={{ color: "var(--rail-ink)" }}
+                >
+                  Show all providers
+                </Link>
+              </p>
+            ) : null}
             <form method="GET" action="/select">
               <input type="hidden" name="return" value={returnTo} />
               <div
@@ -85,7 +115,7 @@ export function ScopeBar({
                 role="group"
                 aria-label="Vendors"
               >
-                {universe.map((v) => (
+                {offered.map((v) => (
                   <label
                     key={v.ticker}
                     className="tap tap-stack flex cursor-pointer items-start gap-2.5 rounded-md px-1.5 py-1.5 text-[0.97rem] hover:bg-[color-mix(in_srgb,var(--fg)_4%,transparent)]"
@@ -138,6 +168,25 @@ export function ScopeBar({
             Whole Market
           </Link>
         ) : null}
+
+        {/* SERVICE-FAMILY SCOPES (2026-09-11). One click to the providers who
+            do this kind of work. They select VENDORS — every reading still
+            covers each provider's whole observed position — so the label says
+            "providers", never "market", and the tracking line above says which
+            family put them there. A family with too little evidence to be a
+            market is not offered at all rather than opening on an empty
+            product. */}
+        {families.map((f) => (
+          <Link
+            key={f.id}
+            href={`/select?family=${f.id}&return=${encodeURIComponent(returnTo)}`}
+            className="tap text-[0.96rem]"
+            style={{ color: "var(--rail-ink)" }}
+            title={`${f.count} of ${universe.length} tracked providers hold observed ${f.label} agreements`}
+          >
+            {f.label} providers
+          </Link>
+        ))}
 
         <div className="ml-auto flex items-center gap-4">
           {scope.mode !== "unset" ? (

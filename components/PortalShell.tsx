@@ -32,6 +32,7 @@ export function PortalShell({
           spineDataAsOf={ctx.spine.dataAsOf}
           spineDataAgeDays={ctx.spine.dataAgeDays}
           returnTo={returnTo}
+          families={ctx.families}
         />
       ) : null}
       <main className="mx-auto w-full max-w-[var(--max-width)] flex-1 px-5 pb-16 pt-7 sm:px-8 sm:pt-9">

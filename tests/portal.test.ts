@@ -2944,3 +2944,58 @@ describe("a signing country is not a delivery location (2026-09-10)", () => {
     expect(fact).not.toMatch(/d\.country/);
   });
 });
+
+describe("a service family gates who can be selected (2026-09-11)", () => {
+  const facts = readFileSync(resolve(__dirname, "../lib/data/facts.ts"), "utf8");
+  const bar = readFileSync(resolve(__dirname, "../components/ScopeBar.tsx"), "utf8");
+  const route = readFileSync(resolve(__dirname, "../app/select/route.ts"), "utf8");
+
+  it("HR BPO is not offered, and the reason is recorded where the decision lives", () => {
+    // A gate has to be right about who it EXCLUDES. Neither the contract
+    // record nor the AG catalog can establish who delivers outsourced HR, and
+    // a gate on either would have told a buyer that ADP does not.
+    expect(facts).not.toMatch(/"hr-bpo":\s*\{/);
+    const why = facts.slice(facts.indexOf("HR BPO IS DELIBERATELY NOT HERE"), facts.indexOf("export type ServiceFamilyId"));
+    expect(why).toMatch(/ADP/);
+    expect(why).toMatch(/staffing and recruitment/i);
+    expect(why).toMatch(/no HR category/i);
+    // and it says what would turn it on, so the omission is actionable
+    expect(why).toMatch(/capability/i);
+  });
+
+  it("a family selects vendors and never becomes a second scope dimension", () => {
+    // The selected vendors remain the market; every reading still covers each
+    // provider's whole position. Nothing downstream learns about families.
+    expect(route).toMatch(/never a second scope dimension/);
+    expect(route).toMatch(/getVendorsInServiceFamily/);
+  });
+
+  it("the gate is visible, and escapable in one click", () => {
+    // A filter a reader cannot see is a filter they will misread.
+    expect(bar).toMatch(/only<\/span>|activeFamily\.label\} only/);
+    expect(bar).toMatch(/Show all providers/);
+  });
+
+  it("the picker offers only the gated providers", () => {
+    expect(bar).toMatch(/const offered = gated \? universe\.filter/);
+    expect(bar).toMatch(/\{offered\.map\(/);
+    expect(bar).not.toMatch(/\{universe\.map\(/);
+  });
+
+  it("refining a selection keeps the gate; the whole market clears it", () => {
+    expect(route).toMatch(/the stored one stands|the gate survives refining/);
+    expect(route).toMatch(/if \(wantsWhole\) activeFamily = undefined/);
+  });
+
+  it("a family too thin to be a market is not offered at all", () => {
+    const portal = readFileSync(resolve(__dirname, "../lib/portal.ts"), "utf8");
+    expect(portal).toMatch(/MIN_PROVIDERS_FOR_FAMILY_SCOPE/);
+    expect(portal).toMatch(/f\.count >= MIN_PROVIDERS_FOR_FAMILY_SCOPE/);
+  });
+
+  it("the family label says providers, never market", () => {
+    // "Tech" over readings drawn from all of a provider's work would be read
+    // as a Tech market view. It is not one.
+    expect(bar).toMatch(/\{f\.label\} providers/);
+  });
+});
