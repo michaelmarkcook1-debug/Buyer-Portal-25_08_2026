@@ -11,7 +11,6 @@ import {
   Panel,
   SectionHeader,
 } from "@/components/ui";
-import { fetchAgRenewals } from "@/lib/adapters/decision-api";
 import { getDevelopments, getVendorExposure, getVendorRenewalEvidence } from "@/lib/data/facts";
 import { count, formatTcvDisplay, money, monthsRemaining, shortDate } from "@/lib/format";
 import type { RawSearchParams } from "@/lib/market-scope";
@@ -137,11 +136,13 @@ export default async function VendorDetail({
     );
   }
 
-  const [exposure, developments, renewals, agBriefs] = await Promise.all([
+  /* AG per-renewal decision briefs are left out of the pilot (decision
+     27 Sep 2026): the portal writes its own briefings and shows the store's
+     renewal verdicts below. The adapter stays in lib/adapters for later. */
+  const [exposure, developments, renewals] = await Promise.all([
     getVendorExposure(ticker, 8),
     getDevelopments(ticker, 10),
     getVendorRenewalEvidence(ticker, 6),
-    fetchAgRenewals(ticker, 12),
   ]);
 
   const m = focal.metrics;
@@ -475,19 +476,6 @@ export default async function VendorDetail({
               title="No renewal outcome is recorded for this provider."
               body="The curated store holds no contract for them that it read as a renewal or a loss. That is an absence of evidence, not evidence they lose work."
             />
-          )}
-          {/* The decision SERVICE is a separate, richer thing: per-renewal
-              briefs from SourcingGenius. Its status is reported on its own,
-              so "not connected" can never be mistaken for "no renewal
-              evidence held". */}
-          {agBriefs.status !== "ok" ? (
-            <p className="code mt-3 mb-0 max-w-[92ch] text-meta leading-snug" style={{ color: "var(--fg-dim)" }}>
-              Per-renewal decision briefs: {agBriefs.reason}
-            </p>
-          ) : (
-            <p className="code mt-3 mb-0 text-meta" style={{ color: "var(--fg-dim)" }}>
-              AG decision service connected — {agBriefs.count} renewal brief{agBriefs.count === 1 ? "" : "s"} available for this vendor.
-            </p>
           )}
         </div>
       </section>

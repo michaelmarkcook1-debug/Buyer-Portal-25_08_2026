@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getUniverse, getVendorsInServiceFamily, isServiceFamily } from "@/lib/data/facts";
+import { getCurrentUser } from "@/lib/auth/session";
+import { saveUserScope } from "@/lib/auth/users";
 import { isDbConfigured } from "@/lib/db";
 import {
   SCOPE_COOKIE,
@@ -57,18 +59,20 @@ export async function GET(req: Request) {
 
   if (wantsWhole) activeFamily = undefined; // the whole market is not a family
   if (wantsWhole || vendors.length > 0) {
-    res.cookies.set(
-      SCOPE_COOKIE,
-      encodeCookieValue({
-        v: 1,
-        mode: wantsWhole ? "whole_market" : "selected_vendors",
-        vendors,
-        family: activeFamily,
-        selectedAt: now,
-        firstUseAt,
-      }),
-      { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 },
-    );
+    const value = encodeCookieValue({
+      v: 1,
+      mode: wantsWhole ? "whole_market" : "selected_vendors",
+      vendors,
+      family: activeFamily,
+      selectedAt: now,
+      firstUseAt,
+    });
+    res.cookies.set(SCOPE_COOKIE, value, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    /* Saved on the account too, so the selection follows the buyer to any
+       browser; sign-in restores it. Market vendors only — no buyer-owned
+       commercial data is held. */
+    const user = isDbConfigured() ? await getCurrentUser() : null;
+    if (user) await saveUserScope(user.id, value);
   }
   // A submission with nothing selected changes nothing — the current scope stands.
 

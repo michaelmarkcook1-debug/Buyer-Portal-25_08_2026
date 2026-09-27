@@ -196,17 +196,34 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
             AnalystGenius · Buyer Portal
           </span>
-          {/* Operator utility, deliberately in the footer rather than the tab
-              bar: the Backoffice is not a buyer surface and must not read as a
-              sixth destination. */}
-          <Link
-            href="/backoffice"
-            prefetch={false}
-            className="tap-link code ml-auto text-meta underline-offset-4 hover:underline"
-            style={{ color: "var(--fg-dim)" }}
-          >
-            Backoffice
-          </Link>
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+            {ctx.dbReady ? (
+              <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
+                Signed in as {ctx.user.email}
+              </span>
+            ) : null}
+            {/* Operator utility, admins only. It sat in every buyer's footer and
+                its endpoint accepted anyone; buyers now never see it. */}
+            {ctx.dbReady && ctx.user.role === "admin" ? (
+              <Link
+                href="/backoffice"
+                prefetch={false}
+                className="tap-link code text-meta underline-offset-4 hover:underline"
+                style={{ color: "var(--fg-dim)" }}
+              >
+                Backoffice
+              </Link>
+            ) : null}
+            <form method="POST" action="/api/auth/logout" className="m-0">
+              <button
+                type="submit"
+                className="tap-link code cursor-pointer border-0 bg-transparent p-0 text-meta underline-offset-4 hover:underline"
+                style={{ color: "var(--fg-dim)" }}
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </footer>

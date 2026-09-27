@@ -5,6 +5,7 @@ import { Hairline, Panel, SectionHeader } from "@/components/ui";
 import { detectExecutor } from "@/lib/backoffice/executor";
 import { lastSuccessfulChecks, latestRun } from "@/lib/backoffice/run-state";
 import { getFreshness, getSpineAnchor } from "@/lib/data/facts";
+import { requireAdmin } from "@/lib/auth/session";
 import { isDbConfigured } from "@/lib/db";
 import { count, shortDate } from "@/lib/format";
 
@@ -25,6 +26,7 @@ export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robot
  * local-file stages still run only when the operator runs them.
  */
 export default async function BackofficePage() {
+  await requireAdmin();
   const executor = detectExecutor();
   const ready = isDbConfigured();
   const [freshness, spine, checks, lastRun] = ready

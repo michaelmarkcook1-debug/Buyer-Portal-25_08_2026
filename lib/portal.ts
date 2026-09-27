@@ -5,6 +5,9 @@ import {
   type SourceFreshness, type SpineAnchor, type UniverseVendor,
 } from "@/lib/data/facts";
 import { isDbConfigured } from "@/lib/db";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/session";
+import type { PortalUser } from "@/lib/auth/users";
 import { summariseEvidence, type EvidenceSummary } from "@/lib/freshness";
 import { getMarketScope, type MarketScope, type RawSearchParams } from "@/lib/market-scope";
 
@@ -13,6 +16,8 @@ export type PortalContext =
   | { dbReady: false }
   | {
       dbReady: true;
+      /** The signed-in account. Every data page requires one. */
+      user: PortalUser;
       universe: UniverseVendor[];
       scope: MarketScope;
       names: string[];
@@ -44,6 +49,10 @@ const MIN_PROVIDERS_FOR_FAMILY_SCOPE = 5;
 
 export async function getPortalContext(sp: RawSearchParams): Promise<PortalContext> {
   if (!isDbConfigured()) return { dbReady: false };
+  /* Middleware already turned away anyone without an authentic session; this
+     is the authoritative check — the account must exist and not be disabled. */
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const familyIds = Object.keys(SERVICE_FAMILIES) as ServiceFamilyId[];
   const [universe, spine, freshness, familyTickers] = await Promise.all([
     getUniverse(), getSpineAnchor(), getFreshness(),
@@ -61,7 +70,7 @@ export async function getPortalContext(sp: RawSearchParams): Promise<PortalConte
       return { id, label: SERVICE_FAMILIES[id]!.label, basis: SERVICE_FAMILIES[id]!.basis, count: tickers.length, tickers };
     })
     .filter((f) => f.count >= MIN_PROVIDERS_FOR_FAMILY_SCOPE);
-  return { dbReady: true, universe, scope, names, freshness, spine, updatedAt, evidence, families };
+  return { dbReady: true, user, universe, scope, names, freshness, spine, updatedAt, evidence, families };
 }
 
 export function todayLabel(): string {

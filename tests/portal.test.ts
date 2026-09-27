@@ -2892,11 +2892,12 @@ describe("renewal evidence is the store's verdict, not ours (2026-09-10)", () =>
     expect(section).toMatch(/absence of evidence, not evidence they lose work/);
   });
 
-  it("the decision service reports separately from the evidence held", () => {
-    // "Not connected" previously sat where a reader would take it to mean no
-    // renewal evidence existed at all. The two are different statements.
-    expect(section).toMatch(/Per-renewal decision briefs:/);
-    expect(section).toMatch(/agBriefs\.status !== "ok"/);
+  it("AG renewal briefs are left out of the pilot; the store's evidence stays", () => {
+    // Decision 27 Sep 2026: no decision-service status line on the vendor
+    // page. The store's own renewal verdicts are still rendered.
+    const vendorPage = readFileSync(resolve(__dirname, "../app/vendors/[vendor]/page.tsx"), "utf8");
+    expect(vendorPage).not.toMatch(/fetchAgRenewals|agBriefs|Per-renewal decision briefs/);
+    expect(vendorPage).toMatch(/getVendorRenewalEvidence/);
   });
 
   it("an unnamed country renders as absent rather than as a place", () => {

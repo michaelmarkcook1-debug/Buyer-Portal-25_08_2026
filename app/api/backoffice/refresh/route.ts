@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/session";
 import { spawn } from "node:child_process";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -16,6 +17,19 @@ import {
   scrubSecrets,
   setStage,
 } from "@/lib/backoffice/run-state";
+
+
+/**
+ * The refresh endpoint can start a shell on the operator's machine, dispatch a
+ * GitHub workflow and write run state to Neon. It was reachable by anyone who
+ * could load the site. Admins only now, checked here as well as by middleware.
+ */
+async function adminOnly(): Promise<NextResponse | null> {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (user.role !== "admin") return NextResponse.json({ error: "Admins only." }, { status: 403 });
+  return null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +172,8 @@ async function dispatchWorkflow(runId: string, mode: "validation" | "refresh"): 
 
 /** GET — status for the Backoffice UI. Safe to poll while a run is active. */
 export async function GET(): Promise<NextResponse> {
+  const denied = await adminOnly();
+  if (denied) return denied;
   const executor = detectExecutor();
   try {
     await reapStaleRuns();
@@ -182,6 +198,8 @@ export async function GET(): Promise<NextResponse> {
 
 /** POST — start one manual refresh. */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const denied = await adminOnly();
+  if (denied) return denied;
   const executor = detectExecutor();
 
   /* Validation dispatch: infrastructure check only. It claims no run and
