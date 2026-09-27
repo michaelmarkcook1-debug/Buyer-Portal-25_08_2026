@@ -7,6 +7,7 @@ import { FirstRunSelector, PortalShell } from "@/components/PortalShell";
 import {
   BasisList,
   EmptyEvidence,
+  ModelledTag,
   Panel,
   SectionHeader,
 } from "@/components/ui";
@@ -351,8 +352,10 @@ export default async function VendorDetail({
           eyebrow="Market record"
           title="Their expiring agreements"
           aside={
-            exposure.length > 0 && focal.coverage.inPlay12 > exposure.length
-              ? `Showing ${count(exposure.length)} of ${count(focal.coverage.inPlay12)} reaching end-of-term within 12 months`
+            /* The list covers 24 months, so it is counted against the
+               24-month total — not the 12-month one it used to quote. */
+            exposure.length > 0 && focal.coverage.inPlay24 > exposure.length
+              ? `Showing ${count(exposure.length)} of ${count(focal.coverage.inPlay24)} reaching end-of-term within 24 months`
               : "Their defensive position is your leverage"
           }
         />
@@ -389,6 +392,11 @@ export default async function VendorDetail({
                           >
                             {shortDate(e.endDate)} · {monthsRemaining(e.daysRemaining)} remaining
                           </span>
+                          {e.endEstimated ? (
+                            <span className="ml-2">
+                              <ModelledTag note="End date estimated upstream from the announcement date and a modelled term — not a stated term." />
+                            </span>
+                          ) : null}
                         </td>
                       </tr>
                     ))}

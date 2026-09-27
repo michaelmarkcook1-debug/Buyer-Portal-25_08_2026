@@ -1,6 +1,7 @@
 import "server-only";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import { cache } from "react";
+import { summariseEvidence } from "@/lib/freshness";
 import {
   getAiEvents,
   getCatalog,
@@ -1418,6 +1419,19 @@ function rollup(
     (assessed.some((m) => m.confidence === "low") ? "low" : "medium");
   // §17: divergence is analyst signal, not noise — say when the read is uneven.
   const divergent = states.favourable > 0 && states.unfavourable > 0;
+  /* A rollup has no observation date of its own, but its readings do. It
+     carries their span — oldest to newest — so a reader can see how current
+     the summary is without opening each provider, and it never claims a date
+     newer than its newest input. */
+  const readingDates = assessed.map((m) => m.asOf).filter((d): d is string => Boolean(d)).sort();
+  const newestReading = readingDates.at(-1) ?? null;
+  const oldestReading = readingDates[0] ?? null;
+  const readingsSpan =
+    newestReading == null
+      ? null
+      : oldestReading === newestReading
+        ? `Readings dated ${shortDate(newestReading)}.`
+        : `Readings dated ${shortDate(oldestReading)} to ${shortDate(newestReading)}.`;
   /* A state with no sentence beside it asks the buyer to infer the meaning
      from a chip and a count, which is the hierarchy this product inverts. Five
      of nine market readings rendered that way. Mixed is a real condition --
@@ -1446,11 +1460,12 @@ function rollup(
       : baseReading,
     [
       {
-        text: `${states.favourable} of ${n} assessed vendors favourable, ${states.unfavourable} unfavourable, ${states.stable + states.mixed} steady or mixed.`,
+        text: `${states.favourable} of ${n} assessed vendors favourable, ${states.unfavourable} unfavourable, ${states.stable + states.mixed} steady or mixed.${readingsSpan ? ` ${readingsSpan}` : ""}`,
         source: "Derived from canonical metrics", ownership: "market",
+        ...(newestReading ? { asOf: newestReading } : {}),
       },
     ],
-    null,
+    newestReading,
   );
 }
 
@@ -2132,6 +2147,17 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
         source: pricingMix.source, ownership: "market",
       });
     }
+    /* The capability side is always an input, so it is always stated — with
+       its own date. Without it, a scope with no commercial-model series left
+       this reading with no basis at all, and nothing a reader could date. */
+    const capabilityAsOf = newestOf(strip.aiProductivityPressure.asOf, strip.automationOpportunity.asOf);
+    basis.push({
+      text: `Capability side: AI productivity pressure reads ${capability}, automation opportunity ${automation}${
+        capabilityAsOf ? ` (readings to ${shortDate(capabilityAsOf)})` : ""
+      }.${withShare.length < 2 ? " Too few dated commercial-model observations to compare terms against." : ""}`,
+      source: "Derived from canonical metrics", ownership: "market",
+      ...(capabilityAsOf ? { asOf: capabilityAsOf } : {}),
+    });
     return metric(
       "m.prodTerms", "Productivity vs Commercial Terms", state, "insufficient",
       withShare.length >= 2 ? "medium" : "low", null, basis,
@@ -2544,6 +2570,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
 
   const names = tickers.map((t) => nameOf.get(t) ?? t);
   const updatedAt = freshness.map((f) => f.lastSeen).filter((x): x is string => Boolean(x)).sort().at(-1) ?? null;
+  const evidence = summariseEvidence(freshness);
 
   const intel: MarketIntel = {
     scope: {
@@ -2553,6 +2580,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
     },
     baselineStart: scope.baselineStart,
     updatedAt,
+    evidence,
     spine: anchor,
     strip,
     buyerEconomics,

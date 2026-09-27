@@ -279,6 +279,10 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
   }
 
   const intel = await resolveIntelligence(JSON.stringify(ctx.scope));
+  /* Perception readings come from the AG signal family; its own evidence date,
+     not the newest ingest across every source, is what they run to. */
+  const perceptionAsOf =
+    intel.evidence.families.find((f) => f.source === "AnalystGenius signals")?.evidenceDate ?? null;
   const vendors = intel.vendors as unknown as VendorRow[];
   const findings = buildFindings(vendors);
 
@@ -378,7 +382,7 @@ export default async function ReputationPage({ searchParams }: { searchParams: P
           These readings describe how the market perceives each vendor. They are a prompt to ask
           better questions, not a verdict on how a vendor performs on your own account — and the
           underlying analytical scoring is proprietary and is not exposed.
-          {intel.updatedAt ? ` Perception evidence runs to ${shortDate(intel.updatedAt)}.` : ""}
+          {perceptionAsOf ? ` Perception evidence runs to ${shortDate(perceptionAsOf)}.` : ""}
         </p>
       </section>
     </PortalShell>

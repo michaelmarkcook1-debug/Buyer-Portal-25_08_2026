@@ -1756,7 +1756,16 @@ describe("backoffice freshness semantics (2026-08-31)", () => {
     const evidenceExprs = [...sources.matchAll(/evidence:\s*`([^`]+)`/g)].map((m) => m[1]!);
     expect(evidenceExprs.length).toBeGreaterThanOrEqual(4);
     for (const e of evidenceExprs) {
-      expect(e, `evidence expression launders an ingest time: ${e}`).not.toMatch(/ingested_at|created_at|updated_at|current_timestamp|now\(\)/i);
+      /* The ingest time may bound WHICH rows count (procurement: a start
+         counts only if it had happened by the day the row was landed), but
+         must never be the value returned. So the check runs on the expression
+         with its FILTER clause removed, and the FILTER may use the ingest time
+         only as an upper bound on a source date. */
+      const value = e.replace(/FILTER\s*\((?:[^()]|\([^()]*\))*\)/gi, "");
+      expect(value, `evidence expression launders an ingest time: ${e}`).not.toMatch(/ingested_at|created_at|updated_at|current_timestamp|now\(\)/i);
+      for (const f of e.match(/FILTER\s*\((?:[^()]|\([^()]*\))*\)/gi) ?? []) {
+        if (/ingested_at/i.test(f)) expect(f, `ingest time used other than as an upper bound: ${f}`).toMatch(/<=\s*to_char\(ingested_at/i);
+      }
     }
     // and the spine anchor derives its as-of from announcement dates, not ingest
     const anchorFn = facts.slice(facts.indexOf("export const getSpineAnchor"), facts.indexOf("/* ───────────────────────── Vendor universe"));

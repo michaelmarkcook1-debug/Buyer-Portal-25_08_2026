@@ -5,6 +5,7 @@ import {
   type SourceFreshness, type SpineAnchor, type UniverseVendor,
 } from "@/lib/data/facts";
 import { isDbConfigured } from "@/lib/db";
+import { summariseEvidence, type EvidenceSummary } from "@/lib/freshness";
 import { getMarketScope, type MarketScope, type RawSearchParams } from "@/lib/market-scope";
 
 /** Everything the shell and every page needs about the current request. */
@@ -17,7 +18,10 @@ export type PortalContext =
       names: string[];
       freshness: SourceFreshness[];
       spine: SpineAnchor;
+      /** Latest INGEST across sources — pipeline provenance only, never shown as freshness. */
       updatedAt: string | null;
+      /** What the evidence is about, per family — the only freshness the page states. */
+      evidence: EvidenceSummary;
       families: ServiceFamilyOption[];
     };
 
@@ -50,13 +54,14 @@ export async function getPortalContext(sp: RawSearchParams): Promise<PortalConte
   const nameOf = new Map(universe.map((u) => [u.ticker, u.name]));
   const names = scope.vendorIds.map((t) => nameOf.get(t) ?? t);
   const updatedAt = freshness.map((f) => f.lastSeen).filter((x): x is string => Boolean(x)).sort().at(-1) ?? null;
+  const evidence = summariseEvidence(freshness);
   const families: ServiceFamilyOption[] = familyIds
     .map((id, i) => {
       const tickers = familyTickers[i]!.filter((t) => valid.has(t));
       return { id, label: SERVICE_FAMILIES[id]!.label, basis: SERVICE_FAMILIES[id]!.basis, count: tickers.length, tickers };
     })
     .filter((f) => f.count >= MIN_PROVIDERS_FOR_FAMILY_SCOPE);
-  return { dbReady: true, universe, scope, names, freshness, spine, updatedAt, families };
+  return { dbReady: true, universe, scope, names, freshness, spine, updatedAt, evidence, families };
 }
 
 export function todayLabel(): string {

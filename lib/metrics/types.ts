@@ -1,3 +1,5 @@
+import type { EvidenceSummary } from "@/lib/freshness";
+
 /**
  * Canonical buyer metric layer — portal-owned, buyer-specific (spec §17–§19).
  *
@@ -254,8 +256,13 @@ export interface MarketIntel {
   /** Scope echo — vendor names in selection order. */
   scope: { mode: "selected_vendors" | "whole_market"; tickers: string[]; names: string[] };
   baselineStart: string;
-  /** Latest ingest across sources — the global freshness line. */
+  /**
+   * Latest INGEST across sources. Pipeline provenance and cache keying only —
+   * never shown or described as freshness (a no-op re-run moves it).
+   */
   updatedAt: string | null;
+  /** Newest genuine evidence date per family, and which families are stale. */
+  evidence: EvidenceSummary;
   /**
    * Spine freshness carries BOTH truths: ingest provenance and the newest
    * observation date the commercial evidence itself contains (data-as-of).

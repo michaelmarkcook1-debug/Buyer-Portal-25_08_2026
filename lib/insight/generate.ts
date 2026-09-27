@@ -1,3 +1,4 @@
+import { familyEvidenceLines } from "@/lib/freshness";
 import "server-only";
 import { unstable_cache } from "next/cache";
 import type { MarketIntel, VendorIntel, WatchSignal } from "@/lib/metrics/types";
@@ -253,7 +254,7 @@ export function buildContext(
   const sections: string[] = [
     `MARKET SCOPE: ${intel.scope.mode === "whole_market" ? `Whole supported market (${intel.scope.names.length} AG-covered vendors)` : `Selected vendors: ${intel.scope.names.join(", ")}`}.`,
     "EVIDENCE OWNERSHIP: the reader has provided ONLY this vendor selection. None of their contracts, spend, renewal dates, rates or commitments are held. Every contract figure, value and date in this context is a market/public observation about agreements between these vendors and OTHER organisations. Never present any of it as the reader's own.",
-    `RETROSPECTIVE BASELINE: ${intel.baselineStart}. Data updated: ${intel.updatedAt ?? "unknown"}. Commercial contract evidence is as of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old) — treat contract-derived movement accordingly. Public-procurement and AG-signal evidence is materially fresher and each fact carries its own date.`,
+    `RETROSPECTIVE BASELINE: ${intel.baselineStart}. Newest evidence in any family: ${intel.evidence.newest ?? "unknown"}. Commercial contract evidence is as of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old) — treat contract-derived movement accordingly. Other families carry their own dates (listed under EVIDENCE FRESHNESS BY FAMILY); each fact carries its own date.`,
     intel.signalTrackingSince
       ? `AG signal tracking began ${intel.signalTrackingSince}; a full 12-month signal series is not yet held.`
       : "",
@@ -296,7 +297,10 @@ export function buildContext(
   {
     const fam: string[] = [];
     fam.push(`commercial contract spine data-as-of ${intel.spine.dataAsOf ?? "unknown"} (${intel.spine.dataAgeDays ?? "?"} days old — STALE evidence family; constrain current-conclusions accordingly)`);
-    if (intel.updatedAt) fam.push(`freshest evidence families (SEC, AI events, procurement, FX, talent, reputation) run to ${intel.updatedAt}`);
+    /* Each family's own evidence date — never the ingest date, which a no-op
+       re-run moves. A stale family is named as stale so the briefing cannot
+       lean on it as current. */
+    for (const line of familyEvidenceLines(intel.evidence.families.filter((f) => !f.commercial))) fam.push(line);
     sections.push("", "EVIDENCE FRESHNESS BY FAMILY: " + fam.join("; ") + ".");
   }
 

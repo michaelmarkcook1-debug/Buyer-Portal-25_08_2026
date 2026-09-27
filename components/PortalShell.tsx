@@ -28,7 +28,7 @@ export function PortalShell({
           scope={ctx.scope}
           universe={ctx.universe}
           names={ctx.names}
-          updatedAt={ctx.updatedAt}
+          evidence={ctx.evidence}
           spineDataAsOf={ctx.spine.dataAsOf}
           spineDataAgeDays={ctx.spine.dataAgeDays}
           returnTo={returnTo}
@@ -150,8 +150,15 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           >
             {ctx.freshness.map((f) => (
               <li key={f.source}>
+                {/* Evidence date first: it is what the family is ABOUT. The load
+                    date follows, labelled as such — a re-run moves it without
+                    adding a single new fact, so it must never read as freshness. */}
                 <div>
-                  {f.source}: {f.lastSeen ? `${shortDate(f.lastSeen)} (${agoDays(f.daysSince)})` : "never"}
+                  {f.source}:{" "}
+                  {f.evidenceDate ? `evidence to ${shortDate(f.evidenceDate)} (${agoDays(f.evidenceDaysSince)})` : "no evidence date"}
+                </div>
+                <div style={{ opacity: 0.68 }}>
+                  {f.lastSeen ? `loaded ${shortDate(f.lastSeen)}` : "never loaded"}
                   {f.snapshots === 1 ? " · loaded once" : ""}
                 </div>
                 {/* What each family actually feeds. Two of them carry nearly the

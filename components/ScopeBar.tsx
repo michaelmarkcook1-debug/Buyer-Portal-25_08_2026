@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { UniverseVendor } from "@/lib/data/facts";
 import type { MarketScope } from "@/lib/market-scope";
 import { agoDays, shortDate } from "@/lib/format";
+import { familyEvidenceLines, FRESHNESS_CAP_DAYS, type EvidenceSummary } from "@/lib/freshness";
 
 /**
  * The persistent vendor-market selector (spec §6) — visible on every tab.
@@ -16,7 +17,7 @@ export function ScopeBar({
   scope,
   universe,
   names,
-  updatedAt,
+  evidence,
   spineDataAsOf,
   spineDataAgeDays,
   returnTo,
@@ -25,7 +26,8 @@ export function ScopeBar({
   scope: MarketScope;
   universe: UniverseVendor[];
   names: string[];
-  updatedAt: string | null;
+  /** Per-family evidence dates. The ingest date is deliberately not a prop. */
+  evidence: EvidenceSummary;
   /** The newest observation date the commercial evidence itself carries. */
   spineDataAsOf: string | null;
   spineDataAgeDays: number | null;
@@ -43,6 +45,16 @@ export function ScopeBar({
         : "No vendors selected";
 
   const selected = new Set(scope.vendorIds);
+  /* The spine sentence covers the commercial feeds; any other family past the
+     cap is named here rather than implied fresh by the families beside it. */
+  const otherStale = evidence.stale.filter((f) => !f.commercial);
+  const fresherFamilies = evidence.families.filter((f) => !f.commercial && f.evidenceDate && !f.stale);
+  const fresherNote =
+    fresherFamilies.length > 0
+      ? `${fresherFamilies.map((f) => f.source).join(", ")} run to ${shortDate(
+          fresherFamilies.map((f) => f.evidenceDate!).sort()[0]!,
+        )} or later.`
+      : null;
 
   /* THE GATE. While a family is active the picker offers only the providers
      that family admits, so a buyer working in one cannot silently reselect
@@ -194,24 +206,43 @@ export function ScopeBar({
               12-month baseline from {shortDate(scope.baselineStart)}
             </span>
           ) : null}
-          {updatedAt ? (
-            <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }} title="Latest ingest across connected sources">
-              Updated {shortDate(updatedAt)}
+          {evidence.newest ? (
+            <span
+              className="code text-[0.88rem]"
+              style={{ color: "var(--fg-dim)" }}
+              title={`Newest evidence by family — the date each is about, not when it was loaded:\n${familyEvidenceLines(evidence.families).join("\n")}`}
+            >
+              Newest evidence {shortDate(evidence.newest)}
             </span>
           ) : null}
         </div>
       </div>
 
-      {spineDataAgeDays != null && spineDataAgeDays > 45 ? (
+      {(spineDataAgeDays != null && spineDataAgeDays > FRESHNESS_CAP_DAYS) || otherStale.length > 0 ? (
         <div style={{ background: "var(--data-watch-soft)" }}>
           <div
             className="mx-auto max-w-[var(--max-width)] px-5 py-1.5 text-[0.93rem] sm:px-8"
             style={{ color: "var(--data-watch-ink)" }}
           >
             <span className="block max-w-[84ch]">
-              Commercial contract evidence is as of {shortDate(spineDataAsOf)} ({agoDays(spineDataAgeDays)}) —
-              contract-derived readings are dated accordingly. Public-procurement and AG-signal evidence is
-              fresher and carries its own dates; nothing here is passed off as current.
+              {spineDataAgeDays != null && spineDataAgeDays > FRESHNESS_CAP_DAYS ? (
+                <>
+                  Commercial contract evidence is as of {shortDate(spineDataAsOf)} ({agoDays(spineDataAgeDays)}) —
+                  contract-derived readings are dated accordingly.{" "}
+                </>
+              ) : null}
+              {otherStale.length > 0 ? (
+                <>
+                  Also past {FRESHNESS_CAP_DAYS} days:{" "}
+                  {otherStale
+                    .map((f) => `${f.source.toLowerCase()} (to ${shortDate(f.evidenceDate)})`)
+                    .join(", ")}
+                  .{" "}
+                </>
+              ) : fresherNote ? (
+                <>{fresherNote} </>
+              ) : null}
+              Every reading carries its own date; nothing here is passed off as current.
             </span>
           </div>
         </div>

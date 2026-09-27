@@ -49,6 +49,8 @@ export interface SourceFreshness {
   /** What the newest evidence is ABOUT — never the ingestion date. */
   evidenceDate: string | null;
   evidenceDaysSince: number | null;
+  /** A commercial contract feed — its age is the spine's data-as-of. */
+  commercial: boolean;
 }
 
 /**
@@ -87,7 +89,12 @@ const FRESHNESS_SOURCES: readonly {
     stage: null,
     source: "Public procurement record",
     feeds: "award flow across 6 jurisdictions — market evidence",
-    evidence: `max(left(start_date_raw, 10)) FILTER (WHERE left(start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))`,
+    /* The corpus carries start dates only, and some rows start after the day
+       they were landed (a scheduled start of an award already made). Capping
+       at today let those starts arrive one by one with no new data, so the
+       family read as days old weeks after its last import. A start counts as
+       evidence only if it had happened by the time the row was landed. */
+    evidence: `max(left(start_date_raw, 10)) FILTER (WHERE left(start_date_raw, 10) <= to_char(ingested_at, 'YYYY-MM-DD'))`,
   },
   {
     table: "stg_analystgenius_signal",
@@ -149,6 +156,7 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
         daysSince: r?.days_since == null ? null : Number(r.days_since),
         evidenceDate: r?.evidence_date ?? null,
         evidenceDaysSince: r?.evidence_days == null ? null : Number(r.evidence_days),
+        commercial: stage === "contract-tracker" || stage === "contract-store",
       };
     }),
   );
@@ -232,7 +240,7 @@ export const getUniverse = cache(async (): Promise<UniverseVendor[]> => {
      ), xr AS (
        SELECT x.external_id AS ticker, x.ag_provider_id
          FROM xref_identity x WHERE x.system = 'ticker'
-     )
+     ), ${SEC_ITEMS_CTE}
      SELECT l.ticker, l.name,
             (SELECT count(*) FROM deal d
               WHERE d.ag_provider_id = xr.ag_provider_id AND d.source_system = ANY($1::text[])) AS contracts,
@@ -242,7 +250,7 @@ export const getUniverse = cache(async (): Promise<UniverseVendor[]> => {
                 AND d.end_date < current_date + interval '24 months') AS in_play_24,
             (SELECT count(DISTINCT s.signal_type) FROM stg_analystgenius_signal s
               WHERE s.ticker = l.ticker) AS signal_types,
-            (SELECT count(*) FROM stg_sec_event e WHERE e.ticker = l.ticker) AS sec_events
+            (SELECT count(*) FROM sec_items e WHERE e.ticker = l.ticker) AS sec_events
        FROM latest l
        JOIN xr ON xr.ticker = l.ticker
       ORDER BY l.name ASC`,
@@ -419,23 +427,36 @@ export interface ExposureContract {
   tcvHighUsd: number | null;
   endDate: string;
   daysRemaining: number;
+  /**
+   * True where the end date is the curated store's own estimate (announcement
+   * proxy plus a modelled term) rather than a stated term. Every store-sourced
+   * agreement is currently estimated; showing those dates as observed would
+   * pass a model off as the record.
+   */
+  endEstimated: boolean;
 }
 
 /** A vendor's agreements reaching their end date — their defensive position. */
 export async function getVendorExposure(ticker: string, limit = 8): Promise<ExposureContract[]> {
   const rows = await q<{
     client_name: string; line: string | null; industry: string | null;
-    tcv_usd: number | null; end_date: string; days: string;
+    tcv_usd: number | null; end_date: string; days: string; end_estimated: boolean | null;
     value_provenance: string | null; tcv_low_usd: number | null; tcv_mid_usd: number | null; tcv_high_usd: number | null;
   }>(
     `SELECT d.client_name, t.display_name AS line, v.display_name AS industry,
             d.tcv_usd, d.value_provenance, d.tcv_low_usd, d.tcv_mid_usd, d.tcv_high_usd,
             to_char(d.end_date, 'YYYY-MM-DD') AS end_date,
-            (d.end_date::date - current_date) AS days
+            (d.end_date::date - current_date) AS days,
+            s.end_estimated
        FROM deal d
        JOIN xref_identity x ON x.ag_provider_id = d.ag_provider_id AND x.system = 'ticker'
        LEFT JOIN service_taxonomy t ON t.taxonomy_id = d.taxonomy_id
        LEFT JOIN vertical v ON v.vertical_id = d.client_vertical_id
+       LEFT JOIN (SELECT DISTINCT ON (source_record_id) source_system, source_record_id, end_estimated
+                    FROM stg_contract_store
+                   ORDER BY source_record_id, ingested_at DESC) s
+         ON s.source_system = d.source_system
+        AND d.deal_id = substr(encode(digest('deal:' || s.source_system || ':' || s.source_record_id, 'sha256'), 'hex'), 1, 32)
       WHERE d.source_system = ANY($1::text[]) AND x.external_id = $2
         AND d.end_date >= current_date
         AND d.end_date < current_date + interval '24 months'
@@ -454,6 +475,7 @@ export async function getVendorExposure(ticker: string, limit = 8): Promise<Expo
     tcvHighUsd: r.tcv_high_usd,
     endDate: r.end_date,
     daysRemaining: Number(r.days),
+    endEstimated: r.end_estimated === true,
   }));
 }
 
@@ -874,6 +896,65 @@ export const getCatalog = cache(async (tickersKey: string): Promise<Map<string, 
 
 /* ───────────────────────── SEC events ───────────────────────── */
 
+/**
+ * The 8-K items this portal reads, with their SEC labels. The historical
+ * stg_sec_event table carried exactly this set, one row per item; the live
+ * sec-events stage lands one row per filing in stg_capability_event with the
+ * items as a comma list and no labels. Holding the set here keeps both sources
+ * to the same meaning — exhibits (9.01) and Reg FD furnishings (7.01) never
+ * reached the old table and must not arrive through the new one.
+ */
+const SEC_ITEM_LABELS: Record<string, string> = {
+  "1.01": "Entry into a material definitive agreement",
+  "1.02": "Termination of a material definitive agreement",
+  "1.05": "Material cybersecurity incident",
+  "2.02": "Results of operations and financial condition",
+  "2.05": "Costs associated with exit or disposal activities",
+  "5.02": "Departure or election of directors and principal officers",
+  "8.01": "Other events",
+};
+
+const SEC_ITEM_CODES_SQL = `ARRAY[${Object.keys(SEC_ITEM_LABELS).map((c) => `'${c}'`).join(",")}]::text[]`;
+const SEC_ITEM_LABEL_SQL = `CASE item_code ${Object.entries(SEC_ITEM_LABELS)
+  .map(([c, l]) => `WHEN '${c}' THEN '${l.replace(/'/g, "''")}'`)
+  .join(" ")} END`;
+
+/**
+ * One row per (filing, item) across both SEC tables. stg_sec_event stopped
+ * being written on 21 Aug; reading it alone presented filings that were weeks
+ * old as the latest while the freshness row, reading the live table, said
+ * otherwise. The live table wins wherever both hold the same accession.
+ * Filing dates leave as text (YYYY-MM-DD), per the estate convention.
+ */
+const SEC_ITEMS_CTE = `sec_live AS (
+    SELECT DISTINCT ON (source_record_id) *
+      FROM stg_capability_event
+     WHERE source_system = 'sec_edgar_8k'
+     ORDER BY source_record_id, ingested_at DESC
+  ), sec_old AS (
+    SELECT DISTINCT ON (accession_no, item_code) *
+      FROM stg_sec_event
+     ORDER BY accession_no, item_code, ingested_at DESC
+  ), sec_items AS (
+    SELECT x.external_id AS ticker,
+           c.canonical_provider_raw AS company_name,
+           c.raw->>'filingDate' AS d,
+           trim(code) AS item_code,
+           c.article_url AS url,
+           c.source_record_id AS accession
+      FROM sec_live c
+      JOIN xref_identity x ON x.ag_provider_id = c.resolved_ag_provider_id AND x.system = 'ticker'
+      CROSS JOIN LATERAL unnest(string_to_array(c.raw->>'items', ',')) AS code
+     WHERE c.raw->>'form' IN ('8-K', '8-K/A')
+       AND trim(code) = ANY(${SEC_ITEM_CODES_SQL})
+    UNION ALL
+    SELECT s.ticker, s.company_name, to_char(s.filed_at, 'YYYY-MM-DD') AS d,
+           s.item_code, s.document_url AS url, s.accession_no AS accession
+      FROM sec_old s
+     WHERE s.item_code = ANY(${SEC_ITEM_CODES_SQL})
+       AND NOT EXISTS (SELECT 1 FROM sec_live c WHERE c.source_record_id = s.accession_no)
+  )`;
+
 export interface SecSummary {
   ticker: string;
   total12mo: number;
@@ -887,19 +968,21 @@ export const getSecSummaries = cache(async (tickersKey: string): Promise<Map<str
 
   const [counts, latest] = await Promise.all([
     q<{ ticker: string; item_code: string | null; n: string }>(
-      `SELECT ticker, item_code, count(*) AS n
-         FROM stg_sec_event
+      `WITH ${SEC_ITEMS_CTE}
+       SELECT ticker, item_code, count(*) AS n
+         FROM sec_items
         WHERE ticker = ANY($1::text[])
-          AND filed_at >= current_date - interval '12 months'
+          AND d >= to_char(current_date - interval '12 months', 'YYYY-MM-DD')
         GROUP BY 1, 2`,
       [tickers],
     ),
     q<{ ticker: string; d: string; item_code: string | null; item_label: string | null; url: string | null; rn: string }>(
-      `SELECT ticker, to_char(filed_at, 'YYYY-MM-DD') AS d, item_code, item_label, document_url AS url,
-              row_number() OVER (PARTITION BY ticker ORDER BY filed_at DESC) AS rn
-         FROM stg_sec_event
+      `WITH ${SEC_ITEMS_CTE}
+       SELECT ticker, d, item_code, ${SEC_ITEM_LABEL_SQL} AS item_label, url,
+              row_number() OVER (PARTITION BY ticker ORDER BY d DESC, accession DESC, item_code) AS rn
+         FROM sec_items
         WHERE ticker = ANY($1::text[])
-          AND filed_at >= current_date - interval '12 months'`,
+          AND d >= to_char(current_date - interval '12 months', 'YYYY-MM-DD')`,
       [tickers],
     ),
   ]);
@@ -968,20 +1051,29 @@ export const getDevelopments = cache(async (tickersKey: string, limit = 30): Pro
           AND x.external_id = ANY($2::text[])
           AND d.start_date <= current_date
           AND d.start_date >= current_date - interval '12 months'
+          /* Only signings the feed already held when it was landed. The
+             curated feed was landed once, in June, with start dates running
+             into 2027; without this cap each scheduled start surfaced as a
+             fresh "development" on its start date, with no new evidence. */
+          AND d.start_date::date <= CASE d.source_system
+                WHEN 'contract_tracker' THEN (SELECT max(ingested_at)::date FROM stg_curated_deal)
+                WHEN 'contract_tracker_store' THEN (SELECT max(ingested_at)::date FROM stg_contract_store)
+                ELSE current_date END
         ORDER BY d.start_date DESC
         LIMIT $3`,
       [COMMERCIAL_SYSTEMS, tickers, limit],
     ),
     q<{ d: string; ticker: string; vendor: string; code: string | null; label: string | null; url: string | null }>(
-      `SELECT to_char(e.filed_at, 'YYYY-MM-DD') AS d, e.ticker,
+      `WITH ${SEC_ITEMS_CTE}
+       SELECT e.d, e.ticker,
               COALESCE(pr.canonical_name, e.company_name) AS vendor,
-              e.item_code AS code, e.item_label AS label, e.document_url AS url
-         FROM stg_sec_event e
+              e.item_code AS code, ${SEC_ITEM_LABEL_SQL.replace("CASE item_code", "CASE e.item_code")} AS label, e.url
+         FROM sec_items e
          LEFT JOIN xref_identity x ON x.external_id = e.ticker AND x.system = 'ticker'
          LEFT JOIN provider pr ON pr.ag_provider_id = x.ag_provider_id
         WHERE e.ticker = ANY($1::text[])
-          AND e.filed_at >= current_date - interval '12 months'
-        ORDER BY e.filed_at DESC
+          AND e.d >= to_char(current_date - interval '12 months', 'YYYY-MM-DD')
+        ORDER BY e.d DESC, e.accession DESC, e.item_code
         LIMIT $2`,
       [tickers, limit],
     ),
@@ -1329,7 +1421,7 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
                                  AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS t365,
               sum(p.value_usd_raw) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '365 days', 'YYYY-MM-DD')
                                  AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS v365,
-              max(left(p.start_date_raw, 10)) FILTER (WHERE left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS last_award,
+              max(left(p.start_date_raw, 10)) FILTER (WHERE left(p.start_date_raw, 10) <= to_char(p.ingested_at, 'YYYY-MM-DD')) AS last_award,
               count(*) FILTER (WHERE left(p.end_date_raw, 10) >= to_char(current_date, 'YYYY-MM-DD')
                                  AND left(p.end_date_raw, 10) < to_char(current_date + interval '12 months', 'YYYY-MM-DD')) AS inplay12
          FROM stg_procurement_contract p

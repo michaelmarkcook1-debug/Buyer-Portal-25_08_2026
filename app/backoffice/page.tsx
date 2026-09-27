@@ -105,6 +105,12 @@ export default async function BackofficePage() {
           <div className="mt-1 text-[1.00rem]" style={{ color: "var(--fg)" }}>
             {spineChecked ? shortDate(spineChecked) : lastRun ? "no successful run recorded" : "no run recorded"}
           </div>
+          {/* Stages run straight from the AG repo's command line (a promote
+              on 10 Sep, for one) change the spine without leaving a record
+              here, so this date can trail "content changed" below. */}
+          <div className="mt-1 text-[0.86rem]" style={{ color: "var(--fg-dim)" }}>
+            Backoffice runs only — command-line runs are not recorded
+          </div>
         </div>
         <div>
           <div className="eyebrow" style={{ color: "var(--fg-dim)" }}>
