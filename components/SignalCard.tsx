@@ -20,18 +20,18 @@ export function SignalCard({ s }: { s: WatchSignal }) {
           {s.vendors.join(" · ")}
         </span>
         {s.opportunityType ? (
-          <span className="code ml-auto text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code ml-auto text-meta" style={{ color: "var(--fg-dim)" }}>
             {OPPORTUNITY_LABELS[s.opportunityType]}
           </span>
         ) : null}
       </div>
-      <div className="display mt-2 text-[1.2rem] leading-snug" style={{ color: "var(--fg)" }}>
+      <div className="display mt-2 text-lead leading-snug" style={{ color: "var(--fg)" }}>
         {s.judgement}
       </div>
-      <p className="mt-1.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+      <p className="mt-1.5 mb-0 max-w-[70ch] text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         {s.implication}
       </p>
-      <p className="mt-2.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+      <p className="mt-2.5 mb-0 max-w-[70ch] text-body leading-relaxed" style={{ color: "var(--fg)" }}>
         <span className="font-semibold" style={{ color: "var(--accent-ink)" }}>Worth testing: </span>
         {s.action}
       </p>
@@ -44,7 +44,7 @@ export function SignalCard({ s }: { s: WatchSignal }) {
 export function SignalEvidence({ s, className = "" }: { s: WatchSignal; className?: string }) {
   return (
     <div
-      className={`code flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.87rem] ${className}`}
+      className={`code flex flex-wrap items-center gap-x-4 gap-y-1 text-meta ${className}`}
       style={{ color: "var(--fg-dim)", borderTop: "1px solid var(--surface-line-soft)", paddingTop: "0.6rem" }}
     >
       <span>

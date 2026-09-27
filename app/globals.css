@@ -31,6 +31,35 @@
   --font-sans: "Manrope Variable", Manrope, Inter, system-ui, -apple-system, sans-serif;
   --font-display: "Cormorant Garamond Variable", "Cormorant Garamond", "Libre Baskerville", Georgia, serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── Type scale (2026-09-27) ───────────────────────────────────────────
+     Seven steps, and nothing between them. The app had grown 43 distinct
+     sizes — seventeen of them packed between 0.86rem and 1.03rem — because
+     each card set its own. Earlier passes raised the tokens while the cards
+     kept their private sizes, so nothing lined up and every fix leaked. Every
+     text size now comes from this list (the brand wordmark and the info-icon
+     glyph are the only exceptions). Reading text sits at 17px.
+       meta     14px  sources, dates, codes, chart notes
+       label    15px  secondary text, table cells, controls
+       body     17px  reading prose
+       lead     19px  findings and card judgements
+       title    22px  card and panel titles
+       section  28px  section headings
+       display  36px  page titles and the briefing headline */
+  --text-meta: 0.875rem;
+  --text-meta--line-height: 1.5;
+  --text-label: 0.9375rem;
+  --text-label--line-height: 1.5;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-lead: 1.1875rem;
+  --text-lead--line-height: 1.45;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.3;
+  --text-section: 1.75rem;
+  --text-section--line-height: 1.2;
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.12;
 }
 
 :root {
@@ -82,9 +111,9 @@
      hard-coded sizes. This pass lifts the floor again and remaps those sizes
      monotonically, so card prose reads at the body tier the tokens always
      claimed rather than two steps below it. Display sizes stay put. */
-  --fs-body: 1rem;
-  --fs-small: 0.94rem;
-  --fs-micro: 0.84rem;
+  --fs-body: var(--text-body);
+  --fs-small: var(--text-label);
+  --fs-micro: var(--text-meta);
 
   --tracking-display: -0.018em;
   --tracking-tight: -0.01em;
@@ -285,6 +314,12 @@ body {
      returns once there is room for it. */
   font-size: 1rem;
   line-height: 1.62;
+  /* Invisible touch overlays (.hit-target's 44px ring around a 17px icon)
+     reach past the edge when an icon sits near it, which made the whole page
+     scroll sideways by a few pixels on a phone. clip, not hidden: it stops the
+     sideways scroll without making body a scroll container, so sticky
+     elements still stick. */
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background-color var(--motion-standard) var(--ease-premium),
@@ -415,7 +450,7 @@ a {
   background: var(--surface-solid);
   box-shadow: var(--shadow-2);
   color: var(--fg-muted);
-  font-size: 0.86rem;
+  font-size: var(--text-meta);
   line-height: 1.55;
   opacity: 0;
   pointer-events: none;

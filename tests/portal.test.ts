@@ -1921,9 +1921,11 @@ describe("Backoffice entry point (2026-08-25)", () => {
        may legitimately move the footer tier, and pinning the literal value
        made a readability change look like a regression. Assert the size sits
        below the body tier instead. */
-    const size = /text-\[(\d*\.?\d+)rem\]/.exec(link);
+    /* Sizes come from the type scale now (2026-09-27): the footer tier is a
+       step below body — meta or label, never body or above. */
+    const size = /\btext-(meta|label|body|lead|title|section|display)\b/.exec(link);
     expect(size).not.toBeNull();
-    expect(Number(size![1])).toBeLessThan(1);
+    expect(["meta", "label"]).toContain(size![1]);
     expect(link).not.toMatch(/accent-fill|display/);
   });
 });
@@ -2428,9 +2430,10 @@ describe("Analyst Insight headline (2026-08-29)", () => {
     expect(cmp).toMatch(/<h2/);
     expect(cmp).toMatch(/fontWeight: 700/);
     expect(cmp).toMatch(/className=\{`display /);
-    // both size steps present: full, and a step down for a long headline
-    expect(cmp).toMatch(/text-\[1\.55rem\].*sm:text-\[1\.72rem\]/);
-    expect(cmp).toMatch(/text-\[1\.3rem\].*sm:text-\[1\.42rem\]/);
+    // both size steps present, from the type scale: full, and a step down
+    // for a long headline
+    expect(cmp).toMatch(/text-section/);
+    expect(cmp).toMatch(/text-title/);
   });
 
   it("never renders a delivered briefing without a headline", () => {

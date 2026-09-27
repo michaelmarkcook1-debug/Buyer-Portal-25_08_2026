@@ -43,6 +43,12 @@ cannot produce a false product regression.
 the existing seven-point standard. When the provider is unavailable it reports
 `SKIPPED — PROVIDER UNAVAILABLE` and leaves the deterministic verdict alone.
 
+**Pass mark for Mode B:** every briefing scores at least 4/7, and every
+headline (the briefing's first sentence) stays within 300 characters. First
+run, 27 Sep 2026: 6 of 6 briefings delivered, mean 6.50/7, no headline
+reviews. Treat a mean below 6/7 as a regression worth investigating even when
+no single briefing falls under 4.
+
 ## What the results mean
 
 | Result | Meaning | Exit |

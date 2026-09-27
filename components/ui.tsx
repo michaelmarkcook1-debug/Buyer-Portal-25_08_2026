@@ -45,9 +45,9 @@ export function SectionHeader({
     <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
       <div>
         <div className="eyebrow">{eyebrow}</div>
-        <h2 className="display mt-1.5 text-[1.55rem] text-[var(--fg)]">{title}</h2>
+        <h2 className="display mt-1.5 text-section text-[var(--fg)]">{title}</h2>
       </div>
-      {aside ? <div className="text-sm sm:shrink-0" style={{ color: "var(--fg-muted)" }}>{aside}</div> : null}
+      {aside ? <div className="text-label sm:shrink-0" style={{ color: "var(--fg-muted)" }}>{aside}</div> : null}
     </div>
   );
 }
@@ -244,7 +244,7 @@ export function ClassChip({ cls }: { cls: WatchClass }) {
   const s = CLASS_STYLE[cls];
   return (
     <span
-      className="code inline-flex items-center rounded-[6px] px-2 py-1 text-[13.5px] font-semibold tracking-[0.14em]"
+      className="code inline-flex items-center rounded-[6px] px-2 py-1 text-meta font-semibold tracking-[0.14em]"
       style={{ background: s.bg, color: s.fg, boxShadow: `inset 0 0 0 1px ${s.ring}` }}
     >
       {cls}
@@ -275,9 +275,9 @@ export function BasisList({
   return (
     <ul className={`m-0 list-none space-y-1.5 p-0 ${className}`}>
       {basis.map((b, i) => (
-        <li key={i} className="text-[0.98rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <li key={i} className="text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {b.text}{" "}
-          <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+          <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
             {(() => {
               /* What kind of statement this is — observed, derived, AG's
                  interpretation or modelled — ahead of where it came from. */
@@ -304,7 +304,7 @@ export function EmptyEvidence({ title, body }: { title: string; body: string }) 
       <div className="font-medium" style={{ color: "var(--fg)" }}>
         {title}
       </div>
-      <p className="mt-1 mb-0 text-[1.00rem] leading-relaxed">{body}</p>
+      <p className="mt-1 mb-0 text-body leading-relaxed">{body}</p>
     </div>
   );
 }
@@ -313,7 +313,7 @@ export function EmptyEvidence({ title, body }: { title: string; body: string }) 
 export function ModelledTag({ note }: { note: string }) {
   return (
     <span
-      className="code inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[0.87rem] uppercase tracking-[0.12em]"
+      className="code inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-meta uppercase tracking-[0.12em]"
       style={{ background: "var(--rail-soft)", color: "var(--rail-ink)" }}
       title={note}
     >

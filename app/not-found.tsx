@@ -7,7 +7,7 @@ export default function NotFound() {
         <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
           Not found
         </div>
-        <h1 className="display mt-3 text-[1.8rem]" style={{ color: "var(--fg)" }}>
+        <h1 className="display mt-3 text-section" style={{ color: "var(--fg)" }}>
           This page is not part of the portal.
         </h1>
         <p className="mt-3" style={{ color: "var(--fg-muted)" }}>

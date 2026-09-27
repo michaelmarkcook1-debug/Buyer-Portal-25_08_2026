@@ -56,7 +56,7 @@ export function Masthead({ active, dateLabel }: { active: NavId; dateLabel: stri
                 key={item.id}
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
-                className="tap shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[14px] transition-colors"
+                className="tap shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-meta transition-colors"
                 style={{
                   color: isActive ? "var(--on-navy)" : "var(--on-navy-muted)",
                   background: isActive ? "color-mix(in srgb, var(--ag-dark-gold-bright) 14%, transparent)" : undefined,
@@ -74,7 +74,7 @@ export function Masthead({ active, dateLabel }: { active: NavId; dateLabel: stri
             Intelligence briefing
           </div>
           <div
-            className="code tabular whitespace-nowrap text-[12px] sm:text-[14px]"
+            className="code tabular whitespace-nowrap text-meta"
             style={{ color: "var(--on-navy)" }}
           >
             {dateLabel}

@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -96,5 +97,22 @@ describe("signal cards lead with the judgement", () => {
     const card = src("components/SignalCard.tsx");
     expect(card.indexOf("{s.judgement}")).toBeGreaterThan(-1);
     expect(card.indexOf("{s.judgement}")).toBeLessThan(card.indexOf("Evidence: {s.headline}"));
+  });
+});
+
+describe("one type scale", () => {
+  it("no call site sets its own text size outside the scale", () => {
+    const out = execSync(
+      `grep -rnoE 'text-\\[[0-9.]+(rem|px)\\]' app components || true`,
+      { cwd: resolve(__dirname, ".."), encoding: "utf8" },
+    );
+    /* The brand wordmark (Masthead) and the info-icon glyph are sized to
+       their artwork, not to reading; they are the only permitted exceptions. */
+    const offenders = out
+      .split("\n")
+      .filter(Boolean)
+      .filter((l) => !/components\/Masthead\.tsx:\d+:text-\[(17|21)px\]/.test(l))
+      .filter((l) => !/components\/InfoTip\.tsx:\d+:text-\[11px\]/.test(l));
+    expect(offenders).toEqual([]);
   });
 });

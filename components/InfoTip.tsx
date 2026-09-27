@@ -66,27 +66,27 @@ export function InfoTip({ content }: { content: InfoContent }) {
         <div className="eyebrow" style={{ color: "var(--accent-ink)" }}>
           {content.name}
         </div>
-        <p className="mt-2 mb-0 text-[0.98rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+        <p className="mt-2 mb-0 text-body leading-relaxed" style={{ color: "var(--fg)" }}>
           {content.definition}
         </p>
-        <p className="mt-2.5 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-2.5 mb-0 text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           <span style={{ color: "var(--fg-dim)" }}>How to read it: </span>
           {content.interpretation}
         </p>
         {content.colour ? (
-          <p className="mt-2 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-2 mb-0 text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>Colour: </span>
             {content.colour}
           </p>
         ) : null}
         {content.window ? (
-          <p className="mt-2 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-2 mb-0 text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>Period: </span>
             {content.window}
           </p>
         ) : null}
         {content.caveat ? (
-          <p className="mt-2 mb-0 text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+          <p className="mt-2 mb-0 text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
             <span style={{ color: "var(--fg-dim)" }}>What it does not mean: </span>
             {content.caveat}
           </p>

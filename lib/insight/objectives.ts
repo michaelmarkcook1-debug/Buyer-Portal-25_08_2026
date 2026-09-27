@@ -13,7 +13,7 @@
 /** The hierarchy every top-level tab hero must follow. */
 export const MARKET_FIRST_HIERARCHY =
   "STRUCTURE — follow this order strictly:\n" +
-  "1. MARKET JUDGEMENT: open with a decisive read on the SELECTED MARKET as a whole — what dominates it right now, and whether that condition is broad-based or concentrated. The first sentence must characterise the market, not a single vendor.\n" +
+  "1. MARKET JUDGEMENT: open with a decisive read on the SELECTED MARKET as a whole — what dominates it right now, and whether that condition is broad-based or concentrated. The first sentence must characterise the market, not a single vendor. It is displayed on its own as the briefing's headline, so it must work as one: a single decisive claim of no more than 25 words, carrying at most one figure. The supporting figures belong in the sentences that follow.\n" +
   "2. DIVERGENCE: say how the selected vendors differ on that pattern, and on what axis.\n" +
   "3. VENDOR EXAMPLE: name the vendor that most clearly expresses the pattern (and, where useful, the one that departs from it) as EVIDENCE within the market read — 'X is the clearest expression of this', 'Y differs because…' — never 'X is the opportunity'.\n" +
   "4. BUYER IMPLICATION: what the buyer should do or investigate.\n" +

@@ -48,7 +48,7 @@ function InsightHeadline({
   return (
     <h2
       className={`display m-0 ${
-        tight ? "text-[1.3rem] leading-[1.4] sm:text-[1.42rem]" : "text-[1.55rem] leading-[1.35] sm:text-[1.72rem]"
+        tight ? "text-title leading-[1.4]" : "text-section leading-[1.35]"
       }`}
       style={{ color: muted ? "var(--fg-muted)" : "var(--fg)", fontWeight: 700 }}
     >
@@ -98,7 +98,7 @@ function InsightResultView({
         style={{ borderColor: "var(--surface-line)" }}
       >
         <InsightHeadline tight>Analyst Insight is not configured.</InsightHeadline>
-        <p className="code mt-2 mb-0 text-[0.93rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="code mt-2 mb-0 text-label leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {result.reason}
         </p>
       </div>
@@ -113,7 +113,7 @@ function InsightResultView({
         style={{ borderColor: "var(--surface-line)" }}
       >
         <InsightHeadline tight>Analyst Insight temporarily unavailable.</InsightHeadline>
-        <p className="mt-2 mb-0 max-w-[70ch] text-[0.97rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-2 mb-0 max-w-[70ch] text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           The intelligence below is complete and unaffected.
         </p>
       </div>
@@ -169,13 +169,13 @@ function InsightResultView({
       <InsightHeadline tight={longHeadline}>{headline}</InsightHeadline>
       {body ? (
         <p
-          className="display m-0 mt-4 whitespace-pre-line text-[1.15rem] leading-[1.6] sm:text-[1.18rem]"
+          className="display m-0 mt-4 whitespace-pre-line text-lead leading-[1.6]"
           style={{ color: "var(--fg)", opacity: 0.92 }}
         >
           {body}
         </p>
       ) : null}
-      <div className="code mt-5 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code mt-5 text-meta" style={{ color: "var(--fg-dim)" }}>
         Grounded in the canonical intelligence below · interpretation, not additional data
         {scenario ? ` · modelled under “${scenario.label}”` : ""}
       </div>
@@ -230,7 +230,7 @@ export async function AnalystInsightHero(props: {
             <InsightHeadline tight muted>Preparing this market briefing…</InsightHeadline>
             {/* The briefing streams in on its own — no refresh, no client JS.
                 Say so, so a reader does not sit waiting or reload the page. */}
-            <p className="m-0 mt-2.5 text-[0.97rem] leading-snug" style={{ color: "var(--fg-dim)" }}>
+            <p className="m-0 mt-2.5 text-body leading-snug" style={{ color: "var(--fg-dim)" }}>
               Prepared from the evidence for your selected market. It will appear here when ready —
               the intelligence below is complete and usable now.
             </p>

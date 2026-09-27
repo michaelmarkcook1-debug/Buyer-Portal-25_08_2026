@@ -195,7 +195,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
         <div className="mt-5">
           <VendorComparison vendors={intel.scope.mode === "whole_market" ? intel.vendors.slice(0, 8) : intel.vendors} variant="opportunity" />
           {intel.scope.mode === "whole_market" && intel.vendors.length > 8 ? (
-            <p className="mt-3 mb-0 text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
+            <p className="mt-3 mb-0 text-label" style={{ color: "var(--fg-muted)" }}>
               Showing the strongest 8 of {intel.vendors.length} covered vendors — the full comparison lives in Vendors.
             </p>
           ) : null}
@@ -232,11 +232,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
                 </div>
                 <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
                   {moving.slice(0, 2).map((m) => (
-                    <li key={m.id} className="flex flex-wrap items-baseline gap-x-3 text-[0.97rem]">
-                      <span className="eyebrow text-[0.84rem]">{m.label}</span>
-                      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-[0.95rem]" />
+                    <li key={m.id} className="flex flex-wrap items-baseline gap-x-3 text-body">
+                      <span className="eyebrow text-meta">{m.label}</span>
+                      <MovementText movement={m.movement} effect={displayState(m.id, m.state).effect} className="text-label" />
                       {m.headline ? (
-                        <span className="w-full text-[0.95rem]" style={{ color: "var(--fg-muted)" }}>
+                        <span className="w-full text-label" style={{ color: "var(--fg-muted)" }}>
                           {m.headline}
                         </span>
                       ) : null}
@@ -270,13 +270,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
               return (
                 <Panel key={i} className="px-5 py-3.5">
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="code tabular text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+                    <span className="code tabular text-meta" style={{ color: "var(--fg-dim)" }}>
                       {shortDate(d.date)}
                     </span>
                     <span className="font-medium" style={{ color: "var(--fg)" }}>
                       {d.vendor}
                     </span>
-                    <span className="text-[0.99rem]" style={{ color: "var(--fg-muted)" }}>
+                    <span className="text-body" style={{ color: "var(--fg-muted)" }}>
                       {d.headline}
                       {d.tcvUsd != null ? ` · ${money(d.tcvUsd)}` : ""}
                       {d.detail ? ` · ${d.detail}` : ""}
@@ -286,15 +286,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
                         href={d.sourceUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="code tap-link ml-auto text-[0.88rem]"
+                        className="code tap-link ml-auto text-meta"
                         style={{ color: "var(--rail-ink)" }}
                       >
                         Source ↗
                       </a>
                     ) : null}
                   </div>
-                  <p className="mt-1 mb-0 text-[0.96rem]" style={{ color: "var(--fg-muted)" }}>
-                    <span className="eyebrow mr-2 text-[0.82rem]">Why it matters</span>
+                  <p className="mt-1 mb-0 text-label" style={{ color: "var(--fg-muted)" }}>
+                    <span className="eyebrow mr-2 text-meta">Why it matters</span>
                     {implication}
                   </p>
                 </Panel>
@@ -337,10 +337,10 @@ function GroupedSignal({
           Across {signals.length} selected vendors
         </span>
       </div>
-      <div className="display mt-2 text-[1.2rem] leading-snug" style={{ color: "var(--fg)" }}>
+      <div className="display mt-2 text-lead leading-snug" style={{ color: "var(--fg)" }}>
         {judgement}
       </div>
-      <p className="mt-2.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+      <p className="mt-2.5 mb-0 max-w-[70ch] text-body leading-relaxed" style={{ color: "var(--fg)" }}>
         <span className="font-semibold" style={{ color: "var(--accent-ink)" }}>Worth testing: </span>
         {lead.action}
       </p>
@@ -349,16 +349,16 @@ function GroupedSignal({
         style={{ borderTop: "1px solid var(--surface-line-soft)", paddingTop: "0.6rem" }}
       >
         {signals.map((s) => (
-          <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.95rem]">
+          <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-label">
             <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
-            <span className="code min-w-0 flex-1 text-[0.9rem]" style={{ color: "var(--fg-dim)" }}>
+            <span className="code min-w-0 flex-1 text-meta" style={{ color: "var(--fg-dim)" }}>
               {rowText(s)}
             </span>
           </li>
         ))}
       </ul>
       {footnote ? (
-        <div className="code mt-3 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+        <div className="code mt-3 text-meta" style={{ color: "var(--fg-dim)" }}>
           {footnote}
         </div>
       ) : null}

@@ -36,12 +36,12 @@ function Figure({
     <figure className="m-0 flex flex-col gap-3">
       {children}
       {interpretation ? (
-        <figcaption className="m-0 max-w-[76ch] text-[0.98rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+        <figcaption className="m-0 max-w-[76ch] text-body leading-relaxed" style={{ color: "var(--fg)" }}>
           {interpretation}
         </figcaption>
       ) : null}
       {footnote ? (
-        <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+        <div className="code text-meta" style={{ color: "var(--fg-dim)" }}>
           {footnote}
         </div>
       ) : null}
@@ -152,7 +152,7 @@ export function ExposureConcentrationChart({
           })}
         </svg>
       </div>
-      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-meta" style={{ color: "var(--fg-dim)" }}>
         {valueLabel}
       </div>
     </Figure>
@@ -234,7 +234,7 @@ export function SigningsSlopeChart({
           })}
         </svg>
       </div>
-      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-meta" style={{ color: "var(--fg-dim)" }}>
         Hollow marker = prior window · solid marker = current window · {windowLabel}
       </div>
     </Figure>
@@ -280,10 +280,10 @@ export function DistributionChart({
           return (
             <div key={r.dimension} className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-                <span className="text-[0.98rem] font-medium" style={{ color: "var(--fg)" }}>
+                <span className="text-body font-medium" style={{ color: "var(--fg)" }}>
                   {r.dimension}
                 </span>
-                <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+                <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
                   {total} vendors
                 </span>
               </div>
@@ -303,7 +303,7 @@ export function DistributionChart({
                   ))}
               </div>
               {/* the same numbers in text — colour is never the sole carrier */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.92rem]" style={{ color: "var(--fg-muted)" }}>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-label" style={{ color: "var(--fg-muted)" }}>
                 {r.bands
                   .filter((b) => b.count > 0)
                   .map((b) => (
@@ -388,11 +388,11 @@ export function FlowComparisonChart({
           return (
             <div key={s.label} className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <span className="text-[0.98rem] font-medium" style={{ color: "var(--fg)" }}>
+                <span className="text-body font-medium" style={{ color: "var(--fg)" }}>
                   {s.label}
                 </span>
                 {s.asOf ? (
-                  <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+                  <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
                     to {s.asOf}
                   </span>
                 ) : null}
@@ -401,7 +401,7 @@ export function FlowComparisonChart({
                 {rows.map((r) => (
                   <div key={r.window} className="flex items-center gap-2 sm:gap-3">
                     <span
-                      className="w-[6.6rem] shrink-0 text-[0.92rem] leading-tight sm:w-[8.5rem]"
+                      className="w-[6.6rem] shrink-0 text-label leading-tight sm:w-[8.5rem]"
                       style={{ color: "var(--fg-muted)" }}
                     >
                       {r.window}
@@ -418,7 +418,7 @@ export function FlowComparisonChart({
                       />
                     </span>
                     <span
-                      className="tabular w-[3.2rem] shrink-0 text-right text-[0.97rem] font-medium"
+                      className="tabular w-[3.2rem] shrink-0 text-right text-body font-medium"
                       style={{ color: "var(--fg)" }}
                     >
                       {r.value}
@@ -430,7 +430,7 @@ export function FlowComparisonChart({
           );
         })}
       </div>
-      <div className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+      <div className="code text-meta" style={{ color: "var(--fg-dim)" }}>
         Lighter bar = prior window · solid bar = current window · each measure is scaled against
         itself, never against the other
       </div>
