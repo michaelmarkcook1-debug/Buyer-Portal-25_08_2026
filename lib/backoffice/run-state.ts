@@ -258,14 +258,24 @@ export async function finishRun(runId: string, errorSummary?: string | null): Pr
  */
 export async function reapStaleRuns(maxMinutes = 30): Promise<number> {
   await ensureTable();
+  /* Silence, not age. A full local run now takes longer than 30 minutes (the
+     procurement corpus alone is ~12), and measuring from started_at marked
+     healthy runs failed mid-flight whenever the Backoffice was open and
+     polling — the script kept writing to a run already declared dead. A run
+     is stale only when neither it nor any stage has reported for maxMinutes. */
   const rows = await q<Record<string, unknown>>(
-    `UPDATE portal_refresh_run
+    `UPDATE portal_refresh_run r
         SET status = 'failed',
             finished_at = now(),
             current_stage = NULL,
-            error_summary = 'Run did not report completion within ' || $1 || ' minutes; the runner stopped without finishing.'
-      WHERE status = 'running' AND started_at < now() - ($1 || ' minutes')::interval
-      RETURNING id`,
+            error_summary = 'Run reported nothing for ' || $1 || ' minutes; the runner stopped without finishing.'
+      WHERE r.status = 'running'
+        AND GREATEST(
+              r.started_at,
+              (SELECT max(GREATEST((e->>'startedAt')::timestamptz, (e->>'finishedAt')::timestamptz))
+                 FROM jsonb_array_elements(r.stages) e)
+            ) < now() - ($1 || ' minutes')::interval
+      RETURNING r.id`,
     [String(maxMinutes)],
   );
   return rows.length;
