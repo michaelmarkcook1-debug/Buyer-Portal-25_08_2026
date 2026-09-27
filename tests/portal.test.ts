@@ -2128,7 +2128,13 @@ describe("date provenance and the evidence anchor (2026-08-25)", () => {
     // public procurement start dates are sourced from award notices and must
     // keep driving award-flow windows
     expect(facts).toMatch(/p\.start_date_raw/);
-    expect(facts).toMatch(/FROM stg_procurement_contract p/);
+    // read from procurement staging, one row per award (27 Sep 2026): the
+    // newest resolved version of each record, never every staged version
+    expect(facts).toMatch(/FROM \$\{PROCUREMENT_LATEST_SQL\} p/);
+    const latest = readFileSync(resolve(__dirname, "../lib/data/procurement-sql.ts"), "utf8");
+    expect(latest).toMatch(/FROM stg_procurement_contract/);
+    expect(latest).toMatch(/DISTINCT ON \(source_system, source_record_id\)/);
+    expect(latest).toMatch(/resolution_status = 'resolved'/);
   });
 });
 

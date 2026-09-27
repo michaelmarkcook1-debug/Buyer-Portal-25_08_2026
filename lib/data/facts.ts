@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { q } from "@/lib/db";
+import { PROCUREMENT_LATEST_SQL } from "@/lib/data/procurement-sql";
 
 /**
  * FACTS — the only place this app reads the canonical AG spine.
@@ -1425,7 +1426,7 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
               max(left(p.start_date_raw, 10)) FILTER (WHERE left(p.start_date_raw, 10) <= to_char(p.ingested_at, 'YYYY-MM-DD')) AS last_award,
               count(*) FILTER (WHERE left(p.end_date_raw, 10) >= to_char(current_date, 'YYYY-MM-DD')
                                  AND left(p.end_date_raw, 10) < to_char(current_date + interval '12 months', 'YYYY-MM-DD')) AS inplay12
-         FROM stg_procurement_contract p
+         FROM ${PROCUREMENT_LATEST_SQL} p
          JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
         WHERE p.resolution_status = 'resolved'
           AND x.external_id = ANY($1::text[])
@@ -1436,7 +1437,7 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
       `SELECT count(DISTINCT p.resolved_ag_provider_id) FILTER (
                 WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '180 days', 'YYYY-MM-DD')) AS winners,
               to_char(max(p.ingested_at), 'YYYY-MM-DD') AS last_ingest
-         FROM stg_procurement_contract p
+         FROM ${PROCUREMENT_LATEST_SQL} p
          JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
         WHERE p.resolution_status = 'resolved'
           AND x.external_id = ANY($1::text[])`,

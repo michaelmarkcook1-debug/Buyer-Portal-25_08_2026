@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { q } from "@/lib/db";
+import { PROCUREMENT_LATEST_SQL } from "@/lib/data/procurement-sql";
 import { assertHistoryMode, mixCoverage, type HistoricalMode, type MixCoverage } from "@/lib/metrics/rules";
 
 /**
@@ -82,7 +83,7 @@ export const getProcurementMonthlyFlow = cache(async (tickersKey: string): Promi
   }
   const rows = await q<{ month: string; n: string }>(
     `SELECT left(p.start_date_raw, 7) AS month, count(*) AS n
-       FROM stg_procurement_contract p
+       FROM ${PROCUREMENT_LATEST_SQL} p
        JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
       WHERE p.resolution_status = 'resolved'
         AND x.external_id = ANY($1::text[])
