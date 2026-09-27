@@ -21,7 +21,8 @@ export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robot
  * the last run did. Both are complete states — the deployed page is not a
  * degraded copy of the local one.
  *
- * REFRESH IS MANUAL UNTIL FURTHER NOTICE — there is no scheduler.
+ * Cloud-safe stages run weekly (Mondays 06:00 UTC, since 27 Sep 2026); the
+ * local-file stages still run only when the operator runs them.
  */
 export default async function BackofficePage() {
   const executor = detectExecutor();
@@ -58,16 +59,17 @@ export default async function BackofficePage() {
       <p className="mt-3 max-w-[70ch] text-body leading-relaxed" style={{ color: "var(--fg-muted)" }}>
         {executor.reason === "local-execution" ? (
           <>
-            Refresh is manual until further notice: run → validate results → review the portal →
-            continue testing. This button invokes the AG repo&rsquo;s single sanctioned entry point
-            (<span className="code">ops/refresh-manual.sh</span>) — identical to running it in a
+            The cloud-safe stages refresh every Monday at 06:00 UTC. The local-file stages — the
+            contract store, the xlsx bridge and the procurement corpus — run only from this machine:
+            this button invokes the AG repo&rsquo;s single sanctioned entry point
+            (<span className="code">ops/refresh-manual.sh</span>), identical to running it in a
             terminal.
           </>
         ) : executor.reason === "github-actions" ? (
           <>
-            Refresh is manual until further notice. This button dispatches one run of the
-            AnalystGenius data pipeline in GitHub Actions — the same stages as the local script,
-            on a temporary runner. Nothing is scheduled, and progress below is read from the
+            The cloud-safe stages refresh every Monday at 06:00 UTC. This button dispatches one
+            more run of the AnalystGenius data pipeline in GitHub Actions, on a temporary runner,
+            and progress below is read from the
             canonical spine as the run reports it.
           </>
         ) : (

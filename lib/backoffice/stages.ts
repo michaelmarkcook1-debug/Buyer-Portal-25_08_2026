@@ -31,7 +31,9 @@ export interface StageSpec {
  */
 export const LOCAL_ONLY_STAGES: StageSpec[] = [
   { id: "contract-store", label: "Contract store", command: "pnpm etl:contract-store", what: "confirmed Contract Tracker records from the local store — reading it is not resuming discovery" },
-  { id: "contract-tracker", label: "Contract Tracker xlsx bridge", command: "pnpm etl:contract-tracker", what: "curated deals from the operator's export — a content-hash no-op until a new export lands" },
+  { id: "contract-tracker", label: "Contract Tracker xlsx bridge", command: "pnpm etl:contract-tracker", what: "curated deals from the operator's export — skipped when no export is present, a content-hash no-op until a new one lands" },
+  { id: "procurement-vendor", label: "Procurement vendors", command: "pnpm etl:procurement-vendor", what: "public-procurement vendor registry" },
+  { id: "procurement-contracts", label: "Procurement awards", command: "pnpm etl:procurement-contracts", what: "public-procurement award corpus — the weekly-refreshed copy where present" },
 ];
 
 /** The subset any runner can reach. Mirror of ops/refresh-cloud.sh. */
@@ -64,5 +66,5 @@ export const EXCLUDED_STAGES = [
   { label: "Contract Tracker discovery / import / confirmation", why: "frozen at its confirmed 16 Apr 2026 state until explicitly resumed — reading the already-confirmed store is not resuming discovery" },
   { label: "Local-file sources on a cloud runner", why: "the contract store and the xlsx bridge read files on the operator's machine, so a GitHub Actions run skips them; a local run includes them" },
   { label: "Any write to the protected AG production service", why: "that service is read-only; the single touchpoint is a GET" },
-  { label: "Scheduling of any kind", why: "refresh is manual until further notice — no cron, no Actions, no auto-run" },
+  { label: "Scheduling of the local-file stages", why: "the weekly run (Mondays 06:00 UTC, since 27 Sep 2026) covers the cloud-safe stages only; the contract store, xlsx bridge and procurement corpus run when the operator runs them" },
 ];

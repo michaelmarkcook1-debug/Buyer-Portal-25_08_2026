@@ -287,10 +287,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const onLine = (line: string) => {
     const start = /stage:\s+(\S+)/.exec(line);
     const ok = /stage OK:\s+(\S+)/.exec(line);
+    const skipped = /stage SKIPPED:\s+(\S+)\s*(?:\((.*)\))?/.exec(line);
     const fail = /stage FAILED:\s+(\S+)/.exec(line);
     if (ok) {
       tail = [];
       record(() => setStage(run.id, ok[1]!, "success"));
+    } else if (skipped) {
+      /* An absent source (no xlsx export, say) — neither a failure that turns
+         the run red nor a success it did not have. */
+      tail = [];
+      record(() => setStage(run.id, skipped[1]!, "skipped", skipped[2] ?? null));
     } else if (fail) {
       /* Wide enough to carry a stack-framed error: the first capture cut the
          Prisma message off above the pnpm wrapper's own failure lines. */

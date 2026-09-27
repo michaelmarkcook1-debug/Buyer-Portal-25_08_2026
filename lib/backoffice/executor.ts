@@ -111,7 +111,7 @@ export function detectExecutor(): ExecutorInfo {
       location: `${gh.owner}/${gh.repo}`,
       runner: "github-actions",
       detail:
-        "Refresh runs manually using the AnalystGenius data pipeline in GitHub Actions. Nothing is scheduled: pressing the button dispatches one workflow, which runs the same stages as the local script and writes progress here as it goes.",
+        "The AnalystGenius data pipeline runs in GitHub Actions every Monday at 06:00 UTC. Pressing the button dispatches one more run of the same cloud-safe stages, which writes progress here as it goes.",
     };
   }
 

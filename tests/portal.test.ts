@@ -720,10 +720,9 @@ describe("pilot-readiness sprint (2026-08-23)", () => {
     expect(calm).not.toMatch(/grounding|validator|firewall|ownership|numeric/i);
   });
 
-  it("refresh remains manual — no scheduler is armed in source", () => {
-    // Comments in this workflow discuss scheduling in order to rule it out, so
-    // the guard reads the CONFIGURATION, not the prose. Matching raw text here
-    // would pass on a sentence and fail on a real trigger.
+  it("refresh runs weekly for cloud stages only — one schedule, nothing else armed", () => {
+    // The 22 Aug manual-only rule was lifted on 27 Sep 2026 for the cloud-safe
+    // stages. The guard reads the CONFIGURATION, not the prose.
     const wf = readFileSync(
       resolve(process.cwd(), "..", "AG Sourcing Tool 20_06_2026", ".github/workflows/data-refresh.yml"),
       "utf8",
@@ -732,10 +731,15 @@ describe("pilot-readiness sprint (2026-08-23)", () => {
       .split("\n")
       .filter((l) => !/^\s*#/.test(l))
       .join("\n");
-    expect(code).not.toMatch(/^\s*schedule:/m);
-    expect(code.toLowerCase()).not.toContain("cron");
+    // One weekly schedule since 27 Sep 2026 (cloud-safe stages only), manual
+    // dispatch kept, and no push, deployment or dispatch recurrence.
+    expect(code.match(/^\s*schedule:/gm)?.length ?? 0).toBe(1);
+    expect(code.match(/- cron:/g)?.length ?? 0).toBe(1);
+    expect(code).toMatch(/- cron: "0 6 \* \* 1"/);
     expect(code).not.toMatch(/^\s*(push|pull_request|deployment|repository_dispatch):/m);
     expect(code).toMatch(/^\s*workflow_dispatch:/m);
+    expect(code).toMatch(/\.\/ops\/refresh-cloud\.sh/);
+    expect(code).not.toMatch(/refresh-manual\.sh/);
   });
 });
 
@@ -1579,13 +1583,14 @@ describe("backoffice manual refresh (2026-08-25)", () => {
   });
 
   it("runs local-file sources only where the files exist", () => {
-    // ops/refresh-manual.sh runs on the operator's machine and adds the two
+    // ops/refresh-manual.sh runs on the operator's machine and adds the
     // stages refresh-cloud.sh cannot reach. A cloud run must not list them:
     // pending-for-ever reads as a hung run, not as an absent source.
-    expect(LOCAL_ONLY_STAGES.map((s) => s.id)).toEqual(["contract-store", "contract-tracker"]);
+    const LOCAL = ["contract-store", "contract-tracker", "procurement-vendor", "procurement-contracts"];
+    expect(LOCAL_ONLY_STAGES.map((s) => s.id)).toEqual(LOCAL);
     const local = stagesFor("local-script").map((s) => s.id);
     const cloud = stagesFor("github-actions").map((s) => s.id);
-    for (const id of ["contract-store", "contract-tracker"]) {
+    for (const id of LOCAL) {
       expect(local, `local run missing ${id}`).toContain(id);
       expect(cloud, `cloud run should not list ${id}`).not.toContain(id);
     }
@@ -1594,6 +1599,7 @@ describe("backoffice manual refresh (2026-08-25)", () => {
     // local-file stages run BEFORE promote, or promote derives from stale staging
     expect(local.indexOf("contract-store")).toBeLessThan(local.indexOf("promote"));
     expect(local.indexOf("contract-tracker")).toBeLessThan(local.indexOf("promote"));
+    expect(local.indexOf("procurement-contracts")).toBeLessThan(local.indexOf("promote"));
     // the shared subset is unchanged and stays the cloud definition
     expect(cloud).toEqual(REFRESH_STAGES.map((s) => s.id));
   });
@@ -1776,9 +1782,9 @@ describe("backoffice freshness semantics (2026-08-31)", () => {
   });
 
   it("every family states which stage lands it, and null is a decision", () => {
-    // procurement is imported by hand; stg_sec_event is no longer written by
-    // the sec-events stage (that lands stg_capability_event). Both would read
-    // as permanently stale if a stage were claimed for them.
+    // stg_sec_event is no longer written by the sec-events stage (that lands
+    // stg_capability_event), so no stage is claimed for it. Procurement gained
+    // a stage on 27 Sep 2026.
     const tables = [...sources.matchAll(/table:\s*"([^"]+)"/g)].map((m) => m[1]!);
     const stages = [...sources.matchAll(/stage:\s*(null|"[^"]+")/g)].map((m) => m[1]!);
     expect(stages.length, "a family declares no stage key at all").toBe(tables.length);
@@ -1786,20 +1792,22 @@ describe("backoffice freshness semantics (2026-08-31)", () => {
     expect(byTable["stg_curated_deal"]).toBe('"contract-tracker"');
     expect(byTable["stg_contract_store"]).toBe('"contract-store"');
     expect(byTable["stg_analystgenius_signal"]).toBe('"analystgenius"');
-    // no stage lands these, and the table must say so rather than imply staleness
-    expect(byTable["stg_procurement_contract"]).toBe("null");
+    expect(byTable["stg_procurement_contract"]).toBe('"procurement-contracts"');
     // the SEC row now points at where the stage actually lands (capability
     // events, source_system sec_edgar_8k); stg_sec_event keeps its history
     expect(byTable["stg_capability_event"]).toBe('"sec-events"');
     expect(page).toMatch(/not in this refresh/);
   });
 
-  it("procurement cannot look healthy just because a refresh ran", () => {
-    // its source aggregation is blocked upstream and no stage imports it, so
-    // "checked" must never claim a run it was not part of
+  it("procurement is checked by its own stage, and dated by its own evidence", () => {
+    // Since 27 Sep 2026 the manual local refresh lands procurement from the
+    // weekly-refreshed corpus, so "checked" comes from that stage's result —
+    // and its evidence date still comes from the awards, capped at landing.
     const idx = sources.indexOf('table: "stg_procurement_contract"');
     expect(idx).toBeGreaterThan(0);
-    expect(sources.slice(idx, idx + 220)).toMatch(/stage:\s*null/);
+    const block = sources.slice(idx, idx + 900);
+    expect(block).toMatch(/stage:\s*"procurement-contracts"/);
+    expect(block).toMatch(/start_date_raw/);
   });
 
   it("explains the no-op case in one line rather than becoming documentation", () => {
@@ -1938,11 +1946,16 @@ describe("GitHub Actions manual execution (2026-08-25)", () => {
      stripped. A raw-text assertion would pass on prose and fail on config. */
   const code = raw.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
 
-  it("is manual only — no schedule, cron, push or deployment trigger", () => {
-    expect(code).not.toMatch(/^\s*schedule:/m);
-    expect(code.toLowerCase()).not.toContain("cron");
+  it("runs weekly plus manual — no push or deployment trigger", () => {
+    // One weekly schedule since 27 Sep 2026 (cloud-safe stages only), manual
+    // dispatch kept, and no push, deployment or dispatch recurrence.
+    expect(code.match(/^\s*schedule:/gm)?.length ?? 0).toBe(1);
+    expect(code.match(/- cron:/g)?.length ?? 0).toBe(1);
+    expect(code).toMatch(/- cron: "0 6 \* \* 1"/);
     expect(code).not.toMatch(/^\s*(push|pull_request|deployment|repository_dispatch):/m);
     expect(code).toMatch(/^\s*workflow_dispatch:/m);
+    expect(code).toMatch(/\.\/ops\/refresh-cloud\.sh/);
+    expect(code).not.toMatch(/refresh-manual\.sh/);
   });
 
   it("takes the portal's run id as a required input", () => {
@@ -2021,7 +2034,7 @@ describe("executor precedence (2026-08-25)", () => {
     expect(info.mode).toBe("github-actions");
     expect(info.canRun).toBe(true);
     expect(info.location).toBe("owner/repo");
-    expect(info.detail).toMatch(/Nothing is scheduled/i);
+    expect(info.detail).toMatch(/every Monday at 06:00 UTC/i);
   });
 
   it("does not require a paid runner — Fly is never needed to execute", () => {

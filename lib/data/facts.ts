@@ -35,10 +35,11 @@ export interface SourceFreshness {
   feeds: string;
   /**
    * The refresh stage that lands this table, or null where no stage does.
-   * Null is a real answer, not a gap: procurement is imported by hand, and
-   * stg_sec_event is no longer written by the sec-events stage (that stage
-   * lands stg_capability_event). Both would otherwise look permanently stale
-   * while the pipeline ran perfectly.
+   * Null is a real answer, not a gap: stg_sec_event is no longer written by
+   * the sec-events stage (that stage lands stg_capability_event), and would
+   * otherwise look permanently stale while the pipeline ran perfectly.
+   * Procurement has a stage since 27 Sep 2026 (the manual local refresh reads
+   * the weekly-refreshed corpus).
    */
   stage: string | null;
   rows: number;
@@ -86,7 +87,7 @@ const FRESHNESS_SOURCES: readonly {
   },
   {
     table: "stg_procurement_contract",
-    stage: null,
+    stage: "procurement-contracts",
     source: "Public procurement record",
     feeds: "award flow across 6 jurisdictions — market evidence",
     /* The corpus carries start dates only, and some rows start after the day
