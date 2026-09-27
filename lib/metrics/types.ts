@@ -243,8 +243,18 @@ export interface WatchSignal {
   classification: WatchClass;
   tickers: string[];
   vendors: string[];
+  /**
+   * The analyst judgement a buyer reads first: what the development means
+   * for them, in one line. Templated per rule from the event's semantics —
+   * never generated.
+   */
+  judgement: string;
+  /** The event itself — supporting evidence beneath the judgement. */
   headline: string;
+  /** Why it matters commercially. */
   implication: string;
+  /** One concrete thing a buyer could investigate or challenge. */
+  action: string;
   opportunityType: OpportunityType | null;
   change: string | null;
   confidence: Confidence;

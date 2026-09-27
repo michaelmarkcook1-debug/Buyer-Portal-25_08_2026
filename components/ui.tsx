@@ -1,3 +1,4 @@
+import { EVIDENCE_CLASS_LABEL, evidenceClassOf } from "@/lib/evidence-class";
 import type { ReactNode } from "react";
 import { showsConfidenceCaveat } from "@/lib/metrics/rules";
 import { displayState, levelEffect, type BuyerEffect } from "@/lib/metrics/dictionary";
@@ -277,6 +278,12 @@ export function BasisList({
         <li key={i} className="text-[0.98rem] leading-relaxed" style={{ color: "var(--fg-muted)" }}>
           {b.text}{" "}
           <span className="code text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+            {(() => {
+              /* What kind of statement this is — observed, derived, AG's
+                 interpretation or modelled — ahead of where it came from. */
+              const cls = evidenceClassOf(b);
+              return cls ? <>· <span style={{ color: "var(--fg-muted)" }}>{EVIDENCE_CLASS_LABEL[cls]}</span> </> : null;
+            })()}
             · {b.source}
             {b.asOf ? ` · ${b.asOf}` : ""}
             {b.ownership === "market" ? " · market evidence" : b.ownership === "buyer" ? " · buyer-owned" : ""}

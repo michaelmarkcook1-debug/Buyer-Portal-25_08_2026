@@ -153,48 +153,21 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
                     g.length === 1 ? (
                       <SignalCard key={`a${i}`} s={g[0]!} />
                     ) : (
-                      <Panel key={`a${i}`} className="px-5 py-4">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <ClassChip cls={g[0]!.classification} />
-                          <span className="font-medium" style={{ color: "var(--fg)" }}>
-                            {g[0]!.implication.split(". ")[0]} — across {g.length} vendors
-                          </span>
-                        </div>
-                        <ul className="m-0 mt-3 list-none space-y-2 p-0">
-                          {g.map((s) => (
-                            <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.97rem]">
-                              <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
-                              <span className="min-w-0 flex-1" style={{ color: "var(--fg-muted)" }}>
-                                {s.headline}{s.change ? ` · ${s.change}` : ""}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </Panel>
+                      <GroupedSignal
+                        key={`a${i}`}
+                        signals={g}
+                        judgement={g[0]!.judgement}
+                        rowText={(s) => `${s.headline}${s.change ? ` · ${s.change}` : ""}`}
+                      />
                     ),
                   )}
                   {renewal.length >= 2 ? (
-                    <Panel className="px-5 py-4">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <ClassChip cls={renewal[0]!.classification} />
-                        <span className="font-medium" style={{ color: "var(--fg)" }}>
-                          Observed renewal activity concentrating across {renewal.length} selected vendors
-                        </span>
-                      </div>
-                      <ul className="m-0 mt-3 list-none space-y-2 p-0">
-                        {renewal.map((s) => (
-                          <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.97rem]">
-                            <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
-                            <span className="min-w-0 flex-1" style={{ color: "var(--fg-muted)" }}>
-                              {s.implication.split(". ")[0]}.{s.change ? ` ${s.change}` : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="code mt-3 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
-                        Market record{intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} — their defensive exposure, never the reader's contracts. End-of-term dates move slowly, so this reading stays useful between commercial loads.
-                      </div>
-                    </Panel>
+                    <GroupedSignal
+                      signals={renewal}
+                      judgement={renewal[0]!.judgement}
+                      rowText={(s) => `${s.implication.split(". ")[0]}.${s.change ? ` ${s.change}` : ""}`}
+                      footnote={`Market record${intel.spine.dataAsOf ? ` to ${shortDate(intel.spine.dataAsOf)}` : ""} — their defensive exposure, never the reader's contracts. End-of-term dates move slowly, so this reading stays useful between commercial loads.`}
+                    />
                   ) : (
                     renewal.map((s, i) => <SignalCard key={`n${i}`} s={s} />)
                   )}
@@ -336,5 +309,59 @@ export default async function Home({ searchParams }: { searchParams: Promise<Raw
         </div>
       </section>
     </PortalShell>
+  );
+}
+
+/**
+ * One development seen across several vendors: the shared judgement and the
+ * single action lead, and each vendor's own dated evidence sits beneath —
+ * the same order as a single SignalCard.
+ */
+function GroupedSignal({
+  signals,
+  judgement,
+  rowText,
+  footnote,
+}: {
+  signals: WatchSignal[];
+  judgement: string;
+  rowText: (s: WatchSignal) => string;
+  footnote?: string;
+}) {
+  const lead = signals[0]!;
+  return (
+    <Panel className="px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <ClassChip cls={lead.classification} />
+        <span className="eyebrow" style={{ letterSpacing: "0.14em" }}>
+          Across {signals.length} selected vendors
+        </span>
+      </div>
+      <div className="display mt-2 text-[1.2rem] leading-snug" style={{ color: "var(--fg)" }}>
+        {judgement}
+      </div>
+      <p className="mt-2.5 mb-0 max-w-[70ch] text-[1rem] leading-relaxed" style={{ color: "var(--fg)" }}>
+        <span className="font-semibold" style={{ color: "var(--accent-ink)" }}>Worth testing: </span>
+        {lead.action}
+      </p>
+      <ul
+        className="m-0 mt-3 list-none space-y-2 p-0"
+        style={{ borderTop: "1px solid var(--surface-line-soft)", paddingTop: "0.6rem" }}
+      >
+        {signals.map((s) => (
+          <li key={s.tickers[0]} className="flex flex-wrap items-baseline gap-x-3 text-[0.95rem]">
+            <span className="w-28 shrink-0 font-medium" style={{ color: "var(--fg)" }}>{s.vendors[0]}</span>
+            <span className="code min-w-0 flex-1 text-[0.9rem]" style={{ color: "var(--fg-dim)" }}>
+              {rowText(s)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {footnote ? (
+        <div className="code mt-3 text-[0.88rem]" style={{ color: "var(--fg-dim)" }}>
+          {footnote}
+        </div>
+      ) : null}
+    </Panel>
   );
 }

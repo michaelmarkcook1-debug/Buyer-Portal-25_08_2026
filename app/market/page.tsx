@@ -1,3 +1,12 @@
+import { SectionFinding } from "@/components/SectionFinding";
+import {
+  aiProductivityFinding,
+  economicsFinding,
+  familyFinding,
+  financialFinding,
+  geographyFinding,
+  workforceFinding,
+} from "@/lib/metrics/section-findings";
 import Link from "next/link";
 import { AnalystInsightHero } from "@/components/AnalystInsightHero";
 import {
@@ -155,6 +164,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="Buyer economics"
           aside="What economic forces are changing the buyer's commercial position?"
         />
+        <SectionFinding f={economicsFinding(intel.buyerEconomics.dimensions)} className="mt-4" />
         <Panel hero className="mt-5 px-6 py-6 sm:px-8">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <StateText state={intel.buyerEconomics.state} metricId="m.buyerEconomics" className="display text-[1.7rem]" />
@@ -199,6 +209,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="Contract volume by service family"
           aside="Direction is not asserted while contract evidence is this old"
         />
+        <SectionFinding f={familyFinding(lines)} className="mt-4" />
         <div className="mt-5">
           {lines.length > 0 ? (
             <Panel>
@@ -237,6 +248,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="Where this market signs"
           aside="The country each agreement was signed in — never where it is delivered from"
         />
+        <SectionFinding f={geographyFinding(geography.rows)} className="mt-4" />
         <div className="mt-5">
           {geography.rows.length > 0 ? (
             <Panel>
@@ -291,6 +303,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           title="AI productivity"
           aside="Where should AI capability now be changing what buyers pay for?"
         />
+        <SectionFinding
+          f={aiProductivityFinding(intel.vendors.map((v) => ({ name: v.name, metric: v.metrics.aiProductivityOpportunity })))}
+          className="mt-4"
+        />
         <div className="mt-5">
           <Panel className="px-5 py-4">
             <div className="eyebrow">By vendor</div>
@@ -323,6 +339,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
 
       <section className="mt-12">
         <SectionHeader eyebrow="Delivery economics" title="Labour and delivery" />
+        <SectionFinding
+          f={workforceFinding(intel.vendors.map((v) => ({ name: v.name, metric: v.metrics.talentPressure })))}
+          className="mt-4"
+        />
         {/* Operational risk is a delivery CONDITION, not an economic force. It
             was previously filed under buyer economics, where it answered no
             economic question; it belongs here beside delivery continuity. */}
@@ -422,6 +442,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
               <InfoTip content={fromSemantics(METRIC_DICTIONARY.financialResilience!)} />
             </span>
           }
+        />
+        <SectionFinding
+          f={financialFinding(intel.vendors.map((v) => ({ name: v.name, metric: v.metrics.financialResilience })))}
+          className="mt-4"
         />
         {isWhole ? (
           /* 66 identical cards is not a market view — it is the same variable

@@ -12,39 +12,56 @@ import type { MarketIntel, WatchSignal } from "./types";
  * metric's real facts — never generated, never speculative.
  */
 
-export const SEC_MEANING: Record<string, { headline: string; implication: string; cls: "ACT" | "WATCH" | "KNOW" }> = {
+export const SEC_MEANING: Record<
+  string,
+  { headline: string; judgement: string; implication: string; action: string; cls: "ACT" | "WATCH" | "KNOW" }
+> = {
   "1.02": {
     headline: "Terminated a material agreement",
+    judgement: "Lost a material agreement — their commercial posture may soften",
+    action: "Ask how the loss changes their pricing appetite and whether the teams involved are being redeployed.",
     implication: "A material contract loss changes their commercial posture — a basis for buyers to pressure-test continuity and pricing appetite.",
     cls: "ACT",
   },
   "1.05": {
     headline: "Disclosed a material cybersecurity incident",
+    judgement: "Material cyber incident — third-party risk is live",
+    action: "Request the incident scope, the services affected and the remediation commitments before extending or expanding work.",
     implication: "Disclosure-grade third-party risk — buyers using this vendor should review exposure and remediation commitments.",
     cls: "ACT",
   },
   "1.01": {
     headline: "Entered a material agreement",
+    judgement: "A major new commitment — delivery capacity may tighten",
+    action: "Seek named-resource and retention assurances for key roles on existing work.",
     implication: "A major new commitment can absorb delivery capacity — buyers of this vendor should probe staffing assurances on their accounts.",
     cls: "WATCH",
   },
   "5.02": {
     headline: "Officer or director change",
+    judgement: "Leadership change — sponsorship above client accounts may shift",
+    action: "Confirm who now owns executive sponsorship and escalation for work with this vendor.",
     implication: "Leadership change at the vendor — sponsorship and escalation paths above buyer accounts may shift.",
     cls: "WATCH",
   },
   "2.05": {
     headline: "Disclosed exit or disposal costs",
+    judgement: "Restructuring under way — delivery teams may change",
+    action: "Ask which delivery centres and roles are affected, and what continuity protections apply.",
     implication: "Restructuring under way — delivery teams serving buyer accounts may be affected.",
     cls: "WATCH",
   },
   "2.02": {
     headline: "Reported results of operations",
+    judgement: "Fresh results — context for how hard to push on price",
+    action: "Compare their reported growth and margin with the pricing flexibility they are offering.",
     implication: "Fresh financial context for their commercial position.",
     cls: "KNOW",
   },
   "8.01": {
     headline: "Disclosed a material event",
+    judgement: "A filing they judged material — worth reading before the next review",
+    action: "Read the filing and ask what, if anything, it changes for delivery.",
     implication: "The company judged this material enough to file — context worth holding.",
     cls: "KNOW",
   },
@@ -106,8 +123,10 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: m.cls,
         tickers: [d.ticker],
         vendors: [nameOf.get(d.ticker) ?? d.vendor],
+        judgement: m.judgement,
         headline: `${nameOf.get(d.ticker) ?? d.vendor}: ${m.headline}`,
         implication: m.implication,
+        action: m.action,
         opportunityType: d.itemCode === "1.02" ? "commercial-leverage" : null,
         change: `Filed ${shortDate(d.date)}`,
         confidence: "high", // a regulatory filing on a stated date
@@ -120,8 +139,10 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: "WATCH",
         tickers: [d.ticker],
         vendors: [nameOf.get(d.ticker) ?? d.vendor],
+        judgement: "A large new win — a stronger reference, and capacity now committed elsewhere",
         headline: `${nameOf.get(d.ticker) ?? d.vendor} signed ${money(d.tcvUsd)}${d.detail ? ` in ${d.detail}` : ""}`,
         implication: "A win of this size shifts observed contract activity and their reference position — relevant to any live evaluation.",
+        action: "In any live evaluation, ask how the new work is staffed and whether it draws on teams serving other clients.",
         opportunityType: "market-test",
         change: `Signed ${shortDate(d.date)}`,
         confidence: "high",
@@ -141,7 +162,9 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: leverageSignalClass(lev.confidence, v.coverage.inPlay12),
         tickers: [v.ticker],
         vendors: [v.name],
+        judgement: "Renewals concentrating — buyers with comparable agreements hold more leverage",
         headline: `${v.name}: observed renewal activity concentrating`,
+        action: "Where comparable work is coming up for renewal, test price and structure against alternatives rather than rolling terms forward.",
         implication:
           (lev.basis[0]?.text ?? "Observed agreements reach end-of-term within 12 months.") +
           " Their defensive exposure strengthens the position of buyers with comparable agreements.",
@@ -158,9 +181,11 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: "WATCH",
         tickers: [v.ticker],
         vendors: [v.name],
+        judgement: "Delivery workforce contracting — capacity risk on multi-year work",
         headline: `${v.name}: delivery workforce contracting`,
         implication:
           "A multi-year commitment buys this delivery workforce — capacity strain is decision-relevant for buyers of this vendor.",
+        action: "Ask for capacity plans and key-person commitments before extending term or scope.",
         opportunityType: "gain-sharing",
         change: talent.basis[0]?.text ?? null,
         confidence: talent.confidence,
@@ -174,8 +199,10 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: "KNOW",
         tickers: [v.ticker],
         vendors: [v.name],
+        judgement: "Productivity economics have moved — room for outcome-based terms",
         headline: `${v.name}: productivity economics have moved`,
         implication: gain.headline ?? "Capability is rising while labour dependency falls.",
+        action: "Test whether gain-share or outcome-priced terms are available where effort-based pricing still applies.",
         opportunityType: "gain-sharing",
         change: null,
         confidence: gain.confidence,
@@ -188,8 +215,10 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
         classification: "KNOW",
         tickers: [v.ticker],
         vendors: [v.name],
+        judgement: `AG reads their claims against delivery as ${v.claimsVsDelivery.direction.replace(/-/g, " ")}`,
         headline: `${v.name}: claims vs delivery — ${v.claimsVsDelivery.direction.replace(/-/g, " ")}`,
         implication: v.claimsVsDelivery.headline,
+        action: "Ask for delivery evidence — named references and outcomes — behind the capability they claim.",
         opportunityType: null,
         change: v.claimsVsDelivery.asOf ? `AG analysis as of ${shortDate(v.claimsVsDelivery.asOf)}` : null,
         confidence: "medium",
@@ -209,6 +238,20 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
     ai_revenue_or_bookings: "WATCH",
     workforce_change: "WATCH",
     delivery_model_change: "WATCH",
+  };
+  const JUDGEMENT: Record<string, string> = {
+    pricing_model_change: "Their commercial model is moving — legacy pricing may no longer hold",
+    productivity_disclosure: "Productivity gains disclosed — staffing baselines are now challengeable",
+    ai_revenue_or_bookings: "AI work is reaching their revenue — capability claims have evidence behind them",
+    workforce_change: "Delivery workforce being redesigned — capacity and pricing assumptions shift",
+    delivery_model_change: "Delivery model changing — work priced on the old model deserves review",
+  };
+  const ACTION: Record<string, string> = {
+    pricing_model_change: "Ask which new pricing structures they now offer and test them against the terms in place.",
+    productivity_disclosure: "Ask how the disclosed gains show up in staffing levels and rates on comparable work.",
+    ai_revenue_or_bookings: "Ask for client references for the AI work they are booking before paying a premium for it.",
+    workforce_change: "Ask how the redesign changes team mix and rates on multi-year work.",
+    delivery_model_change: "Identify engagements priced on the old delivery model and ask what should change.",
   };
   const IMPLICATION: Record<string, string> = {
     pricing_model_change: "The vendor's own commercial model is moving — buyers negotiating terms should test whether legacy pricing structures still apply.",
@@ -232,6 +275,8 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
     let cls: "ACT" | "WATCH" | "KNOW" = COMMERCIAL_CLS[strongest.eventType]!;
     let headline = strongest.headline.slice(0, 140);
     let implication = IMPLICATION[strongest.eventType]!;
+    let judgement = JUDGEMENT[strongest.eventType]!;
+    let action = ACTION[strongest.eventType]!;
     if (isContentlessHeadline(strongest.headline)) {
       const meaning = itemCodesFromHeadline(strongest.headline)
         .map((code) => SEC_MEANING[code])
@@ -240,13 +285,17 @@ export async function buildWatchSignals(intel: MarketIntel, tickersKey: string):
       cls = meaning.cls;
       headline = meaning.headline;
       implication = meaning.implication;
+      judgement = meaning.judgement;
+      action = meaning.action;
     }
     signals.push({
       classification: cls,
       tickers: [ticker],
       vendors: [name],
+      judgement,
       headline: `${name}: ${headline}`,
       implication,
+      action,
       opportunityType: strongest.eventType === "pricing_model_change" ? "gain-sharing" : null,
       change: `Observed ${shortDate(strongest.date)} · material AI capability change`,
       confidence: strongest.materiality >= 5 ? "high" : "medium",

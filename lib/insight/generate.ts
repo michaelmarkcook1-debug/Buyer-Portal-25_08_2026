@@ -1,8 +1,9 @@
-import { familyEvidenceLines } from "@/lib/freshness";
 import "server-only";
+import { createHash } from "node:crypto";
 import { unstable_cache } from "next/cache";
 import type { MarketIntel, VendorIntel, WatchSignal } from "@/lib/metrics/types";
 import { buildWatchSignals } from "@/lib/metrics/watch";
+import { familyEvidenceLines } from "@/lib/freshness";
 import type { Scenario } from "@/lib/scenarios";
 import { generateStructured, llmAvailability } from "./llm";
 import { validateInsight, VALIDATOR_VERSION } from "./validate";
@@ -473,11 +474,17 @@ export async function getInsight(
   const signals = await buildWatchSignals(intel, [...intel.scope.tickers].sort().join(","));
   const vendorNames = intel.scope.names;
   const context = buildContext(intel, tab, { ...opts, signals });
-  const dataVersion = `${intel.updatedAt ?? ""}|${intel.spine.lastIngest}`;
+  /* Keyed on the exact context the model is given, not on load dates. The
+     context's figures roll with the calendar (12-month windows end today), so
+     a key built from ingest dates alone kept serving yesterday's briefing —
+     which the re-check below then correctly blocked, leaving the hero
+     "unavailable" for up to six hours after midnight. Same context, same
+     briefing; any changed figure, a fresh one. */
+  const contextVersion = createHash("sha256").update(context).digest("hex").slice(0, 16);
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v17", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, dataVersion];
+  const key = ["insight", "v18", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, contextVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
