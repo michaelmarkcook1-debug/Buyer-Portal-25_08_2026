@@ -1,5 +1,5 @@
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, SESSION_DAYS, signSession, usableSecret, verifySession } from "./token";
@@ -15,15 +15,19 @@ export interface AuthConfig {
   secret: string | null;
   /** The code carried by the general sign-up link. Unset means sign-up is closed. */
   signupCode: string | null;
+  /** The code carried by the guest link. Unset means guest access is off. */
+  guestCode: string | null;
   adminEmails: Set<string>;
 }
 
 export function authConfig(): AuthConfig {
   const secret = process.env.AUTH_SECRET;
   const code = process.env.PILOT_SIGNUP_CODE?.trim();
+  const guest = process.env.GUEST_ACCESS_CODE?.trim();
   return {
     secret: usableSecret(secret) ? secret : null,
     signupCode: code && code.length >= 12 ? code : null,
+    guestCode: guest && guest.length >= 12 ? guest : null,
     adminEmails: new Set(
       (process.env.ADMIN_EMAILS ?? "")
         .split(",")
@@ -43,6 +47,7 @@ export async function getCurrentUser(): Promise<PortalUser | null> {
   const jar = await cookies();
   const payload = await verifySession(jar.get(SESSION_COOKIE)?.value, secret);
   if (!payload) return null;
+  if (payload.uid.startsWith(GUEST_PREFIX)) return guestFromUid(payload.uid);
   const user = await findUserById(payload.uid);
   if (!user || user.disabled) return null;
   return user;
@@ -91,6 +96,52 @@ export function safeNext(raw: string | null | undefined): string {
 /** Does this code open sign-up? Constant-time, and false whenever sign-up is closed. */
 export function isSignupCode(code: string | null | undefined): boolean {
   const expected = authConfig().signupCode;
+  if (!expected || !code) return false;
+  const a = Buffer.from(code);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/* ── Guest link ───────────────────────────────────────────────────────────
+   A view-only way in that skips sign-in: /guest?code=<GUEST_ACCESS_CODE>.
+   There is no account behind it. The guest's session id carries a short
+   fingerprint of the code it was issued under, so changing or removing
+   GUEST_ACCESS_CODE ends every guest session at once — no list to revoke.
+   Guests read every buyer page; they never reach the Backoffice, and their
+   vendor selection stays in their own browser. */
+
+const GUEST_PREFIX = "guest:";
+/** Guest sessions are shorter than buyer sessions. */
+export const GUEST_SESSION_DAYS = 7;
+
+function guestFingerprint(code: string): string {
+  return createHash("sha256").update(`guest-link:${code}`).digest("hex").slice(0, 16);
+}
+
+export function guestSessionId(): string | null {
+  const code = authConfig().guestCode;
+  return code ? GUEST_PREFIX + guestFingerprint(code) : null;
+}
+
+/** A guest session is valid only while it matches the guest code now configured. */
+function guestFromUid(uid: string): PortalUser | null {
+  const current = guestSessionId();
+  if (!current || uid !== current) return null;
+  return {
+    id: uid,
+    email: "guest",
+    role: "guest",
+    passwordHash: "",
+    scope: null,
+    disabled: false,
+    failedLogins: 0,
+    lockedUntil: null,
+  };
+}
+
+/** Does this code open the guest link? Constant-time, and false whenever guest access is off. */
+export function isGuestCode(code: string | null | undefined): boolean {
+  const expected = authConfig().guestCode;
   if (!expected || !code) return false;
   const a = Buffer.from(code);
   const b = Buffer.from(expected);

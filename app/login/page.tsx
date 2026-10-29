@@ -21,7 +21,9 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 export default async function LoginPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const next = safeNext(one(sp.next));
-  if (await getCurrentUser()) redirect(next);
+  const current = await getCurrentUser();
+  /* A guest can still sign in properly; only a real account skips this page. */
+  if (current && current.role !== "guest") redirect(next);
 
   const configured = Boolean(authConfig().secret);
   const error = configured ? MESSAGES[one(sp.error) ?? ""] ?? null : MESSAGES["not-configured"]!;

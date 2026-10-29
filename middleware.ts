@@ -26,7 +26,8 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     /* Everything except: sign-in and sign-up pages, their API, Next's own
-       assets, brand images and icons. */
-    "/((?!login|join|api/auth|_next/static|_next/image|brand|favicon.ico|icon|apple-icon|robots.txt).*)",
+       assets, the guest link (which checks its own code), brand images and
+       icons. */
+    "/((?!login|join|api/auth|_next/static|_next/image|guest|brand|favicon.ico|icon|apple-icon|robots.txt).*)",
   ],
 };

@@ -111,3 +111,30 @@ describe("access is closed by default", () => {
     expect(src("components/PortalShell.tsx")).toMatch(/ctx\.user\.role === "admin" \? \(\s*<Link\s+href="\/backoffice"/);
   });
 });
+
+describe("guest link (skips sign-in, view only)", () => {
+  it("is let through middleware, and checks its own code", () => {
+    expect(src("middleware.ts")).toMatch(/_next\/image\|guest\|brand/);
+    const route = src("app/guest/route.ts");
+    expect(route).toMatch(/isGuestCode\(url\.searchParams\.get\("code"\)\)/);
+    expect(route).toMatch(/redirect\(new URL\("\/login"/);
+  });
+
+  it("guest sessions are tied to the current code and never admin", () => {
+    const session = src("lib/auth/session.ts");
+    expect(session).toMatch(/guestFingerprint\(code\)/);
+    expect(session).toMatch(/if \(!current \|\| uid !== current\) return null;/);
+    expect(session).toMatch(/role: "guest"/);
+    // admin comes only from ADMIN_EMAILS for real accounts
+    expect(session).toMatch(/adminEmails\.has\(email\) \? "admin" : "buyer"/);
+  });
+
+  it("guests keep their vendor selection in the browser only", () => {
+    expect(src("app/select/route.ts")).toMatch(/user\.role !== "guest"\) await saveUserScope/);
+  });
+
+  it("a guest can still sign in properly", () => {
+    expect(src("app/login/page.tsx")).toMatch(/current\.role !== "guest"\) redirect\(next\)/);
+    expect(src("app/join/page.tsx")).toMatch(/current\.role !== "guest"\) redirect/);
+  });
+});

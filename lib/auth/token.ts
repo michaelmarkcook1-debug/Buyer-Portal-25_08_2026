@@ -45,8 +45,8 @@ export function usableSecret(secret: string | undefined): secret is string {
   return typeof secret === "string" && secret.length >= MIN_SECRET_LENGTH;
 }
 
-export async function signSession(uid: string, secret: string, now = Date.now()): Promise<string> {
-  const payload: SessionPayload = { uid, exp: Math.floor(now / 1000) + SESSION_DAYS * 86_400, v: 1 };
+export async function signSession(uid: string, secret: string, now = Date.now(), days = SESSION_DAYS): Promise<string> {
+  const payload: SessionPayload = { uid, exp: Math.floor(now / 1000) + days * 86_400, v: 1 };
   const body = b64url(enc.encode(JSON.stringify(payload)));
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await key(secret), enc.encode(body)));
   return `${body}.${b64url(sig)}`;

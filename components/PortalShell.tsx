@@ -199,7 +199,7 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
           <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
             {ctx.dbReady ? (
               <span className="code text-meta" style={{ color: "var(--fg-dim)" }}>
-                Signed in as {ctx.user.email}
+                {ctx.user.role === "guest" ? "Viewing as a guest" : `Signed in as ${ctx.user.email}`}
               </span>
             ) : null}
             {/* Operator utility, admins only. It sat in every buyer's footer and

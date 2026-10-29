@@ -72,7 +72,7 @@ export async function GET(req: Request) {
        browser; sign-in restores it. Market vendors only — no buyer-owned
        commercial data is held. */
     const user = isDbConfigured() ? await getCurrentUser() : null;
-    if (user) await saveUserScope(user.id, value);
+    if (user && user.role !== "guest") await saveUserScope(user.id, value);
   }
   // A submission with nothing selected changes nothing — the current scope stands.
 

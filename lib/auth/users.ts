@@ -10,7 +10,8 @@ import { q } from "@/lib/db";
  * a list of market vendors, exactly what the scope cookie already carries.
  */
 
-export type Role = "buyer" | "admin";
+/** "guest" is a view-only visitor who came in through the guest link; never stored. */
+export type Role = "buyer" | "admin" | "guest";
 
 export interface PortalUser {
   id: string;

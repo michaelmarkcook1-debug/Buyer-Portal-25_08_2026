@@ -18,7 +18,8 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
  * never says whether a code was close or what the right one is.
  */
 export default async function JoinPage({ searchParams }: { searchParams: SP }) {
-  if (await getCurrentUser()) redirect("/");
+  const current = await getCurrentUser();
+  if (current && current.role !== "guest") redirect("/");
   const sp = await searchParams;
   const code = one(sp.code) ?? "";
   const cfg = authConfig();
