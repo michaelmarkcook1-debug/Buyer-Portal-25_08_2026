@@ -9,6 +9,9 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
  * With no AUTH_SECRET configured nothing verifies, so everything is closed.
  */
 export async function middleware(req: NextRequest) {
+  /* Public access is on: let every request through. Route handlers and pages
+     still enforce their own rules, so the admin Backoffice stays locked. */
+  if (process.env.PUBLIC_ACCESS === "on") return NextResponse.next();
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value, process.env.AUTH_SECRET);
   if (session) return NextResponse.next();
 

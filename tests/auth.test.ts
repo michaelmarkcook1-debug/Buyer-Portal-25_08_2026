@@ -138,3 +138,22 @@ describe("guest link (skips sign-in, view only)", () => {
     expect(src("app/join/page.tsx")).toMatch(/current\.role !== "guest"\) redirect/);
   });
 });
+
+describe("public access switch (PUBLIC_ACCESS=on)", () => {
+  it("is one setting, checked in middleware and on the server", () => {
+    expect(src("middleware.ts")).toMatch(/process\.env\.PUBLIC_ACCESS === "on"\) return NextResponse\.next\(\)/);
+    expect(src("lib/auth/session.ts")).toMatch(/return publicAccess\(\) \? publicGuest\(\) : null;/);
+  });
+
+  it("makes everyone a guest, never an admin", () => {
+    const session = src("lib/auth/session.ts");
+    const guest = session.slice(session.indexOf("function publicGuest"));
+    expect(guest).toMatch(/role: "guest"/);
+    expect(guest).not.toMatch(/role: "admin"/);
+  });
+
+  it("leaves the Backoffice and its refresh endpoint admin-only", () => {
+    expect(src("app/backoffice/page.tsx")).toMatch(/await requireAdmin\(\)/);
+    expect(src("app/api/backoffice/refresh/route.ts")).toMatch(/user\.role !== "admin"/);
+  });
+});

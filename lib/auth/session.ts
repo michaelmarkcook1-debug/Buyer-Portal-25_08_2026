@@ -42,6 +42,14 @@ export function roleFor(email: string): Role {
 }
 
 export async function getCurrentUser(): Promise<PortalUser | null> {
+  const signedIn = await sessionUser();
+  if (signedIn) return signedIn;
+  /* Public access: anyone without a session reads the portal as a guest.
+     Admin-only surfaces still refuse them, because a guest is never admin. */
+  return publicAccess() ? publicGuest() : null;
+}
+
+async function sessionUser(): Promise<PortalUser | null> {
   const { secret } = authConfig();
   if (!secret) return null;
   const jar = await cookies();
@@ -51,6 +59,29 @@ export async function getCurrentUser(): Promise<PortalUser | null> {
   const user = await findUserById(payload.uid);
   if (!user || user.disabled) return null;
   return user;
+}
+
+/* ── Public access ────────────────────────────────────────────────────────
+   PUBLIC_ACCESS=on turns sign-in off for the buyer pages (owner's call,
+   30 Oct 2026: "I don't want any logins right now"). Everyone reads as a
+   guest. Accounts, the sign-up link and the admin Backoffice are untouched:
+   the Backoffice and its refresh endpoint still need a signed-in admin.
+   Remove the setting and redeploy to require sign-in again. */
+export function publicAccess(): boolean {
+  return process.env.PUBLIC_ACCESS === "on";
+}
+
+function publicGuest(): PortalUser {
+  return {
+    id: "public",
+    email: "guest",
+    role: "guest",
+    passwordHash: "",
+    scope: null,
+    disabled: false,
+    failedLogins: 0,
+    lockedUntil: null,
+  };
 }
 
 /** For pages: the signed-in user, or a redirect to sign in. */

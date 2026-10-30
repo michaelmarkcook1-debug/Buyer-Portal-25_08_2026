@@ -214,15 +214,26 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
                 Backoffice
               </Link>
             ) : null}
-            <form method="POST" action="/api/auth/logout" className="m-0">
-              <button
-                type="submit"
-                className="tap-link code cursor-pointer border-0 bg-transparent p-0 text-meta underline-offset-4 hover:underline"
+            {ctx.dbReady && ctx.user.role === "guest" ? (
+              <Link
+                href="/login"
+                prefetch={false}
+                className="tap-link code text-meta underline-offset-4 hover:underline"
                 style={{ color: "var(--fg-dim)" }}
               >
-                Sign out
-              </button>
-            </form>
+                Sign in
+              </Link>
+            ) : (
+              <form method="POST" action="/api/auth/logout" className="m-0">
+                <button
+                  type="submit"
+                  className="tap-link code cursor-pointer border-0 bg-transparent p-0 text-meta underline-offset-4 hover:underline"
+                  style={{ color: "var(--fg-dim)" }}
+                >
+                  Sign out
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
