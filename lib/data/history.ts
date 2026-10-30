@@ -216,11 +216,16 @@ export const getCommercialModelBreakdown = cache(
 export const getReputationSeries = cache(async (tickersKey: string): Promise<Map<string, HistorySeries>> => {
   const tickers = tickersKey.split(",").filter(Boolean);
   if (tickers.length === 0) return new Map();
-  const rows = await q<{ ticker: string; means: number[] | null }>(
+  /* Upstream series carry empty (null) points: the 26 Oct 2026 refresh landed
+     them for 66 of 67 vendors, and casting every point to a number then
+     failed the whole query, taking Home and Market down with it. Only real
+     numbers are averaged; a position with none stays empty rather than
+     becoming a fabricated zero. */
+  const rows = await q<{ ticker: string; means: (number | null)[] | null }>(
     `SELECT s.ticker,
             (SELECT array_agg(avg_val ORDER BY idx)
                FROM (
-                 SELECT idx, avg(elem::float8) AS avg_val
+                 SELECT idx, avg(CASE WHEN jsonb_typeof(elem) = 'number' THEN elem::float8 END) AS avg_val
                    FROM jsonb_array_elements(s.raw->'sentimentTrend'->'series') ser,
                         jsonb_array_elements(ser->'data') WITH ORDINALITY AS d(elem, idx)
                   GROUP BY idx
@@ -236,14 +241,18 @@ export const getReputationSeries = cache(async (tickersKey: string): Promise<Map
   );
   const out = new Map<string, HistorySeries>();
   for (const r of rows) {
-    if (!r.means || r.means.length < 2) continue;
+    /* Positions keep their own label (t3 stays t3) when a neighbour is empty. */
+    const points = (r.means ?? [])
+      .map((v, i) => (v == null ? null : { period: `t${i + 1}`, value: Math.round(v), n: 1 }))
+      .filter((p): p is { period: string; value: number; n: number } => p !== null);
+    if (points.length < 2) continue;
     out.set(
       r.ticker,
       reconstructed({
         id: `reputation-${r.ticker}`,
         label: "Reputation sentiment (AG tracker series)",
         unit: "score_0_100",
-        points: r.means.map((v, i) => ({ period: `t${i + 1}`, value: Math.round(v), n: 1 })),
+        points,
         source: "AnalystGenius reputation tracker (derived analysis)",
         note: "The tracker's own trailing series; period labels are positional, as published upstream.",
       }),
