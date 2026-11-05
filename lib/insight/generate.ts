@@ -222,7 +222,7 @@ function metricLine(m: { label: string; state: string; movement: string; confide
 
 function vendorBlock(v: VendorIntel, detail: boolean): string {
   const lines = [
-    `${v.name} (${v.ticker}) — overall opportunity: ${v.overall.level}; observed market coverage: ${v.coverage.contracts} contracts on the market record, ${v.coverage.inPlay12} reaching end-of-term within 12 months.`,
+    `${v.name} (${v.ticker}) — overall opportunity: ${v.overall.level}; observed market coverage: ${v.coverage.contracts} contract${v.coverage.contracts === 1 ? "" : "s"} on the market record, ${v.coverage.inPlay12} reaching end-of-term within 12 months.`,
   ];
   const keys = detail
     ? (Object.keys(v.metrics) as Array<keyof typeof v.metrics>)
@@ -239,10 +239,18 @@ function vendorBlock(v: VendorIntel, detail: boolean): string {
   return lines.join("\n");
 }
 
+/** The opportunity an opportunity-detail briefing is about. */
+export interface InsightOpportunity {
+  type: string;
+  label: string;
+  level: string;
+  reason: string | null;
+}
+
 export function buildContext(
   intel: MarketIntel,
   tab: InsightTab,
-  opts: { focalTicker?: string; scenario?: Scenario | null; signals?: WatchSignal[] } = {},
+  opts: { focalTicker?: string; scenario?: Scenario | null; signals?: WatchSignal[]; opportunity?: InsightOpportunity } = {},
 ): string {
   const focal = opts.focalTicker ? intel.vendors.find((v) => v.ticker === opts.focalTicker) : undefined;
   const insufficiencies: string[] = [];
@@ -276,6 +284,12 @@ export function buildContext(
     "SIGNALS:",
     ...intel.watch.map((w) => `${w.classification} — ${buyerSafeBasis(w.headline)}. ${buyerSafeBasis(w.implication)}${w.change ? ` (${w.change})` : ""}`),
     "",
+    /* The opportunity page names its type; without it every type's page got
+       the same briefing, about whichever type was generated first (audit
+       5 Nov 2026). */
+    opts.opportunity
+      ? `FOCUS OPPORTUNITY: ${opts.opportunity.label} for ${focal?.name ?? "the focal vendor"} — current reading: ${opts.opportunity.level}.${opts.opportunity.reason ? ` ${buyerSafeBasis(opts.opportunity.reason)}` : ""} Write about this opportunity type only.\n`
+      : "",
     focal ? `FOCAL VENDOR:\n${vendorBlock(focal, true)}\n\nCOMPARED WITH THE REST OF THE SELECTED MARKET:` : "VENDORS (ranked by overall buyer opportunity):",
     ...intel.vendors.filter((v) => v.ticker !== opts.focalTicker).map((v) => vendorBlock(v, tab === "vendors" || tab === "opportunities")),
     "",
@@ -337,6 +351,23 @@ class InsightFailure extends Error {
  * the market — including the legitimate case where one vendor genuinely
  * dominates and the sentence says so. Returns null when the opening is fine.
  */
+/** The headline is the briefing's first sentence; past this it stops reading as one. */
+export const HEADLINE_MAX_CHARS = 200;
+
+/**
+ * The hero shows the first sentence on its own as the headline. The prompt
+ * asks for 25 words, but the model sometimes packs the figures in and writes
+ * 300+ characters (BDQ flagged 311 and 357 on 5 Nov 2026), so the length is
+ * checked here and gets the same single corrective pass as the structure.
+ */
+export function headlineViolation(text: string): string | null {
+  const t = text.trim();
+  const cut = t.search(/(?<=[.!?])\s+(?=[A-Z])/);
+  const first = cut > 0 ? t.slice(0, cut) : t;
+  if (first.length <= HEADLINE_MAX_CHARS) return null;
+  return `The first sentence is shown on its own as the headline and runs to ${first.length} characters. Rewrite it as one decisive claim of no more than 25 words (under ${HEADLINE_MAX_CHARS} characters), and move the supporting figures into the sentences that follow.`;
+}
+
 export function marketFirstViolation(text: string, tab: InsightTab, vendorNames: string[]): string | null {
   if (!TOP_LEVEL_TABS.includes(tab)) return null;
   const opening = text.trim().split(/(?<=[.:;])\s+/)[0] ?? "";
@@ -422,13 +453,14 @@ async function generateUncached(context: string, tab: InsightTab, vendorNames: s
      one corrective regeneration, and if the model still leads on a vendor the
      briefing is delivered with the deviation logged. Withholding a truthful
      briefing over ordering would cost the buyer more than it protects. */
-  const structural = marketFirstViolation(validation.text, tab, vendorNames);
+  const structureOf = (t: string) => marketFirstViolation(t, tab, vendorNames) ?? headlineViolation(t);
+  const structural = structureOf(validation.text);
   if (structural) {
     const fix = await generateStructured<{ insight: string }>(availability.config, {
       system: SYSTEM_PROMPT,
       user:
         context +
-        "\n\nYOUR PREVIOUS DRAFT BROKE THE REQUIRED STRUCTURE — rewrite it keeping every figure and judgement, changing only the order so the market judgement comes first:\n- " +
+        "\n\nYOUR PREVIOUS DRAFT BROKE THE REQUIRED STRUCTURE — rewrite it keeping every figure and judgement, changing only what this asks:\n- " +
         structural,
       maxTokens: 700,
       tool: {
@@ -443,13 +475,26 @@ async function generateUncached(context: string, tab: InsightTab, vendorNames: s
     });
     if (fix.ok) {
       const revalidated = validateInsight(fix.value.insight ?? "", context);
-      if (revalidated.ok && !marketFirstViolation(revalidated.text, tab, vendorNames)) {
+      if (revalidated.ok && !structureOf(revalidated.text)) {
         return { status: "ok", text: revalidated.text, warnings: revalidated.warnings };
       }
     }
     console.warn("[analyst-insight:structure] " + JSON.stringify({ tab, issue: structural, at: new Date().toISOString() }));
   }
   return { status: "ok", text: validation.text, warnings: validation.warnings };
+}
+
+const FAILURE_TTL_MS = 15 * 60 * 1000;
+const recentFailures = new Map<string, { until: number; result: InsightResult }>();
+const inflight = new Map<string, Promise<Extract<InsightResult, { status: "ok" }>>>();
+
+function rememberFailure(key: string, result: InsightResult): void {
+  if (recentFailures.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of recentFailures) if (v.until <= now) recentFailures.delete(k);
+    if (recentFailures.size > 500) recentFailures.clear();
+  }
+  recentFailures.set(key, { until: Date.now() + FAILURE_TTL_MS, result });
 }
 
 /**
@@ -460,14 +505,18 @@ async function generateUncached(context: string, tab: InsightTab, vendorNames: s
 export async function getInsight(
   intel: MarketIntel,
   tab: InsightTab,
-  opts: { focalTicker?: string; scenario?: Scenario | null } = {},
+  opts: { focalTicker?: string; scenario?: Scenario | null; opportunity?: InsightOpportunity } = {},
 ): Promise<InsightResult> {
   if (intel.scope.tickers.length === 0) return { status: "no-scope" };
 
   // Availability is checked OUTSIDE the cache: a missing key is an environment
   // state, not an analysis, and must never be stored as one.
   const availability = llmAvailability();
-  if (!availability.ok) return { status: "not-configured", reason: availability.reason };
+  if (!availability.ok) {
+    /* Variable names and file paths are for developers, not for visitors. */
+    const reason = process.env.NODE_ENV === "production" ? "Analyst insight is not switched on for this deployment." : availability.reason;
+    return { status: "not-configured", reason };
+  }
 
   // Freshest dated signals ground the briefing (freeze directive §4/§8) —
   // deterministic, evidence-gated, computed with the runtime's own rules.
@@ -484,7 +533,7 @@ export async function getInsight(
   const scopeSig = intel.scope.mode === "whole_market" ? "whole" : [...intel.scope.tickers].sort().join(",");
   // v9 + validator version (sprint 3 fix 1): any ruleset change invalidates
   // every cached insight, so nothing validated by an older ruleset survives.
-  const key = ["insight", "v18", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", scopeSig, contextVersion];
+  const key = ["insight", "v18", `val${VALIDATOR_VERSION}`, tab, opts.focalTicker ?? "", opts.scenario?.id ?? "", opts.opportunity?.type ?? "", scopeSig, contextVersion];
 
   // Only DELIVERED briefings are cached. Blocked or failed generations are
   // thrown out of the cached scope so a transient error cannot be served for
@@ -499,8 +548,21 @@ export async function getInsight(
     { revalidate: 6 * 60 * 60 },
   );
 
+  /* A view that just failed is not retried for FAILURE_TTL_MS: reloading a
+     blocked briefing re-spent two or three model calls every time. And
+     concurrent first views of one context share one generation. Both are
+     per-instance; the hourly ceiling (budget.ts) bounds the rest. */
+  const memoKey = key.join("|");
+  const failed = recentFailures.get(memoKey);
+  if (failed && failed.until > Date.now()) return failed.result;
   try {
-    const result = await cached();
+    let pending = inflight.get(memoKey);
+    if (!pending) {
+      pending = cached();
+      inflight.set(memoKey, pending);
+      pending.finally(() => inflight.delete(memoKey)).catch(() => {});
+    }
+    const result = await pending;
     // Defence in depth (sprint 3 fix 1): re-validate on EVERY read with the
     // validator compiled into THIS runtime. A cache entry written by a stale
     // runtime (the Sprint 2 incident) is caught here and never rendered.
@@ -515,11 +577,14 @@ export async function getInsight(
       if (e.result.status === "blocked") {
         logInsightBlock({ stage: "generation", reasons: e.result.reasons, text: e.result.blockedText, tab, opts, scopeSig, key });
       }
+      rememberFailure(memoKey, e.result);
       return e.result;
     }
     const message = `Insight generation failed: ${(e as Error).message}`;
     logInsightBlock({ stage: "exception", reasons: [message], tab, opts, scopeSig, key });
-    return { status: "blocked", reasons: [message] };
+    const result: InsightResult = { status: "blocked", reasons: [message] };
+    rememberFailure(memoKey, result);
+    return result;
   }
 }
 
@@ -534,7 +599,7 @@ function logInsightBlock(input: {
   reasons: string[];
   text?: string;
   tab: InsightTab;
-  opts: { focalTicker?: string; scenario?: Scenario | null };
+  opts: { focalTicker?: string; scenario?: Scenario | null; opportunity?: InsightOpportunity };
   scopeSig: string;
   key: string[];
 }): void {

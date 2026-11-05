@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { UniverseVendor } from "@/lib/data/facts";
 import type { MarketScope } from "@/lib/market-scope";
-import { agoDays, shortDate } from "@/lib/format";
+import { agoDays, shortDate, counted } from "@/lib/format";
 import { familyEvidenceLines, FRESHNESS_CAP_DAYS, type EvidenceSummary } from "@/lib/freshness";
 
 /**
@@ -144,7 +144,7 @@ export function ScopeBar({
                         {v.name}
                       </span>
                       <span className="code block text-meta" style={{ color: "var(--fg-dim)" }}>
-                        {v.contracts > 0 ? `${v.contracts} contracts · ${v.inPlay24} in play` : "no contracts on record"}
+                        {v.contracts > 0 ? `${counted(v.contracts, "contract")} · ${v.inPlay24} in play` : "no contracts on record"}
                         {v.signalTypes > 0 ? ` · ${v.signalTypes} signal types` : ""}
                       </span>
                     </span>

@@ -37,8 +37,19 @@ export function authConfig(): AuthConfig {
   };
 }
 
-export function roleFor(email: string): Role {
-  return authConfig().adminEmails.has(email) ? "admin" : "buyer";
+/**
+ * Admin needs BOTH an account created as admin out of band
+ * (scripts/create-admin.ts) AND a place on ADMIN_EMAILS. The sign-up form can
+ * never mint one: mailbox ownership is not verified, so anyone holding the
+ * shared code could register the admin's address (audit 5 Nov 2026).
+ * Removing an address from ADMIN_EMAILS takes effect on the next request.
+ */
+export function roleFor(email: string, stored: Role = "buyer"): Role {
+  return stored === "admin" && authConfig().adminEmails.has(email) ? "admin" : "buyer";
+}
+
+export function isAdminEmail(email: string): boolean {
+  return authConfig().adminEmails.has(email);
 }
 
 export async function getCurrentUser(): Promise<PortalUser | null> {
@@ -58,7 +69,7 @@ async function sessionUser(): Promise<PortalUser | null> {
   if (payload.uid.startsWith(GUEST_PREFIX)) return guestFromUid(payload.uid);
   const user = await findUserById(payload.uid);
   if (!user || user.disabled) return null;
-  return user;
+  return { ...user, role: roleFor(user.email, user.role) };
 }
 
 /* ── Public access ────────────────────────────────────────────────────────
@@ -94,6 +105,9 @@ export async function requireUser(next = "/"): Promise<PortalUser> {
 /** For operator pages: an admin, or a redirect. Buyers never see the Backoffice. */
 export async function requireAdmin(): Promise<PortalUser> {
   const user = await requireUser("/backoffice");
+  /* A guest (everyone, with PUBLIC_ACCESS on) is offered sign-in, so an admin
+     who is not signed in gets a prompt instead of a silent bounce home. */
+  if (user.role === "guest") redirect("/login?next=%2Fbackoffice");
   if (user.role !== "admin") redirect("/");
   return user;
 }
@@ -118,10 +132,23 @@ export async function sessionCookieFor(user: PortalUser): Promise<{
   };
 }
 
-/** Same-origin relative paths only — never an open redirect. */
+/**
+ * Same-origin relative paths only — never an open redirect. Prefix checks
+ * alone were bypassed: the URL parser drops tabs and newlines and reads a
+ * backslash as a slash, so "/%09/evil.com" and "/\\evil.com" both left the
+ * site (audit 5 Nov 2026). Those characters are refused outright, and the
+ * result must still resolve to this origin.
+ */
 export function safeNext(raw: string | null | undefined): string {
   const n = raw ?? "/";
-  return n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") ? n : "/";
+  if (!n.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(n)) return "/";
+  const base = "https://portal.invalid";
+  try {
+    const u = new URL(n, base);
+    return u.origin === base ? `${u.pathname}${u.search}${u.hash}` : "/";
+  } catch {
+    return "/";
+  }
 }
 
 /** Does this code open sign-up? Constant-time, and false whenever sign-up is closed. */

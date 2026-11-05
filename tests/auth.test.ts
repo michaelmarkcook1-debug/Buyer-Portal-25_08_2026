@@ -157,3 +157,42 @@ describe("public access switch (PUBLIC_ACCESS=on)", () => {
     expect(src("app/api/backoffice/refresh/route.ts")).toMatch(/user\.role !== "admin"/);
   });
 });
+
+describe("audit fixes (5 Nov 2026)", () => {
+  it("safeNext refuses every way off-site the URL parser allows", async () => {
+    const { safeNext } = await import("@/lib/auth/session");
+    for (const bad of ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "https://evil.com", "evil.com", "/%5C"]) {
+      const out = safeNext(bad);
+      expect(new URL(out, "https://portal.example").origin, JSON.stringify(bad)).toBe("https://portal.example");
+    }
+    expect(safeNext("/market?vendors=ACN#x")).toBe("/market?vendors=ACN#x");
+    expect(safeNext(null)).toBe("/");
+  });
+
+  it("/select uses the shared redirect guard", () => {
+    expect(src("app/select/route.ts")).toMatch(/const returnTo = safeNext\(rawReturn\)/);
+  });
+
+  it("admin needs an admin-created account AND a place on ADMIN_EMAILS", async () => {
+    const prev = process.env.ADMIN_EMAILS;
+    process.env.ADMIN_EMAILS = "boss@corp.com";
+    const { roleFor } = await import("@/lib/auth/session");
+    expect(roleFor("boss@corp.com")).toBe("buyer"); // sign-up path: never admin
+    expect(roleFor("boss@corp.com", "buyer")).toBe("buyer"); // a self-registered row is not promoted
+    expect(roleFor("boss@corp.com", "admin")).toBe("admin");
+    expect(roleFor("other@corp.com", "admin")).toBe("buyer"); // delisted admin loses it at once
+    process.env.ADMIN_EMAILS = prev;
+  });
+
+  it("sign-up refuses ADMIN_EMAILS addresses and puts no email in a URL", () => {
+    const signup = src("app/api/auth/signup/route.ts");
+    expect(signup).toMatch(/if \(isAdminEmail\(verdict\.email\)\) return back\(url, code, "reserved"\)/);
+    expect(signup).not.toMatch(/\{ email/);
+    expect(src("app/api/auth/login/route.ts")).not.toMatch(/searchParams\.set\("email"/);
+  });
+
+  it("a locked account reads like a wrong password, and an expired lock restarts the count", () => {
+    expect(src("app/api/auth/login/route.ts")).not.toMatch(/"locked"/);
+    expect(src("lib/auth/users.ts")).toMatch(/locked_until <= now\(\) THEN 1 ELSE failed_logins \+ 1/);
+  });
+});

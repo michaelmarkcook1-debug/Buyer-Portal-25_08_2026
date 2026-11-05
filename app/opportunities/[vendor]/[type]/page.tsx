@@ -110,7 +110,12 @@ export default async function OpportunityDetail({
       </Panel>
 
       <div className="mt-8">
-        <AnalystInsightHero intel={intel} tab="opportunity-detail" focalTicker={focal.ticker} />
+        <AnalystInsightHero
+          intel={intel}
+          tab="opportunity-detail"
+          focalTicker={focal.ticker}
+          opportunity={{ type: oppType, label: OPPORTUNITY_LABELS[oppType], level: opp.level, reason: opp.reason ?? null }}
+        />
       </div>
 
       {opp.why.length > 0 ? (

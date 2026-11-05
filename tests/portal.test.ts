@@ -103,6 +103,15 @@ describe("grounding firewall (spec §24)", () => {
     expect(allowed.has("2.4")).toBe(true);
     expect(allowed.has("47")).toBe(true);
   });
+
+  it("blocks magnitude and unit swaps of a context figure (audit 5 Nov 2026)", () => {
+    const ctx = JSON.stringify({ v: "$2.4M across 47 agreements", sharePct: 12 });
+    expect(validateInsight("The scope holds $2.4bn of observed value.", ctx).ok).toBe(false);
+    expect(validateInsight("47% of agreements are fixed-price.", ctx).ok).toBe(true); // bare 47 may be a share
+    expect(validateInsight("The scope holds $2.4M across 47 agreements, 12% of the market.", ctx).ok).toBe(true);
+    expect(validateInsight("Value rose 2.4% this year.", ctx).ok).toBe(false); // a magnitude never licenses a percentage
+    expect(validateInsight("The scope holds 47k agreements.", ctx).ok).toBe(false);
+  });
 });
 
 describe("ownership firewall (truth-safety correction §4)", () => {
@@ -2130,7 +2139,10 @@ describe("date provenance and the evidence anchor (2026-08-25)", () => {
     expect(facts).toMatch(/p\.start_date_raw/);
     // read from procurement staging, one row per award (27 Sep 2026): the
     // newest resolved version of each record, never every staged version
-    expect(facts).toMatch(/FROM \$\{PROCUREMENT_LATEST_SQL\} p/);
+    // bound as a materialised CTE so it runs once, not once per vendor (5 Nov 2026)
+    expect(facts).toMatch(/WITH p_latest AS MATERIALIZED \$\{PROCUREMENT_LATEST_SQL\}/);
+    expect(facts).toMatch(/FROM p_latest p/);
+    expect(facts).not.toMatch(/FROM \$\{PROCUREMENT_LATEST_SQL\}/);
     const latest = readFileSync(resolve(__dirname, "../lib/data/procurement-sql.ts"), "utf8");
     expect(latest).toMatch(/FROM stg_procurement_contract/);
     expect(latest).toMatch(/DISTINCT ON \(source_system, source_record_id\)/);
@@ -2356,7 +2368,9 @@ describe("market visual communication pass (2026-08-29)", () => {
   it("keeps the evidence anchor visible and never implies today's data", () => {
     expect(flowChart).toMatch(/asOf/);
     expect(resolveSrc).toMatch(/asOf: anchor\.dataAsOf \? shortDate\(anchor\.dataAsOf\) : null/);
-    expect(resolveSrc).toMatch(/asOf: proc\.lastIngest \? shortDate\(proc\.lastIngest\) : null/);
+    // the newest award on record, never the load date (audit 5 Nov 2026)
+    expect(resolveSrc).toMatch(/asOf: proc\.evidenceAsOf \? shortDate\(proc\.evidenceAsOf\) : null/);
+    expect(resolveSrc).not.toMatch(/asOf: proc\.lastIngest/);
     // the section heading names BOTH clocks rather than labelling the pair
     // with the window of only one of them
     expect(marketPage).toMatch(/Public awards to \$\{intel\.dealFlow\.procurement\.asOf\}/);
@@ -2783,9 +2797,11 @@ describe("commercial model is a reading, not a footnote (2026-09-10)", () => {
     expect(r.movement).toBe("improving");
   });
 
-  it("a year completed by the evidence is allowed to set it", () => {
-    const r = commercialModelReading(YEARS, "2026-12-31");
-    expect(r.latest?.period).toBe("2026");
+  it("a year completed by the evidence is allowed to set it, given n>=30", () => {
+    const full = YEARS.map((y) => (y.period === "2026" ? { ...y, n: 40 } : y));
+    expect(commercialModelReading(full, "2026-12-31").latest?.period).toBe("2026");
+    // 12 agreements is under the locked n>=30 rule even in a complete year (audit 5 Nov 2026)
+    expect(commercialModelReading(YEARS, "2026-12-31").latest?.period).toBe("2025");
   });
 
   it("lastCompleteSigningYear only trusts a year the evidence closes", () => {
@@ -2955,7 +2971,7 @@ describe("a signing country is not a delivery location (2026-09-10)", () => {
   it("counts agreements with no country apart rather than dropping them", () => {
     // Silently excluding them would make the lens look like full coverage.
     expect(fact).toMatch(/unstated/);
-    expect(section).toMatch(/name no country and are counted in none of these/);
+    expect(section).toMatch(/no country and \$\{[^}]*\} counted in none of these/);
   });
 
   it("a country total is disclosed value only", () => {

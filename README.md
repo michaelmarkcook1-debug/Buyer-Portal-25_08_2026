@@ -21,11 +21,11 @@ family, the authoritative read-only path is:
 
 | Data family | Authoritative source | Path used here |
 |---|---|---|
-| Vendor universe (~65 AG-covered vendors) | Landed AG Intelligence catalog + ticker crosswalk in the canonical Neon spine | read-only SQL (`lib/vendors.ts`) — count resolved live, never hardcoded |
+| Vendor universe (AG-covered vendors) | Landed AG Intelligence catalog + ticker crosswalk in the canonical Neon spine | read-only SQL (`getUniverse` in `lib/data/facts.ts`) — count resolved live, never hardcoded |
 | Contract spine (curated commercial contracts) | Canonical `deal` table (promoted from Contract Tracker) | read-only SQL (`lib/data/facts.ts`) |
 | AG provider signals (talent, reputation, top issues, claims-vs-delivery) | `stg_analystgenius_signal` — the landed copy that already embeds AG's extraction honesty gate | read-only SQL, latest-version reads |
-| SEC 8-K events | `stg_sec_event` | read-only SQL |
-| Per-renewal decision briefs (AG interpretation) | SourcingGenius `/api/decision` service (bearer token; built for cross-app consumption) | HTTP adapter (`lib/adapters/decision-api.ts`) — consumed, never reimplemented; renders not-configured when absent |
+| SEC 8-K events | `stg_capability_event` (`source_system = 'sec_edgar_8k'`), with the retired `stg_sec_event` rows merged for history | read-only SQL |
+| Per-renewal decision briefs (AG interpretation) | SourcingGenius `/api/decision` service (bearer token; built for cross-app consumption) | HTTP adapter (`lib/adapters/decision-api.ts`) — consumed, never reimplemented; not wired to any page yet (left out of the pilot) |
 | AI Enterprise capability scores | Blocked upstream (seed data; extractor under repair) | adapter reports blocked status (`lib/adapters/ai-enterprise.ts`); never displayed |
 | Truth gate (`canRenderAsVerified`) | `@ag/truth` shared package | not linked yet — the canonical evidence ledger is empty; when it lands, consume the package via `link:`, do not fork |
 
@@ -76,12 +76,28 @@ remain legitimate.
 
 ## Credentials
 
-`.env.local` is git-ignored and never committed. Minimum services: the Neon
-canonical spine (read-only, `DATABASE_URL`) and the Anthropic API
-(`ANTHROPIC_API_KEY`). The current Anthropic key is a **temporary development
-dependency borrowed from the AI Enterprise project** — replace it with a
-portal-owned key before any deployment. No credential values appear in any
-source-controlled file.
+`.env.local` is git-ignored and never committed; `.env.example` lists every
+setting. Minimum services: the Neon spine (`DATABASE_URL` — canonical tables
+are read only; the portal writes only its own `portal_*` tables) and the
+Anthropic API (`ANTHROPIC_API_KEY`). The Anthropic key in use was **borrowed
+from the AI Enterprise project** — replace it with a portal-owned key, and set
+a spend limit on it, since the deployed site is open to the public. No
+credential values appear in any source-controlled file.
+
+## Access
+
+- **Sign-in:** work-email accounts through the general sign-up link
+  (`/join?code=PILOT_SIGNUP_CODE`); personal and covered-provider domains are
+  refused. Sessions are HMAC-signed cookies (`AUTH_SECRET`).
+- **Admin:** only accounts created with `pnpm admin:create <email>` whose
+  address is also on `ADMIN_EMAILS`. The sign-up link never creates an admin.
+- **`PUBLIC_ACCESS=on`:** buyer pages open to everyone as a guest (the current
+  production setting). The Backoffice and `/api/backoffice/refresh` still need
+  a signed-in admin. Briefing generation is bounded by
+  `INSIGHT_HOURLY_CALL_CAP`.
+- **Backoffice refresh:** locally it runs the AG refresh from
+  `BACKOFFICE_REFRESH_DIR`; deployed, it dispatches the AG GitHub Actions
+  workflow, which also runs on its own every Monday 06:00 UTC.
 
 ## Non-negotiables
 

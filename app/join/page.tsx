@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthFrame, Field, FormError, SubmitButton } from "@/components/AuthFrame";
 import { REFUSAL_MESSAGE } from "@/lib/auth/email-policy";
+import { PASSWORD_HAS_NAME, PASSWORD_TOO_LONG, PASSWORD_TOO_SHORT } from "@/lib/auth/password";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import { authConfig, getCurrentUser, isSignupCode } from "@/lib/auth/session";
 
@@ -44,12 +45,16 @@ export default async function JoinPage({ searchParams }: { searchParams: SP }) {
   }
 
   const err = one(sp.error);
-  const email = one(sp.email) ?? undefined;
+  /* Messages come from fixed codes only: nothing in the URL is echoed onto
+     the page, and no email address travels in it. */
+  const why = one(sp.why);
   const message =
     err === "invalid" || err === "personal" || err === "provider"
       ? REFUSAL_MESSAGE[err]
       : err === "password"
-        ? one(sp.why) ?? "Choose a stronger password."
+        ? why === "short" ? PASSWORD_TOO_SHORT : why === "long" ? PASSWORD_TOO_LONG : why === "name" ? PASSWORD_HAS_NAME : "Choose a stronger password."
+        : err === "reserved"
+          ? "This address can't register through the sign-up link."
         : err === "mismatch"
           ? "The two passwords don't match."
           : err === "exists"
@@ -66,7 +71,7 @@ export default async function JoinPage({ searchParams }: { searchParams: SP }) {
       <FormError message={message} />
       <form method="POST" action="/api/auth/signup" className="space-y-4">
         <input type="hidden" name="code" value={code} />
-        <Field id="email" label="Work email" type="email" autoComplete="username" defaultValue={email} />
+        <Field id="email" label="Work email" type="email" autoComplete="username" />
         <Field
           id="password"
           label="Choose a password"

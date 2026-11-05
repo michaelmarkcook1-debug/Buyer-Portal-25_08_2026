@@ -34,20 +34,18 @@ async function adminOnly(): Promise<NextResponse | null> {
 export const dynamic = "force-dynamic";
 
 /**
- * Manual refresh control.
+ * Refresh control (admins only).
  *
- * A run is started ONLY by an explicit POST from the Backoffice button. There
- * is no schedule, no cron, no auto-run on deploy and no auto-run on page load.
+ * This endpoint starts a run only on an explicit POST from the Backoffice
+ * button — never on deploy or page load. The AG pipeline also runs on its own
+ * schedule in GitHub Actions (Mondays 06:00 UTC); a button press dispatches one
+ * more run of that workflow when BACKOFFICE_GITHUB_* is configured, and on the
+ * AG development machine it runs the refresh locally instead.
  *
- * During testing, execution is local by design: the refresh runs on the AG
- * machine and writes its progress to the shared operational table, which the
- * deployed portal reads. A deployed instance therefore reports status rather
- * than executing, and that is a healthy state, not a missing runner.
- *
- * Run state lives in the canonical Neon spine rather than in this process, so
- * status survives the request that started it and is visible from any Vercel
- * instance. A run is never reported as running unless a runner genuinely has
- * it.
+ * Run state lives in the Neon spine (portal_refresh_run) rather than in this
+ * process, so status survives the request that started it and is visible from
+ * any Vercel instance. A run is never reported as running unless a runner
+ * genuinely has it.
  */
 
 /**

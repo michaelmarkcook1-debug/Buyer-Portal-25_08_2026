@@ -33,8 +33,11 @@ function renewalNote(rows: { confidence: number | null; rationale: string | null
   const conf = rows.map((r) => r.confidence).filter((c): c is number => c != null);
   const lo = conf.length ? Math.min(...conf) : null;
   const hi = conf.length ? Math.max(...conf) : null;
+  /* Raw 0–1 confidence values are internal scoring, which the score firewall
+     keeps out of generated prose; the static page says it in words too. */
+  const word = (c: number) => (c >= 0.8 ? "high" : c >= 0.5 ? "moderate" : "low");
   const band =
-    lo == null ? "" : lo === hi ? ` at confidence ${lo}` : ` at confidence ${lo}–${hi}`;
+    lo == null || hi == null ? "" : word(lo) === word(hi) ? ` at ${word(lo)} confidence` : ` at ${word(lo)} to ${word(hi)} confidence`;
   /* The store's reasons are formulaic by design — it detects renewal language
      rather than adjudicating the commercial substance. Say so once, in its
      words, rather than repeating an identical sentence on every row. */

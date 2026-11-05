@@ -14,6 +14,11 @@ export function count(n: number | null | undefined): string {
   return n.toLocaleString("en-GB");
 }
 
+/** "1 contract", "3 contracts" — the count formatted, the noun agreeing with it. */
+export function counted(n: number | null | undefined, singular: string, plural = `${singular}s`): string {
+  return `${count(n)} ${n === 1 ? singular : plural}`;
+}
+
 export function signed(n: number | null | undefined): string {
   if (n == null) return "—";
   return `${n > 0 ? "+" : ""}${n.toLocaleString("en-GB")}`;
@@ -93,4 +98,19 @@ export function formatTcvDisplay(v: TcvDisplayInput): string {
     if (v.tcvMidUsd != null && v.tcvMidUsd > 0) return `≈${money(v.tcvMidUsd)} est.`;
   }
   return "Not reliably estimable";
+}
+
+/**
+ * The first http(s) URL in a source field, or null. Upstream link fields can
+ * hold several URLs run together, an article title, or a bare domain; used
+ * raw as an href those became broken links or relative paths on this site.
+ */
+export function firstHttpUrl(raw: string | null | undefined): string | null {
+  const m = raw?.match(/https?:\/\/[^\s,;|<>"']+/i);
+  if (!m) return null;
+  try {
+    return new URL(m[0]).href;
+  } catch {
+    return null;
+  }
 }

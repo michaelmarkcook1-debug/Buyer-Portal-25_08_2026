@@ -1,4 +1,5 @@
 import { count } from "@/lib/format";
+import { COMMERCIAL_MODEL_MIN_YEAR_N } from "./rules";
 import type { Metric, MetricAnalysis, MetricState } from "./types";
 
 /**
@@ -794,7 +795,9 @@ export interface CommercialModelInputs {
  * determines whether the ask is a reference or an argument.
  */
 export function commercialModelAnalysis(c: CommercialModelInputs, state: MetricState): MetricAnalysis | undefined {
-  if (state === "insufficient" || c.classified === 0) return undefined;
+  /* A share of a thin base is not a market reading: under the n>=30 rule no
+     percentage is stated below it. */
+  if (state === "insufficient" || c.classified < COMMERCIAL_MODEL_MIN_YEAR_N) return undefined;
 
   const top = c.methods[0];
   const share = (n: number) => Math.round((n / c.classified) * 100);

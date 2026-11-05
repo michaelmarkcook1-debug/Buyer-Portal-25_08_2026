@@ -10,7 +10,7 @@ import { q } from "@/lib/db";
  * a list of market vendors, exactly what the scope cookie already carries.
  */
 
-/** "guest" is a view-only visitor who came in through the guest link; never stored. */
+/** "guest" is a view-only visitor (the guest link, or anyone while PUBLIC_ACCESS=on); never stored. */
 export type Role = "buyer" | "admin" | "guest";
 
 export interface PortalUser {
@@ -96,11 +96,15 @@ export async function recordLoginSuccess(id: string, role: Role): Promise<void> 
   );
 }
 
+/** An expired lock starts a fresh count, so one typo after it does not relock the account. */
 export async function recordLoginFailure(id: string): Promise<void> {
   await q(
     `UPDATE portal_user
-        SET failed_logins = failed_logins + 1,
-            locked_until = CASE WHEN failed_logins + 1 >= $2 THEN now() + ($3 || ' minutes')::interval ELSE locked_until END
+        SET failed_logins = CASE WHEN locked_until IS NOT NULL AND locked_until <= now() THEN 1 ELSE failed_logins + 1 END,
+            locked_until = CASE
+              WHEN locked_until IS NOT NULL AND locked_until <= now() THEN NULL
+              WHEN failed_logins + 1 >= $2 THEN now() + ($3 || ' minutes')::interval
+              ELSE locked_until END
       WHERE id = $1`,
     [id, MAX_FAILED_LOGINS, String(LOCK_MINUTES)],
   );

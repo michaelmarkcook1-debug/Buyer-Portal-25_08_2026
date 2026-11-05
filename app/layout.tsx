@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "AnalystGenius — Buyer Portal",
   description:
     "Buyer-side intelligence on IT services, consulting and BPO vendors. Select the vendors you care about; AnalystGenius identifies where market change has created new commercial opportunity.",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

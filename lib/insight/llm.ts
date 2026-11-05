@@ -1,4 +1,5 @@
 import "server-only";
+import { takeModelCall } from "./budget";
 
 /**
  * The model seam for Analyst Insight — portal-owned orchestration.
@@ -7,8 +8,9 @@ import "server-only";
  * Anthropic fallback), one forced tool call for structured output. No SDK.
  *
  * Two hard properties, in the estate's spirit:
- *   1. NOT-CONFIGURED IS A FIRST-CLASS STATE — with no key, the portal renders
- *      the missing variable by name. It never falls back to canned prose.
+ *   1. NOT-CONFIGURED IS A FIRST-CLASS STATE — with no key, the portal says so
+ *      (naming the missing variable in development only; a deployed portal
+ *      does not show visitors its configuration). It never falls back to canned prose.
  *   2. THE MODEL RECEIVES ONLY THE STRUCTURED CONTEXT. It interprets canonical
  *      states; it does not discover data. The grounding firewall in
  *      validate.ts enforces that independently of whether instructions are obeyed.
@@ -57,6 +59,8 @@ export function llmAvailability(): LlmAvailability {
   };
 }
 
+const MODEL_TIMEOUT_MS = 45_000;
+
 export interface ToolSchema {
   name: string;
   description: string;
@@ -75,11 +79,17 @@ export async function generateStructured<T>(
   if (config.auth === "bearer") headers.authorization = `Bearer ${config.apiKey}`;
   else headers["x-api-key"] = config.apiKey;
 
+  if (!(await takeModelCall())) {
+    return { ok: false, reason: "The hourly ceiling on briefing generation has been reached." };
+  }
+
   let res: Response;
   try {
     res = await fetch(`${config.baseUrl}/v1/messages`, {
       method: "POST",
       headers,
+      /* A hung call must not hold the function to the platform timeout. */
+      signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
       body: JSON.stringify({
         model: config.model,
         max_tokens: args.maxTokens ?? 900,

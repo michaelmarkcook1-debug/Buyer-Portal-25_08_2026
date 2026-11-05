@@ -92,8 +92,8 @@ export function ExposureConcentrationChart({
   return (
     <Figure
       title="Observed commercial value reaching end-of-term, by vendor"
-      desc={`Disclosed value entering the 12-month end-of-term window across ${totalCount} agreements. ${bars
-        .map((b) => `${b.name}: ${b.count} agreements${b.disclosedUsd ? `, ${moneyFmt(b.disclosedUsd)} disclosed` : ", no disclosed value"}`)
+      desc={`Disclosed value entering the 12-month end-of-term window across ${totalCount} agreement${totalCount === 1 ? "" : "s"}. ${bars
+        .map((b) => `${b.name}: ${b.count} agreement${b.count === 1 ? "" : "s"}${b.disclosedUsd ? `, ${moneyFmt(b.disclosedUsd)} disclosed` : ", no disclosed value"}`)
         .join(". ")}.`}
       interpretation={interpretation}
       footnote={footnote}

@@ -116,3 +116,13 @@ describe("one type scale", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("briefing headline length", () => {
+  it("asks for one rewrite when the first sentence runs past the headline limit", async () => {
+    const { headlineViolation, HEADLINE_MAX_CHARS } = await import("@/lib/insight/generate");
+    const short = "Renewal exposure is concentrating across the selected market. Accenture leads it.";
+    expect(headlineViolation(short)).toBeNull();
+    const long = "A".repeat(HEADLINE_MAX_CHARS + 40) + ". Second sentence.";
+    expect(headlineViolation(long)).toMatch(/runs to \d+ characters/);
+  });
+});

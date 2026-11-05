@@ -235,6 +235,8 @@ export interface FlowWindow {
   /** Provenance, carried so a visual can replace the row without losing it. */
   source: string;
   confidence: Confidence;
+  /** Why no direction may be read from this pair, when the windows are not comparable; null when they are. */
+  caveat: string | null;
 }
 
 export type WatchClass = "ACT" | "WATCH" | "KNOW";

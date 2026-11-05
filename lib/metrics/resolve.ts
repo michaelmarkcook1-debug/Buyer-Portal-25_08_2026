@@ -535,11 +535,21 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
     );
   } else {
     const g = cat?.revenueGrowthYoy ?? null;
+    /* The signing windows carry the same frozen-export tail as Deal Market
+       Heat: with the curated export stopping months before the window ends,
+       the current window is part-empty and "signings fell" is an artefact of
+       the feed, not the vendor (audit 5 Nov 2026 — it led many vendor pages
+       as the most important change). Same gate, same refusal. */
+    const spineGate = demandWindowInterpretable({
+      channel: "commercial-spine", windowDays: 365,
+      dataAsOf: v.spineDataAsOf, curatedAsOf: v.spineCuratedAsOf ?? null,
+      today: new Date().toISOString().slice(0, 10),
+    });
     // Movement: fresh procurement flow when it can carry the read; spine windows otherwise.
     const movement: Movement =
       v.proc && procHeat.usable
         ? procHeat.movement
-        : d && d.contracts >= 3
+        : d && d.contracts >= 3 && spineGate.interpretable
           ? ratioMove(d.awardsT12, d.awardsPrior12)
           : "insufficient";
     const state: MetricState =
@@ -552,7 +562,11 @@ function resolveVendorMetrics(v: VendorInputs): VendorMetrics {
         source: "Public procurement record", ownership: "market", asOf: v.proc.lastAwardDate,
       });
     if (d && d.contracts >= 3)
-      basis.push({ text: `Observed commercial signings ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two commercial-evidence windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).`, source: "Curated contract tracker (market record)", ownership: "market" });
+      basis.push({
+        text: `Observed commercial signings ${count(d.awardsT12)} vs ${count(d.awardsPrior12)} across the two commercial-evidence windows (to ${shortDate(v.spineDataAsOf ?? v.spineLastIngest)}).` +
+          (spineGate.interpretable ? "" : " No direction is drawn from them: the curated export stops well before the current window ends."),
+        source: "Curated contract tracker (market record)", ownership: "market",
+      });
     if (eventCountBasis) basis.push(eventCountBasis);
     const rpoPrim = v.prims?.get("rpo_backlog_usd");
     if (rpoPrim) {
@@ -1926,17 +1940,17 @@ export const resolveIntelligence = cache(async (scopeJson: string): Promise<Mark
       if (proc.totalT90 + proc.totalPrior90 >= 5) {
         const publicBasis = [{
           text: `${count(proc.totalT90)} public awards observed in the current 90-day collection window vs ${count(proc.totalPrior90)} in the comparison window (public record, refreshed ${shortDate(proc.lastIngest)}).`,
-          source: "Public procurement record", ownership: "market" as const, asOf: proc.lastIngest,
+          source: "Public procurement record", ownership: "market" as const, asOf: proc.evidenceAsOf,
         }];
         const gate = demandWindowInterpretable({ channel: "public-procurement", windowDays: 90, dataAsOf: proc.lastIngest, today });
         if (!gate.interpretable) {
-          return insufficientMetric("m.demand", "Services Demand", gate.reason, publicBasis, proc.lastIngest);
+          return insufficientMetric("m.demand", "Services Demand", gate.reason, publicBasis, proc.evidenceAsOf);
         }
         const move = ratioMove(proc.totalT90, proc.totalPrior90);
         return metric(
           "m.demand", "Services Demand",
           move.includes("deteriorating") ? "unfavourable" : move.includes("improving") ? "favourable" : "stable",
-          move, "medium", demandReading(move), publicBasis, proc.lastIngest,
+          move, "medium", demandReading(move), publicBasis, proc.evidenceAsOf,
         );
       }
       if (agg.contracts === 0) return insufficientMetric("m.demand", "Services Demand", "No contract evidence in scope.");
@@ -2055,7 +2069,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
             procT90: proc.totalT90,
             procPrior90: proc.totalPrior90,
             asOf: shortDate(anchor.dataAsOf),
-            procAsOf: proc.lastIngest ? shortDate(proc.lastIngest) : null,
+            procAsOf: proc.evidenceAsOf ? shortDate(proc.evidenceAsOf) : null,
           },
           strip.servicesDemand.state,
         ),
@@ -2177,7 +2191,16 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
     if (modelMix.classified > 0) {
       basis.push({
         text: `${count(modelMix.classified)} agreement${modelMix.classified === 1 ? "" : "s"} signed by the selected vendors in the last four years carry a commercial-model classification${modelMix.methods[0] ? `; ${modelMix.methods[0].method.toLowerCase()} is the most common at ${count(modelMix.methods[0].n)}` : ""}.`,
-        source: "Curated contract record — commercial model", ownership: "market",
+        source: "Curated contract record — commercial model", ownership: "market", asOf: anchor.dataAsOf,
+      });
+    }
+    /* The year the reading rests on, stated even when only one year clears
+       n>=30 and there is no movement to describe — otherwise the reader has
+       no date to reach for. */
+    if (reading.latest) {
+      basis.push({
+        text: `Read from ${reading.latest.period}, the latest complete signing year with enough classified agreements to state a share (${count(reading.latest.n)}).`,
+        source: "Curated contract record — commercial model", ownership: "market", asOf: anchor.dataAsOf,
       });
     }
     if (reading.state === "insufficient") {
@@ -2387,6 +2410,7 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
         asOf: anchor.dataAsOf ? shortDate(anchor.dataAsOf) : null,
         source: "Contract market record",
         confidence: "medium",
+        caveat: flowGate.interpretable ? null : flowGate.reason,
       };
     }
   }
@@ -2412,9 +2436,10 @@ const withAnalysis = (metricValue: Metric, analysis: MetricAnalysis | undefined)
         current: proc.totalT90,
         priorWindow: "Prior 90 days",
         currentWindow: "Trailing 90 days",
-        asOf: proc.lastIngest ? shortDate(proc.lastIngest) : null,
+        asOf: proc.evidenceAsOf ? shortDate(proc.evidenceAsOf) : null,
         source: procMonthly.source,
         confidence: "medium",
+        caveat: procGate.interpretable ? null : procGate.reason,
       };
     }
   }

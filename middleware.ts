@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/token";
 
 /**
- * Every page and API route requires a signed-in session, except sign-in,
- * sign-up and static assets. This is the cheap check — an authentic,
+ * With PUBLIC_ACCESS=on every request passes here and the buyer pages read as
+ * a guest; the Backoffice and its API still check for an admin themselves.
+ * Otherwise every page and API route requires a signed-in session, except
+ * sign-in, sign-up and static assets. This is the cheap check — an authentic,
  * unexpired token. The authoritative one runs on the server for each page,
  * which also refuses a disabled account and gates the Backoffice to admins.
  * With no AUTH_SECRET configured nothing verifies, so everything is closed.

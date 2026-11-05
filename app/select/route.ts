@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getUniverse, getVendorsInServiceFamily, isServiceFamily } from "@/lib/data/facts";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, safeNext } from "@/lib/auth/session";
 import { saveUserScope } from "@/lib/auth/users";
 import { isDbConfigured } from "@/lib/db";
 import {
@@ -16,16 +16,15 @@ export const dynamic = "force-dynamic";
 /**
  * GET /select — the vendor-selection form target (zero client JS).
  *
- * Writes the scope cookie (the only persistence in the product — vendor
- * selection is the only user configuration) and returns to the tab the buyer
- * was on. Tickers are validated against the live supported universe; unknown
+ * Writes the scope cookie (and, for a signed-in buyer, the saved scope on
+ * the account — vendor selection is the only user configuration) and returns
+ * to the tab the buyer was on. Tickers are validated against the live supported universe; unknown
  * values are dropped, never stored.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const rawReturn = url.searchParams.get("return") ?? "/";
-  // Same-origin relative paths only — never an open redirect.
-  const returnTo = rawReturn.startsWith("/") && !rawReturn.startsWith("//") ? rawReturn : "/";
+  const returnTo = safeNext(rawReturn);
 
   const jar = await cookies();
   const existing = parseCookieValue(jar.get(SCOPE_COOKIE)?.value);
@@ -67,7 +66,9 @@ export async function GET(req: Request) {
       selectedAt: now,
       firstUseAt,
     });
-    res.cookies.set(SCOPE_COOKIE, value, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set(SCOPE_COOKIE, value, {
+      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365,
+    });
     /* Saved on the account too, so the selection follows the buyer to any
        browser; sign-in restores it. Market vendors only — no buyer-owned
        commercial data is held. */

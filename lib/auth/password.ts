@@ -35,13 +35,17 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+export const PASSWORD_TOO_SHORT = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+export const PASSWORD_TOO_LONG = "That password is too long.";
+export const PASSWORD_HAS_NAME = "Choose a password that doesn't contain your email name.";
+
 /** Why a proposed password is refused, or null if it is acceptable. */
 export function passwordProblem(password: string, email: string): string | null {
-  if (password.length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
-  if (password.length > 256) return "That password is too long.";
+  if (password.length < MIN_PASSWORD_LENGTH) return PASSWORD_TOO_SHORT;
+  if (password.length > 256) return PASSWORD_TOO_LONG;
   const name = email.split("@")[0]!.toLowerCase();
   if (name.length >= 4 && password.toLowerCase().includes(name)) {
-    return "Choose a password that doesn't contain your email name.";
+    return PASSWORD_HAS_NAME;
   }
   return null;
 }

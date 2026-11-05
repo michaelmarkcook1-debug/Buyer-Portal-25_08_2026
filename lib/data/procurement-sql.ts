@@ -8,9 +8,18 @@
  * the newest RESOLVED version of each record: a fresh version still queued
  * for resolution never displaces the resolved one already attributed to a
  * vendor, and never adds a second count beside it.
+ *
+ * Callers bind it as a MATERIALIZED CTE (`WITH p_latest AS MATERIALIZED
+ * ${PROCUREMENT_LATEST_SQL}`), never as a FROM subquery: as a subquery the
+ * planner put it on the inner side of a nested loop and re-ran the whole
+ * de-duplication once per vendor in scope — 4s for a 20-vendor scope against
+ * 0.45s materialised. Only the columns the award counts read are carried;
+ * `raw` alone averages 619 bytes a row and made the sort four times wider.
  */
 export const PROCUREMENT_LATEST_SQL = `(
-  SELECT DISTINCT ON (source_system, source_record_id) *
+  SELECT DISTINCT ON (source_system, source_record_id)
+         source_system, source_record_id, resolved_ag_provider_id, resolution_status,
+         start_date_raw, end_date_raw, value_usd_raw, ingested_at
     FROM stg_procurement_contract
    WHERE resolution_status = 'resolved'
    ORDER BY source_system, source_record_id, ingested_at DESC

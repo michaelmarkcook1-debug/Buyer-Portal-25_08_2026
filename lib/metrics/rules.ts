@@ -572,7 +572,9 @@ export function showsConfidenceCaveat(confidence: Confidence): boolean {
  * than that asserts no share rather than reporting a percentage built on a
  * handful of records.
  */
-export const COMMERCIAL_MODEL_MIN_YEAR_N = 10;
+/* Was 10. The share is a market benchmark, so it sits under the locked
+   n>=30 rule: below 30 nothing is computed (audit 5 Nov 2026). */
+export const COMMERCIAL_MODEL_MIN_YEAR_N = 30;
 /** At or above this share, outcome-linked terms are an established option. */
 export const COMMERCIAL_MODEL_ESTABLISHED_PCT = 20;
 /** Below this share, the market is fixed-price in practice. */

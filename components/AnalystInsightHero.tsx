@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { MarketIntel } from "@/lib/metrics/types";
 import type { Scenario } from "@/lib/scenarios";
-import { getInsight, type InsightTab } from "@/lib/insight/generate";
+import { getInsight, type InsightOpportunity, type InsightTab } from "@/lib/insight/generate";
 import { Panel } from "./ui";
 
 /**
@@ -200,10 +200,12 @@ export async function AnalystInsightHero(props: {
   tab: InsightTab;
   focalTicker?: string;
   scenario?: Scenario | null;
+  opportunity?: InsightOpportunity;
 }) {
   const promise = getInsight(props.intel, props.tab, {
     focalTicker: props.focalTicker,
     scenario: props.scenario,
+    opportunity: props.opportunity,
   });
 
   // Cached briefings resolve immediately — render them inline rather than

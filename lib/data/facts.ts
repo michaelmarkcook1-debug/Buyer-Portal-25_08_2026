@@ -2,6 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { q } from "@/lib/db";
 import { PROCUREMENT_LATEST_SQL } from "@/lib/data/procurement-sql";
+import { sqlDate, sqlExcelDate } from "@/lib/data/sql-safe";
+import { firstHttpUrl } from "@/lib/format";
+import { unstable_cache } from "next/cache";
 
 /**
  * FACTS — the only place this app reads the canonical AG spine.
@@ -77,7 +80,7 @@ const FRESHNESS_SOURCES: readonly {
     source: "Curated contract tracker",
     feeds: "contract spine — awards, renewals, values",
     // Excel serial day -> date
-    evidence: `to_char(to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400), 'YYYY-MM-DD')`,
+    evidence: `to_char(max(${sqlExcelDate("announcement_date_raw")}), 'YYYY-MM-DD')`,
   },
   {
     table: "stg_contract_store",
@@ -90,7 +93,7 @@ const FRESHNESS_SOURCES: readonly {
     table: "stg_procurement_contract",
     stage: "procurement-contracts",
     source: "Public procurement record",
-    feeds: "award flow across 6 jurisdictions — market evidence",
+    feeds: "public-sector award flow — market evidence",
     /* The corpus carries start dates only, and some rows start after the day
        they were landed (a scheduled start of an award already made). Capping
        at today let those starts arrive one by one with no new data, so the
@@ -117,7 +120,7 @@ const FRESHNESS_SOURCES: readonly {
   },
   {
     /* SEC discovery moved: the sec-events stage lands stg_capability_event
-       (source_system 'sec_edgar'), alongside the partnership and tracker
+       (source_system 'sec_edgar_8k'), alongside the partnership and tracker
        families. stg_sec_event still holds its 253 historical rows and is left
        untouched — but pointing the freshness row at it made a live, working
        stage look permanently stale from 21 Aug. */
@@ -130,7 +133,13 @@ const FRESHNESS_SOURCES: readonly {
   },
 ] as const;
 
-export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
+/* Shared across requests for five minutes. Each family is a full count over
+   its table (procurement alone is 146k rows), every page reads it, and the
+   families move weekly; per-request recounting cost ~3s a page. */
+export const getFreshness = cache(() => freshnessShared());
+const freshnessShared = unstable_cache(() => freshnessUncached(), ["freshness-v1"], { revalidate: 300 });
+
+async function freshnessUncached(): Promise<SourceFreshness[]> {
   const rows = await Promise.all(
     FRESHNESS_SOURCES.map(async ({ table, source, feeds, evidence, stage, where }) => {
       // Table names and expressions come from the const list above, never from user input.
@@ -143,8 +152,8 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
                 to_char(min(ingested_at), 'YYYY-MM-DD') AS first_seen,
                 to_char(max(ingested_at), 'YYYY-MM-DD') AS last_seen,
                 (current_date - max(ingested_at)::date) AS days_since,
-                ${evidence ?? "NULL"} AS evidence_date,
-                ${evidence ? `(current_date - (${evidence})::date)` : "NULL"} AS evidence_days
+                ${evidence ? `to_char(${sqlDate(`(${evidence})`)}, 'YYYY-MM-DD')` : "NULL"} AS evidence_date,
+                ${evidence ? `(current_date - ${sqlDate(`(${evidence})`)})` : "NULL"} AS evidence_days
            FROM ${table}${where ? ` WHERE ${where}` : ""}`,
       );
       return {
@@ -164,7 +173,7 @@ export const getFreshness = cache(async (): Promise<SourceFreshness[]> => {
   );
   // Most recently updated first; a family that has never landed sorts last.
   return rows.sort((a, b) => (b.lastSeen ?? "").localeCompare(a.lastSeen ?? ""));
-});
+}
 
 export interface SpineAnchor {
   /** Last INGEST — pipeline provenance only, never presented as data freshness. */
@@ -184,7 +193,7 @@ export interface SpineAnchor {
 export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
   const [r] = await q<{ last: string; days: string; as_of: string | null; age: string | null; curated_as_of: string | null }>(
     `WITH curated AS (
-       SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date AS d
+       SELECT max(${sqlExcelDate("announcement_date_raw")}) AS d
          FROM stg_curated_deal
      ), store AS (
        /* announcement_date_raw, NOT start_date_raw. The start date in this
@@ -192,7 +201,7 @@ export const getSpineAnchor = cache(async (): Promise<SpineAnchor> => {
           "announcement-date proxy; verify effective date" — while the
           announcement date is the sourced fact. Freshness must rest on
           evidence, not on an estimate derived from it. */
-       SELECT max(left(announcement_date_raw, 10))::date AS d
+       SELECT max(${sqlDate("left(announcement_date_raw, 10)")}) AS d
          FROM stg_contract_store
         WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')
      )
@@ -313,8 +322,8 @@ export const getVendorDealFacts = cache(async (tickersKey: string): Promise<Map<
           present in the dataset — never ingestion time, never today. Windows
           close here so every surface inherits one timeline. */
        SELECT GREATEST(
-                (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
-                (SELECT max(left(announcement_date_raw, 10))::date FROM stg_contract_store
+                (SELECT max(${sqlExcelDate("announcement_date_raw")}) FROM stg_curated_deal),
+                (SELECT max(${sqlDate("left(announcement_date_raw, 10)")}) FROM stg_contract_store
                   WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
               ) AS d
      ),
@@ -564,7 +573,7 @@ export const getVendorRenewalEvidence = cache(
       rationale: r.rationale,
       incumbent: r.incumbent,
       announcedOn: r.announced_on,
-      articleUrl: r.article_url,
+      articleUrl: firstHttpUrl(r.article_url),
     }));
   },
 );
@@ -579,7 +588,7 @@ export interface TalentFacts {
   /** e.g. "AI estimate" — rendered as a label whenever present. */
   avgTenureSource: string | null;
   topFunction: string | null;
-  sourcedAt: string;
+  sourcedAt: string | null;
 }
 
 export interface TopIssuesFacts {
@@ -588,7 +597,7 @@ export interface TopIssuesFacts {
   issueTitles: string[];
   monitoringPriorities: string[];
   isStale: boolean;
-  sourcedAt: string;
+  sourcedAt: string | null;
   /** Trusted named issues; empty when the provider's record is withheld. */
   namedIssues: NamedIssue[];
 }
@@ -600,14 +609,14 @@ export interface ReputationFacts {
   trendsDown: number;
   insightTitle: string | null;
   insightBody: string | null;
-  sourcedAt: string;
+  sourcedAt: string | null;
 }
 
 export interface SentimentFacts {
   riskScore: number | null;
   summary: string | null;
   earlyWarnings: string[];
-  sourcedAt: string;
+  sourcedAt: string | null;
 }
 
 export interface NrgFacts {
@@ -617,7 +626,7 @@ export interface NrgFacts {
   /** The analysis' own as-of date — can be older than the ingest. */
   generatedAt: string | null;
   divergences: Array<{ theme: string; delta: number | null; interpretation: string | null }>;
-  sourcedAt: string;
+  sourcedAt: string | null;
 }
 
 export interface VendorSignals {
@@ -713,9 +722,32 @@ export const getVendorSignals = cache(async (tickersKey: string): Promise<Map<st
   const tickers = tickersKey.split(",").filter(Boolean);
   if (tickers.length === 0) return new Map();
 
-  const rows = await q<{ ticker: string; signal_type: string; raw: Raw; sourced_at: string }>(
-    `SELECT DISTINCT ON (ticker, signal_type) ticker, signal_type, raw,
-            to_char(ingested_at, 'YYYY-MM-DD') AS sourced_at
+  /* Only the keys read below leave the database. The full payloads run to
+     2 MB for a whole-market scope (reputation sentiment series, stakeholder
+     breakdowns, recommendations), and moving them cost 2-4s per page. */
+  const rows = await q<{ ticker: string; signal_type: string; raw: Raw; sourced_at: string | null }>(
+    `SELECT DISTINCT ON (ticker, signal_type) ticker, signal_type,
+            CASE signal_type
+              WHEN 'talent_overview' THEN jsonb_build_object('data', raw->'data')
+              WHEN 'top_issues' THEN jsonb_build_object(
+                'riskScore', raw->'riskScore', 'summary', raw->'summary', 'topIssues', raw->'topIssues',
+                'monitoringPriorities', raw->'monitoringPriorities', 'isStale', raw->'isStale')
+              WHEN 'reputation_trends' THEN jsonb_build_object(
+                'sections', (SELECT jsonb_agg(jsonb_build_object('sentimentScore', e->'sentimentScore', 'trend', e->'trend'))
+                               FROM jsonb_array_elements(CASE WHEN jsonb_typeof(raw->'sections') = 'array' THEN raw->'sections' ELSE '[]'::jsonb END) e),
+                'insightTitle', raw->'insightTitle', 'insightBody', raw->'insightBody')
+              WHEN 'stakeholder_sentiment' THEN jsonb_build_object(
+                'riskScore', raw->'riskScore', 'summary', raw->'summary', 'earlyWarningSignals', raw->'earlyWarningSignals')
+              WHEN 'narrative_reality_gap' THEN jsonb_build_object(
+                'gapScore', raw->'gapScore', 'direction', raw->'direction', 'headline', raw->'headline',
+                'generatedAt', raw->'generatedAt', 'topDivergences', raw->'topDivergences')
+            END AS raw,
+            /* The evidence date, never the load date: a weekly re-run moved
+               every signal's date to the run day while claims-vs-delivery
+               evidence was months older (audit 5 Nov 2026). as_of_date when the
+               feed carries one, else the payload's own generation time. */
+            to_char(COALESCE(${sqlDate("left(as_of_date, 10)")}, ${sqlDate("left(raw->>'generatedAt', 10)")},
+                             ${sqlDate("left(raw->>'timestamp', 10)")}), 'YYYY-MM-DD') AS sourced_at
        FROM stg_analystgenius_signal
       WHERE ticker = ANY($1::text[])
         AND signal_type IN ('talent_overview','top_issues','reputation_trends','stakeholder_sentiment','narrative_reality_gap')
@@ -1005,7 +1037,7 @@ export const getSecSummaries = cache(async (tickersKey: string): Promise<Map<str
       byItem,
       latest: latest
         .filter((x) => x.ticker === t && Number(x.rn) <= 4)
-        .map((x) => ({ date: x.d, itemCode: x.item_code, label: x.item_label, url: x.url })),
+        .map((x) => ({ date: x.d, itemCode: x.item_code, label: x.item_label, url: firstHttpUrl(x.url) })),
     });
   }
   return out;
@@ -1090,7 +1122,7 @@ export const getDevelopments = cache(async (tickersKey: string, limit = 30): Pro
       headline: `Signed: ${a.client}`,
       detail: a.line,
       tcvUsd: a.tcv,
-      sourceUrl: a.url,
+      sourceUrl: firstHttpUrl(a.url),
       itemCode: null,
     })),
     ...filings.map((f) => ({
@@ -1101,7 +1133,7 @@ export const getDevelopments = cache(async (tickersKey: string, limit = 30): Pro
       headline: f.label ?? "8-K filing",
       detail: "SEC 8-K",
       tcvUsd: null,
-      sourceUrl: f.url,
+      sourceUrl: firstHttpUrl(f.url),
       itemCode: f.code,
     })),
   ];
@@ -1183,7 +1215,7 @@ export const getMacroReadings = cache(async (): Promise<Map<string, MacroSeriesR
      SELECT l.series_id, l.label, l.latest, l.latest_date,
             (SELECT m.value FROM stg_macro_series m
               WHERE m.series_id = l.series_id AND m.value IS NOT NULL
-                AND m.observation_date <= to_char(l.latest_date::date - interval '365 days', 'YYYY-MM-DD')
+                AND m.observation_date <= to_char(${sqlDate("l.latest_date")} - interval '365 days', 'YYYY-MM-DD')
               ORDER BY m.observation_date DESC LIMIT 1) AS prior
        FROM latest l`,
   );
@@ -1395,10 +1427,17 @@ export interface ScopeProcurement {
   totalT90: number;
   totalPrior90: number;
   distinctWinners180: number;
+  /** Load date — the collection point for window gates, never shown as evidence freshness. */
   lastIngest: string | null;
+  /** Newest award start already on record when landed — the evidence date shown to buyers. */
+  evidenceAsOf: string | null;
 }
 
 /**
+ * Award windows end on the day the record was last landed, not today: the
+ * corpus is not refreshed weekly, and windows ending today left the trailing
+ * 90 days part-empty while the label said "to 27 Sep" (audit 5 Nov 2026).
+ *
  * Fresh public-procurement award flow for the scoped vendors — MARKET evidence,
  * flow/context only. Values here NEVER feed pricing benchmarks (public-sector
  * awards are not enterprise pricing); the curated spine remains the pricing
@@ -1406,7 +1445,7 @@ export interface ScopeProcurement {
  */
 export const getProcurementFlow = cache(async (tickersKey: string): Promise<ScopeProcurement> => {
   const tickers = tickersKey.split(",").filter(Boolean);
-  const empty: ScopeProcurement = { byVendor: new Map(), totalT90: 0, totalPrior90: 0, distinctWinners180: 0, lastIngest: null };
+  const empty: ScopeProcurement = { byVendor: new Map(), totalT90: 0, totalPrior90: 0, distinctWinners180: 0, lastIngest: null, evidenceAsOf: null };
   if (tickers.length === 0) return empty;
 
   const [rows, [scope]] = await Promise.all([
@@ -1414,19 +1453,21 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
       ticker: string; t90: string; p90: string; t365: string; v365: string | null;
       last_award: string | null; inplay12: string;
     }>(
-      `SELECT x.external_id AS ticker,
-              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '90 days', 'YYYY-MM-DD')
-                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS t90,
-              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '180 days', 'YYYY-MM-DD')
-                                 AND left(p.start_date_raw, 10) <= to_char(current_date - interval '90 days', 'YYYY-MM-DD')) AS p90,
-              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '365 days', 'YYYY-MM-DD')
-                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS t365,
-              sum(p.value_usd_raw) FILTER (WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '365 days', 'YYYY-MM-DD')
-                                 AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')) AS v365,
+      `WITH p_latest AS MATERIALIZED ${PROCUREMENT_LATEST_SQL}
+       SELECT x.external_id AS ticker,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(pa.d - interval '90 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(pa.d, 'YYYY-MM-DD')) AS t90,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(pa.d - interval '180 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(pa.d - interval '90 days', 'YYYY-MM-DD')) AS p90,
+              count(*) FILTER (WHERE left(p.start_date_raw, 10) > to_char(pa.d - interval '365 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(pa.d, 'YYYY-MM-DD')) AS t365,
+              sum(p.value_usd_raw) FILTER (WHERE left(p.start_date_raw, 10) > to_char(pa.d - interval '365 days', 'YYYY-MM-DD')
+                                 AND left(p.start_date_raw, 10) <= to_char(pa.d, 'YYYY-MM-DD')) AS v365,
               max(left(p.start_date_raw, 10)) FILTER (WHERE left(p.start_date_raw, 10) <= to_char(p.ingested_at, 'YYYY-MM-DD')) AS last_award,
               count(*) FILTER (WHERE left(p.end_date_raw, 10) >= to_char(current_date, 'YYYY-MM-DD')
                                  AND left(p.end_date_raw, 10) < to_char(current_date + interval '12 months', 'YYYY-MM-DD')) AS inplay12
-         FROM ${PROCUREMENT_LATEST_SQL} p
+         FROM p_latest p
+         CROSS JOIN (SELECT max(ingested_at)::date AS d FROM p_latest) pa
          JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
         WHERE p.resolution_status = 'resolved'
           AND x.external_id = ANY($1::text[])
@@ -1434,10 +1475,12 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
       [tickers],
     ),
     q<{ winners: string; last_ingest: string | null }>(
-      `SELECT count(DISTINCT p.resolved_ag_provider_id) FILTER (
-                WHERE left(p.start_date_raw, 10) > to_char(current_date - interval '180 days', 'YYYY-MM-DD')) AS winners,
+      `WITH p_latest AS MATERIALIZED ${PROCUREMENT_LATEST_SQL}
+       SELECT count(DISTINCT p.resolved_ag_provider_id) FILTER (
+                WHERE left(p.start_date_raw, 10) > to_char(pa.d - interval '180 days', 'YYYY-MM-DD')) AS winners,
               to_char(max(p.ingested_at), 'YYYY-MM-DD') AS last_ingest
-         FROM ${PROCUREMENT_LATEST_SQL} p
+         FROM p_latest p
+         CROSS JOIN (SELECT max(ingested_at)::date AS d FROM p_latest) pa
          JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
         WHERE p.resolution_status = 'resolved'
           AND x.external_id = ANY($1::text[])`,
@@ -1468,6 +1511,8 @@ export const getProcurementFlow = cache(async (tickersKey: string): Promise<Scop
     totalPrior90,
     distinctWinners180: Number(scope?.winners ?? 0),
     lastIngest: scope?.last_ingest ?? null,
+    evidenceAsOf: [...byVendor.values()].reduce<string | null>(
+      (best, f) => (f.lastAwardDate && (!best || f.lastAwardDate > best) ? f.lastAwardDate : best), null),
   };
 });
 
@@ -1552,7 +1597,7 @@ export const getVendorPrimitives = cache(async (tickersKey: string): Promise<Map
         evidenceGrade: r.evidence_grade,
         dataStatus: r.data_status,
         confidence: Number(r.confidence),
-        sourceUrl: r.source_url,
+        sourceUrl: firstHttpUrl(r.source_url),
         series: [point],
       });
     }
@@ -1597,8 +1642,8 @@ export const getScopeAggregates = cache(async (tickersKey: string): Promise<Scop
           present in the dataset — never ingestion time, never today. Windows
           close here so every surface inherits one timeline. */
        SELECT GREATEST(
-                (SELECT to_timestamp(((max(NULLIF(announcement_date_raw, '')::float8)) - 25569) * 86400)::date FROM stg_curated_deal),
-                (SELECT max(left(announcement_date_raw, 10))::date FROM stg_contract_store
+                (SELECT max(${sqlExcelDate("announcement_date_raw")}) FROM stg_curated_deal),
+                (SELECT max(${sqlDate("left(announcement_date_raw, 10)")}) FROM stg_contract_store
                   WHERE left(announcement_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD'))
               ) AS d
      ),

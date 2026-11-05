@@ -11,11 +11,13 @@ export const dynamic = "force-dynamic";
    a wrong password and response timing does not reveal who has an account. */
 let decoyHash: Promise<string> | null = null;
 
-function back(url: URL, error: string, next: string, email?: string): NextResponse {
+/* No email address goes into the redirect URL, where it would sit in logs
+   and browser history. A locked account reads exactly like a wrong password,
+   so the reply never confirms that an address has an account. */
+function back(url: URL, error: string, next: string): NextResponse {
   const to = new URL("/login", url.origin);
   to.searchParams.set("error", error);
   if (next !== "/") to.searchParams.set("next", next);
-  if (email) to.searchParams.set("email", email);
   return NextResponse.redirect(to, 303);
 }
 
@@ -38,30 +40,32 @@ async function handle(req: Request): Promise<NextResponse> {
   const password = String(form.get("password") ?? "");
 
   if (!authConfig().secret) return back(url, "not-configured", next);
-  if (!email || !password) return back(url, "missing", next, email);
+  if (!email || !password) return back(url, "missing", next);
 
   const user = await findUserByEmail(email);
   if (!user) {
     decoyHash ??= hashPassword("decoy-password-for-timing-only");
     await verifyPassword(password, await decoyHash);
-    return back(url, "invalid", next, email);
+    return back(url, "invalid", next);
   }
-  if (user.lockedUntil && Date.parse(user.lockedUntil) > Date.now()) return back(url, "locked", next, email);
-  if (user.disabled) return back(url, "invalid", next, email);
+  if (user.lockedUntil && Date.parse(user.lockedUntil) > Date.now()) return back(url, "invalid", next);
+  if (user.disabled) return back(url, "invalid", next);
 
   if (!(await verifyPassword(password, user.passwordHash))) {
     await recordLoginFailure(user.id);
-    return back(url, "invalid", next, email);
+    return back(url, "invalid", next);
   }
 
-  const role = roleFor(user.email);
+  const role = roleFor(user.email, user.role);
   await recordLoginSuccess(user.id, role);
   const res = NextResponse.redirect(new URL(next, url.origin), 303);
   const c = await sessionCookieFor({ ...user, role });
   res.cookies.set(c.name, c.value, c.options);
   /* The buyer's saved vendor selection follows them to any browser. */
   if (user.scope) {
-    res.cookies.set(SCOPE_COOKIE, user.scope, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set(SCOPE_COOKIE, user.scope, {
+      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365,
+    });
   }
   return res;
 }

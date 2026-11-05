@@ -49,8 +49,8 @@ const MIN_PROVIDERS_FOR_FAMILY_SCOPE = 5;
 
 export async function getPortalContext(sp: RawSearchParams): Promise<PortalContext> {
   if (!isDbConfigured()) return { dbReady: false };
-  /* Middleware already turned away anyone without an authentic session; this
-     is the authoritative check — the account must exist and not be disabled. */
+  /* The authoritative check: a real, enabled account — or, with
+     PUBLIC_ACCESS=on, a guest. Middleware only checked the token's signature. */
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const familyIds = Object.keys(SERVICE_FAMILIES) as ServiceFamilyId[];

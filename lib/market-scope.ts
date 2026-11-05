@@ -21,7 +21,8 @@ export type { ScopeCookie };
  *
  * Vendor selection is the ONLY user configuration in this MVP.
  *
- * Persistence: an httpOnly cookie (there are no accounts), which also carries
+ * Persistence: an httpOnly cookie (also saved on a signed-in buyer's account
+ * and restored at sign-in), which also carries
  * the first-use timestamp from which the 12-month retrospective baseline is
  * derived (spec §3). A `?vendors=` URL parameter overrides the cookie for the
  * request (shareable views) without rewriting the reader's own selection.

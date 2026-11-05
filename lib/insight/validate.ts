@@ -15,7 +15,7 @@
  * validated by an older ruleset can never be served again (sprint 3 fix 1).
  * Bump on EVERY rule change.
  */
-export const VALIDATOR_VERSION = 4;
+export const VALIDATOR_VERSION = 5;
 
 export interface InsightValidation {
   ok: boolean;
@@ -44,6 +44,45 @@ export function allowedNumbers(contextJson: string): Set<string> {
     allowed.add(norm.replace(/(bn|m|k|%)$/, ""));
   }
   return allowed;
+}
+
+const SUFFIX = /(bn|m|k|%)$/;
+
+/**
+ * Output figures the context does not support. A magnitude must match with
+ * its own suffix: "2.4" in the context never licenses "$2.4bn" when the
+ * context said "$2.4M" — that is a 1000x error passing as grounded (audit
+ * 5 Nov 2026). A percentage may come from a bare context number, because
+ * the context carries shares as plain JSON numbers ("sharePct": 47), but
+ * never from a magnitude ("$47M" does not license "47%"). A bare output
+ * number may echo any context number.
+ */
+export function numericOffenders(text: string, contextJson: string): string[] {
+  const exact = new Set<string>();
+  const bare = new Set<string>();
+  const stripped = new Set<string>();
+  for (const m of contextJson.match(NUMERIC) ?? []) {
+    const norm = normalise(m);
+    if (SUFFIX.test(norm)) {
+      exact.add(norm);
+      stripped.add(norm.replace(SUFFIX, ""));
+    } else {
+      bare.add(norm);
+    }
+  }
+  const out: string[] = [];
+  for (const m of text.match(NUMERIC) ?? []) {
+    const tok = normalise(m);
+    if (tok.length === 0) continue;
+    const suffix = tok.match(SUFFIX)?.[1];
+    const num = tok.replace(SUFFIX, "");
+    const ok =
+      suffix === undefined ? bare.has(num) || stripped.has(num)
+      : suffix === "%" ? exact.has(tok) || bare.has(num)
+      : exact.has(tok);
+    if (!ok) out.push(tok);
+  }
+  return [...new Set(out)];
 }
 
 const BANNED_PHRASES = [
@@ -250,13 +289,10 @@ export function validateInsight(text: string, contextJson: string): InsightValid
   let out = text.trim();
 
   /* Numeric firewall. */
-  const allowed = allowedNumbers(contextJson);
-  const offenders = (out.match(NUMERIC) ?? [])
-    .map(normalise)
-    .filter((tok) => tok.length > 0 && !allowed.has(tok) && !allowed.has(tok.replace(/(bn|m|k|%)$/, "")));
+  const offenders = numericOffenders(out, contextJson);
   if (offenders.length > 0) {
     blocked.push(
-      `Generated insight states figure(s) absent from the supplied context: ${[...new Set(offenders)].join(", ")}. ` +
+      `Generated insight states figure(s) absent from the supplied context: ${offenders.join(", ")}. ` +
         "The model may interpret canonical intelligence; it may not produce arithmetic.",
     );
   }

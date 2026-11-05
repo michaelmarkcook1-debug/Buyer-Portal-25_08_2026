@@ -3,23 +3,15 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Where a manual refresh can actually run.
+ * Where a refresh can actually run.
  *
- * The operating model during testing is deliberate and simple: refreshes are
- * run by hand from the AG development machine, which writes to the shared
- * canonical Neon spine. The deployed portal reads that same spine, so it sees
- * the results without any deployment of its own.
- *
- * That means a deployed instance cannot start a refresh — not because
- * something is broken or missing, but because execution is intentionally
- * local. This module reports that as a healthy mode, never as an error.
- *
- *   local-manual   the sanctioned model. `canRun` is true on the AG machine,
- *                  where the repo and its scripts exist, and false everywhere
- *                  else — the deployed portal shows status instead.
- *   remote-runner  a dormant option. If BACKOFFICE_RUNNER_URL is ever set,
- *                  the portal will hand runs to that service. Nothing in the
- *                  testing model requires it and none is deployed.
+ *   github-actions  the deployed portal with BACKOFFICE_GITHUB_* set: the button
+ *                   dispatches the AG data-refresh workflow, which also runs on
+ *                   its own every Monday 06:00 UTC.
+ *   local-manual    the AG development machine (BACKOFFICE_REFRESH_DIR), where
+ *                   the repo and its scripts exist; anywhere else without a
+ *                   GitHub config the page reports status only, a healthy mode.
+ *   remote-runner   a dormant option (BACKOFFICE_RUNNER_URL); none is deployed.
  */
 
 export type ExecutorMode = "local-manual" | "github-actions" | "remote-runner";

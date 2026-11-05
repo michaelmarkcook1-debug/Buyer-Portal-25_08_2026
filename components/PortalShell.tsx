@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { aiEnterpriseStatus } from "@/lib/adapters/ai-enterprise";
-import { agoDays, shortDate } from "@/lib/format";
+import { agoDays, shortDate, counted } from "@/lib/format";
 import type { PortalContext } from "@/lib/portal";
 import { todayLabel } from "@/lib/portal";
 import { Masthead, type NavId } from "./Masthead";
@@ -110,7 +110,7 @@ export function FirstRunSelector({
                   {v.name}
                 </span>
                 <span className="code block text-meta" style={{ color: "var(--fg-dim)" }}>
-                  {v.contracts > 0 ? `${v.contracts} contracts · ${v.inPlay24} in play` : "no contracts on record"}
+                  {v.contracts > 0 ? `${counted(v.contracts, "contract")} · ${v.inPlay24} in play` : "no contracts on record"}
                   {v.signalTypes > 0 ? ` · ${v.signalTypes} signal types` : ""}
                 </span>
               </span>
@@ -163,7 +163,7 @@ function PortalFooter({ ctx }: { ctx: PortalContext }) {
                 </div>
                 {/* What each family actually feeds. Two of them carry nearly the
                     same name — "Curated contract tracker" and "Contract Tracker
-                    curated store" — and currently sit 63 days apart, so a reader
+                    curated store" — and can sit weeks apart, so a reader
                     comparing two contract dates has no way to tell which is
                     which. That distinction was already written here, but reached
                     the reader only as a title attribute: invisible on touch,

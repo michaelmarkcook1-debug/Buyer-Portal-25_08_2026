@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { q } from "@/lib/db";
 import { PROCUREMENT_LATEST_SQL } from "@/lib/data/procurement-sql";
+import { COMMERCIAL_MODEL_MIN_YEAR_N } from "@/lib/metrics/rules";
 import { assertHistoryMode, mixCoverage, type HistoricalMode, type MixCoverage } from "@/lib/metrics/rules";
 
 /**
@@ -82,13 +83,16 @@ export const getProcurementMonthlyFlow = cache(async (tickersKey: string): Promi
     return reconstructed({ id: "procurement-monthly", label: "Public award flow", unit: "awards", points: [], source: "Public procurement record", note: "" });
   }
   const rows = await q<{ month: string; n: string }>(
-    `SELECT left(p.start_date_raw, 7) AS month, count(*) AS n
-       FROM ${PROCUREMENT_LATEST_SQL} p
+    `WITH p_latest AS MATERIALIZED ${PROCUREMENT_LATEST_SQL}
+       SELECT left(p.start_date_raw, 7) AS month, count(*) AS n
+       FROM p_latest p
+       CROSS JOIN (SELECT max(ingested_at)::date AS d FROM p_latest) pa
        JOIN xref_identity x ON x.ag_provider_id = p.resolved_ag_provider_id AND x.system = 'ticker'
       WHERE p.resolution_status = 'resolved'
         AND x.external_id = ANY($1::text[])
-        AND left(p.start_date_raw, 10) > to_char(current_date - interval '12 months', 'YYYY-MM-DD')
-        AND left(p.start_date_raw, 10) <= to_char(current_date, 'YYYY-MM-DD')
+        /* ends on the last landing day, like the award-flow windows */
+        AND left(p.start_date_raw, 10) > to_char(pa.d - interval '12 months', 'YYYY-MM-DD')
+        AND left(p.start_date_raw, 10) <= to_char(pa.d, 'YYYY-MM-DD')
       GROUP BY 1 ORDER BY 1`,
     [tickers],
   );
@@ -155,12 +159,12 @@ export const getPricingModelMixByYear = cache(async (tickersKey: string): Promis
       const total = Number(r.total);
       return {
         period: r.yr,
-        value: total >= 10 ? Number(((Number(r.consumption) / total) * 100).toFixed(1)) : null,
+        value: total >= COMMERCIAL_MODEL_MIN_YEAR_N ? Number(((Number(r.consumption) / total) * 100).toFixed(1)) : null,
         n: total,
       };
     }),
     source: "Contract market record — commercial model",
-    note: "Years below n=10 state their n and assert no share.",
+    note: `Years below n=${COMMERCIAL_MODEL_MIN_YEAR_N} state their n and assert no share.`,
   });
 });
 
@@ -220,23 +224,25 @@ export const getReputationSeries = cache(async (tickersKey: string): Promise<Map
      them for 66 of 67 vendors, and casting every point to a number then
      failed the whole query, taking Home and Market down with it. Only real
      numbers are averaged; a position with none stays empty rather than
-     becoming a fabricated zero. */
+     becoming a fabricated zero. A series or data list that is not an array
+     (null, object, scalar) reads as empty instead of throwing. */
   const rows = await q<{ ticker: string; means: (number | null)[] | null }>(
     `SELECT s.ticker,
             (SELECT array_agg(avg_val ORDER BY idx)
                FROM (
                  SELECT idx, avg(CASE WHEN jsonb_typeof(elem) = 'number' THEN elem::float8 END) AS avg_val
-                   FROM jsonb_array_elements(s.raw->'sentimentTrend'->'series') ser,
-                        jsonb_array_elements(ser->'data') WITH ORDINALITY AS d(elem, idx)
+                   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(s.raw->'sentimentTrend'->'series') = 'array'
+                                                  THEN s.raw->'sentimentTrend'->'series' ELSE '[]'::jsonb END) ser,
+                        jsonb_array_elements(CASE WHEN jsonb_typeof(ser->'data') = 'array'
+                                                  THEN ser->'data' ELSE '[]'::jsonb END) WITH ORDINALITY AS d(elem, idx)
                   GROUP BY idx
                ) t) AS means
        FROM (
          SELECT DISTINCT ON (ticker) ticker, raw
            FROM stg_analystgenius_signal
-          WHERE signal_type = 'reputation_trends'
+          WHERE signal_type = 'reputation_trends' AND ticker = ANY($1::text[])
           ORDER BY ticker, ingested_at DESC
-       ) s
-      WHERE s.ticker = ANY($1::text[])`,
+       ) s`,
     [tickers],
   );
   const out = new Map<string, HistorySeries>();

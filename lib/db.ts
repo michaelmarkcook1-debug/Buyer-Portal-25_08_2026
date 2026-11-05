@@ -2,9 +2,10 @@ import "server-only";
 import { neon } from "@neondatabase/serverless";
 
 /**
- * Read-only access to the canonical AG Neon spine — the estate's sanctioned
- * request-time read surface for facts (see README, integration boundaries).
- * This app issues SELECTs only; it never writes to the canonical database.
+ * Access to the AG Neon spine — the estate's sanctioned request-time read
+ * surface for facts (see README, integration boundaries). Canonical tables are
+ * only ever read. The portal writes only its own tables — portal_user,
+ * portal_refresh_run, portal_llm_spend — created on first use.
  *
  * A missing DATABASE_URL is a first-class rendered state, not a crash: pages
  * check `isDbConfigured()` and render the honest not-configured panel, in the
@@ -33,6 +34,14 @@ function client(): ReturnType<typeof neon> {
 
 /** Typed parameterized query. `$1`-style placeholders; returns the rows array. */
 export async function q<T = Record<string, unknown>>(text: string, params: unknown[] = []): Promise<T[]> {
+  /* Opt-in slow-query log: DB_SLOW_MS=400 prints any query slower than that,
+     with the opening of its SQL, so a slow page can be traced to its query. */
+  const slowMs = Number(process.env.DB_SLOW_MS ?? 0);
+  const t0 = slowMs > 0 ? performance.now() : 0;
   const rows = await client()(text, params);
+  if (slowMs > 0) {
+    const ms = performance.now() - t0;
+    if (ms >= slowMs) console.warn(`[db:slow] ${Math.round(ms)}ms ${text.replace(/\s+/g, " ").trim().slice(0, 140)}`);
+  }
   return rows as T[];
 }

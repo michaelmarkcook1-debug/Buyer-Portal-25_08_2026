@@ -29,7 +29,7 @@ import {
   StateText,
 } from "@/components/ui";
 import { getDevelopments, getScopeCountries, getScopeLines } from "@/lib/data/facts";
-import { count, money, shortDate } from "@/lib/format";
+import { count, money, shortDate, counted } from "@/lib/format";
 import { commercialWindowLabel } from "@/lib/metrics/canonical";
 import { METRIC_DICTIONARY, displayState } from "@/lib/metrics/dictionary";
 import type { RawSearchParams } from "@/lib/market-scope";
@@ -50,6 +50,18 @@ export const dynamic = "force-dynamic";
  */
 function flowReading(series: FlowWindow[]): string {
   if (series.length === 0) return "";
+  /* A window the evidence has not filled cannot carry a direction: the
+     counts stay visible, the reading says why none is drawn (audit 5 Nov
+     2026 — a frozen export read here as "less new work, favours buyers"). */
+  const caveats = series.filter((w) => w.caveat);
+  if (caveats.length === series.length) {
+    return `No direction is read from ${series.length > 1 ? "either series" : "this series"}. ${caveats.map((w) => w.caveat).join(" ")}`;
+  }
+  if (caveats.length > 0) {
+    const clean = series.filter((w) => !w.caveat);
+    const skipped = caveats.map((w) => `${(w as FlowWindow & { label?: string }).label ?? "The other series"} carries no direction: ${w.caveat}`).join(" ");
+    return `${flowReading(clean)} ${skipped}`;
+  }
   const dir = (w: FlowWindow) => (w.current < w.prior ? "down" : w.current > w.prior ? "up" : "flat");
   const dirs = new Set(series.map(dir));
   const both = series.length > 1;
@@ -220,7 +232,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                       {l.line}
                     </span>
                     <span className="tabular text-body" style={{ color: "var(--fg-muted)" }}>
-                      {count(l.contracts)} contracts in scope · {count(l.inPlay24)} in play
+                      {counted(l.contracts, "contract")} in scope · {count(l.inPlay24)} in play
                     </span>
                   </li>
                 ))}
@@ -259,7 +271,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                       {c.country}
                     </span>
                     <span className="tabular text-body" style={{ color: "var(--fg-muted)" }}>
-                      {count(c.contracts)} contracts in scope · {count(c.inPlay12)} reaching term inside 12 months
+                      {counted(c.contracts, "contract")} in scope · {count(c.inPlay12)} reaching term inside 12 months
                     </span>
                     {/* Disclosed value only. A modelled figure never enters a
                         country total, so a country with none shows none. */}
@@ -280,7 +292,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
                     ? `Showing the 12 largest of ${count(geography.rows.length)} countries in the record.`
                     : `${count(geography.rows.length)} countries in the record.`,
                   geography.unstated > 0
-                    ? `${count(geography.unstated)} agreements name no country and are counted in none of these.`
+                    ? `${counted(geography.unstated, "agreement")} ${geography.unstated === 1 ? "names" : "name"} no country and ${geography.unstated === 1 ? "is" : "are"} counted in none of these.`
                     : null,
                   "Signing country only — this says nothing about where work is delivered.",
                 ]

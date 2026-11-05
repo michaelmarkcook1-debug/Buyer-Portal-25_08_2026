@@ -13,14 +13,12 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Backoffice — AnalystGenius", robots: { index: false, follow: false } };
 
 /**
- * BACKOFFICE — operator area, testing phase. Outside product navigation.
+ * BACKOFFICE — operator area, admins only. Outside product navigation.
  *
- * During testing refreshes are run by hand from the AG development machine and
- * write to the shared canonical spine. This page therefore does two things,
- * and which one depends only on where it is running: on the AG machine it can
- * start that refresh; everywhere else it reports what the spine holds and what
- * the last run did. Both are complete states — the deployed page is not a
- * degraded copy of the local one.
+ * It reports what the spine holds and what the last runs did, and its button
+ * starts a refresh: a GitHub Actions dispatch when deployed with
+ * BACKOFFICE_GITHUB_* set (the same workflow also runs every Monday 06:00
+ * UTC), or a local run on the AG development machine.
  *
  * Cloud-safe stages run weekly (Mondays 06:00 UTC, since 27 Sep 2026); the
  * local-file stages still run only when the operator runs them.
